@@ -286,6 +286,8 @@ export default {
 </script>
 
 <style lang="scss">
+@import '../scss/variables';
+
 // =============================================================================
 // NAV-SIDEBAR — Tema Detran-MG
 // Glassmorphism sobre fundo verde escuro ($detran-900)
@@ -514,7 +516,7 @@ export default {
     overflow: hidden;
 
     &.is-active {
-      @extend .glass-active;
+      @include glass-active;
     }
 
     &:not(.is-active):hover {

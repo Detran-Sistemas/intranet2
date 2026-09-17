@@ -1,0 +1,39 @@
+name: Detran-MG
+author: Detran-MG / Arquitetura de TI
+site: https://www.detran.mg.gov.br
+version: 1.0.0
+requirements:
+  minimum: '>= 2.5.0'
+  maximum: '< 3.0.0'
+props:
+  tocPosition:
+    type: String
+    default: 'right'
+    title: Posição do Índice (TOC)
+    hint: Define se o sumário fica à direita ou oculto.
+    enum:
+      - 'right'
+      - 'off'
+    order: 1
+    icon: mdi-table-of-contents
+  showTOC:
+    type: Boolean
+    default: true
+    title: Exibir o Índice da Página
+    order: 2
+  showTags:
+    type: Boolean
+    default: true
+    title: Exibir as Tags da Página
+    order: 3
+  showAuthor:
+    type: Boolean
+    default: true
+    title: Exibir Autor e Data
+    order: 4
+  showEditFab:
+    type: Boolean
+    default: true
+    title: Exibir Menu Flutuante de Ações (Speed Dial)
+    hint: Botão flutuante no canto inferior direito com ações da página.
+    order: 5

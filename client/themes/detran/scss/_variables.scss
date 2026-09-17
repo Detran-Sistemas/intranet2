@@ -126,3 +126,21 @@ $transition-fast:   all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
 $transition-base:   all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
 $transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 $transition-spring: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+
+// -----------------------------------------------------------------------------
+// GLASSMORPHISM MIXINS
+// -----------------------------------------------------------------------------
+@mixin glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+@mixin glass-active {
+  background: $glass-active-bg !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.10);
+  color: $color-white !important;
+}
+

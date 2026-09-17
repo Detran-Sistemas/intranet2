@@ -483,6 +483,8 @@ export default {
 </script>
 
 <style lang="scss">
+@import '../scss/variables';
+
 // =============================================================================
 // PAGE — Tema Detran-MG
 // Layout principal: sidebar glassmorphism + área de conteúdo branca
@@ -591,7 +593,7 @@ export default {
   }
 
   &__new-page-btn {
-    @extend .glass-panel;
+    @include glass-panel;
     padding: 0.75rem 1.25rem;
     border-radius: $radius-lg;
     display: flex;
@@ -618,7 +620,7 @@ export default {
 // BUSCA (glassmorphism)
 // ---------------------------------------------------------------------------
 .detran-search {
-  @extend .glass-panel;
+  @include glass-panel;
   flex: 1;
   max-width: 640px;
   border-radius: 1rem;
