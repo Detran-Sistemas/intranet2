@@ -1,0 +1,18 @@
+// =============================================================================
+// DETRAN-MG DESIGN SYSTEM — SCSS Entry Point
+// Orquestra todos os imports do tema.
+// Carregado pelo Webpack via: client/index-app.js
+//   import('./themes/' + siteConfig.theme + '/scss/app.scss')
+// =============================================================================
+
+// 1. Tokens e variáveis (deve vir primeiro)
+@import 'variables';
+
+// 2. Resets e base global
+@import 'base';
+
+// 3. Animações e micro-interações
+@import 'animations';
+
+// 4. Tipografia do conteúdo Markdown/Wiki.js
+@import 'typography';

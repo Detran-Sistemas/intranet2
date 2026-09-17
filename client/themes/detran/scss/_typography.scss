@@ -1,0 +1,436 @@
+// =============================================================================
+// DETRAN-MG DESIGN SYSTEM — TIPOGRAFIA MARKDOWN
+//
+// Transposição fiel da seção "ESPECIFICAÇÃO DE TIPOGRAFIA MARKDOWN E WIKI.JS"
+// do protótipo design_system.html (linhas 116-248 do arquivo HTML).
+//
+// Aplicado dentro do wrapper .detran-contents que envolve page.render
+// (o HTML gerado pelo pipeline de rendering do Wiki.js).
+//
+// Também implementa os estilos prose-* do Tailwind Typography convertidos
+// para SCSS puro (linhas 429-447 do protótipo).
+// =============================================================================
+
+.detran-contents {
+  font-family: $font-family-base;
+  font-size: $font-size-base;
+  line-height: $line-height-base;
+  color: $slate-600;
+
+  // ---------------------------------------------------------------------------
+  // 1. CABEÇALHOS (H1 a H6)
+  // prose-headings:text-slate-800 prose-headings:font-bold prose-headings:tracking-tight
+  // ---------------------------------------------------------------------------
+  h1, h2, h3, h4, h5, h6 {
+    color: $slate-800;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.3;
+  }
+
+  h1 {
+    font-size: 1.875rem; // prose-h1:text-3xl
+    margin-bottom: 1.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid $slate-100;
+
+    &:not(:first-child) { margin-top: 2rem; }
+  }
+
+  h2 {
+    font-size: 1.5rem; // prose-h2:text-2xl
+    margin-top: 2.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid $slate-100;
+  }
+
+  h3 {
+    font-size: 1.25rem; // prose-h3:text-xl
+    margin-top: 2rem;
+    margin-bottom: 0.75rem;
+  }
+
+  h4 {
+    font-size: 1.125rem; // prose-h4:text-lg
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  // H5: uppercase tracking-wide — usado para sub-seções de categoria
+  h5 {
+    font-size: 1rem; // prose-h5:text-base
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: $slate-500;
+  }
+
+  // H6: itálico — nível mais profundo
+  h6 {
+    font-size: 0.875rem; // prose-h6:text-sm
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+    font-style: italic;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 2. PARÁGRAFOS E TEXTO
+  // prose-p:text-slate-600 prose-p:leading-relaxed prose-p:mb-6
+  // ---------------------------------------------------------------------------
+  p {
+    color: $slate-600;
+    line-height: $line-height-base;
+    margin-bottom: 1.5rem;
+  }
+
+  strong { font-weight: 700; color: $slate-800; }
+  em     { font-style: italic; }
+  s      { text-decoration: line-through; opacity: 0.7; }
+
+  // ---------------------------------------------------------------------------
+  // 3. LINKS
+  // prose-a:text-detran-600 hover:prose-a:text-detran-700 prose-a:no-underline
+  // hover:prose-a:underline prose-a:font-semibold
+  // ---------------------------------------------------------------------------
+  a {
+    color: $detran-600;
+    font-weight: 600;
+    text-decoration: none;
+    transition: $transition-fast;
+
+    &:hover {
+      color: $detran-700;
+      text-decoration: underline;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 4. CÓDIGO INLINE
+  // prose-code:text-pink-600 prose-code:bg-slate-100 prose-code:px-1.5
+  // prose-code:py-0.5 prose-code:rounded-md prose-code:text-sm
+  // ---------------------------------------------------------------------------
+  code:not([class]) {
+    color: #db2777; // pink-600
+    background-color: $slate-100;
+    padding: 0.125rem 0.375rem;
+    border-radius: $radius-sm;
+    font-size: 0.875rem;
+    font-weight: 500;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+    // Remove aspas geradas pelo reset de alguns navegadores
+    &::before, &::after { content: none; }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 5. BLOCOS DE CÓDIGO (PRE)
+  // prose-pre:bg-slate-800 prose-pre:text-slate-100 prose-pre:rounded-xl
+  // ---------------------------------------------------------------------------
+  pre {
+    background-color: $slate-800;
+    color: $slate-100;
+    border-radius: $radius-lg;
+    padding: 1.25rem 1.5rem;
+    overflow-x: auto;
+    box-shadow: $shadow-soft;
+    margin: 1.5rem 0;
+    font-size: 0.875rem;
+    line-height: 1.7;
+
+    code {
+      color: inherit;
+      background: none;
+      padding: 0;
+      border-radius: 0;
+      font-size: inherit;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 6. LISTAS
+  // prose-ul:my-6 prose-ol:my-6 prose-li:my-2 prose-li:marker:text-detran-500
+  // ---------------------------------------------------------------------------
+  ul, ol {
+    margin: 1.5rem 0;
+    padding-left: 1.75rem;
+  }
+
+  li {
+    margin: 0.5rem 0;
+    color: $slate-600;
+  }
+
+  ul li {
+    list-style-type: disc;
+    &::marker { color: $detran-500; }
+  }
+
+  ol li {
+    list-style-type: decimal;
+    &::marker {
+      color: $slate-500;
+      font-weight: 600;
+    }
+  }
+
+  // Listas aninhadas
+  ul ul, ol ul { list-style-type: circle; margin: 0.25rem 0; }
+  ul ol, ol ol { margin: 0.25rem 0; }
+
+  // Task Lists (geradas pelo Wiki.js markdown)
+  .contains-task-list {
+    list-style: none;
+    padding-left: 0;
+
+    .task-list-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+
+      input[type='checkbox'] {
+        width: 1.1em;
+        height: 1.1em;
+        accent-color: $detran-500;
+        border-radius: 0.25em;
+        cursor: pointer;
+        flex-shrink: 0;
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 7. BLOCKQUOTE
+  // prose-blockquote:border-l-4 prose-blockquote:border-slate-300
+  // prose-blockquote:bg-slate-50 prose-blockquote:rounded-r-xl
+  // prose-blockquote:not-italic prose-blockquote:shadow-sm
+  // ---------------------------------------------------------------------------
+  blockquote {
+    border-left: 4px solid $slate-300;
+    background-color: $slate-50;
+    padding: 0.25rem 1.5rem;
+    border-radius: 0 $radius-lg $radius-lg 0;
+    color: $slate-600;
+    font-style: normal; // not-italic
+    margin: 1.5rem 0;
+    box-shadow: $shadow-soft;
+
+    p { margin-bottom: 0.75rem; }
+
+    footer {
+      font-size: 0.875rem;
+      color: $slate-500;
+      font-style: italic;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 8. TABELAS
+  // prose-table:w-full prose-table:text-sm prose-table:text-left
+  // prose-th:bg-white prose-th:p-4 prose-th:font-bold prose-th:border-b-2
+  // prose-td:p-4 prose-td:border-b prose-td:border-slate-100
+  // hover:prose-tr:bg-slate-50/50
+  // ---------------------------------------------------------------------------
+  table {
+    width: 100%;
+    font-size: 0.875rem;
+    text-align: left;
+    border-collapse: collapse;
+    margin: 1.5rem 0;
+    overflow: hidden;
+    border-radius: $radius-lg;
+    box-shadow: $shadow-soft;
+
+    // Mobile: scroll horizontal em tabelas largas
+    @include mobile {
+      display: block;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+  }
+
+  thead {
+    th {
+      background-color: $color-white;
+      padding: 1rem;
+      font-weight: 700;
+      font-size: 0.8125rem;
+      color: $slate-800;
+      border-bottom: 2px solid $slate-200;
+      white-space: nowrap;
+    }
+  }
+
+  tbody {
+    tr {
+      transition: background-color 0.15s ease;
+      &:hover { background-color: rgba($slate-50, 0.5); }
+    }
+
+    td {
+      padding: 1rem;
+      border-bottom: 1px solid $slate-100;
+      color: $slate-600;
+      vertical-align: middle;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 9. IMAGENS
+  // prose-img:rounded-2xl prose-img:border prose-img:border-slate-200
+  // prose-img:shadow-sm prose-img:w-full
+  // ---------------------------------------------------------------------------
+  img {
+    border-radius: $radius-xl;
+    border: 1px solid $slate-200;
+    box-shadow: $shadow-soft;
+    width: 100%;
+    height: auto;
+    display: block;
+    margin: 1.5rem auto;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 10. DIVISOR
+  // prose-hr:border-slate-200 prose-hr:my-10
+  // ---------------------------------------------------------------------------
+  hr {
+    border: none;
+    border-top: 1px solid $slate-200;
+    margin: 2.5rem 0;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 11. ALERTAS NATIVOS DO WIKI.JS
+  // Classes geradas pelo rendering pipeline: .is-info, .is-warning, .is-danger, .is-success
+  // Referência: linhas 142-248 do protótipo design_system.html
+  // ---------------------------------------------------------------------------
+
+  .is-info,
+  .is-warning,
+  .is-danger,
+  .is-success {
+    padding: 1rem 1.25rem 1rem 3.5rem;
+    border-radius: $radius-lg;
+    position: relative;
+    margin: 1.5rem 0;
+    font-size: 0.9375rem;
+    color: $slate-700;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+
+    // Ícone via pseudo-elemento (Material Design Icons webfont)
+    &::before {
+      font-family: 'Material Design Icons';
+      font-weight: 400;
+      position: absolute;
+      left: 1.25rem;
+      top: 1.15rem;
+      font-size: 1.25rem;
+      line-height: 1;
+    }
+
+    strong { font-weight: 700; }
+  }
+
+  // Info (Azul)
+  .is-info {
+    background-color: #eff6ff;
+    border-left: 4px solid $color-info;
+    &::before { content: '\F02FD'; color: $color-info; } // mdi-information
+    strong { color: #1d4ed8; }
+  }
+
+  // Warning (Laranja/Âmbar)
+  .is-warning {
+    background-color: #fffbeb;
+    border-left: 4px solid $color-warning;
+    &::before { content: '\F0026'; color: $color-warning; } // mdi-alert
+    strong { color: #b45309; }
+  }
+
+  // Danger (Vermelho)
+  .is-danger {
+    background-color: #fef2f2;
+    border-left: 4px solid $color-error;
+    &::before { content: '\F028C'; color: $color-error; } // mdi-alert-circle
+    strong { color: #b91c1c; }
+  }
+
+  // Success (Verde Detran)
+  .is-success {
+    background-color: $detran-50;
+    border-left: 4px solid $detran-500;
+    &::before { content: '\F05E0'; color: $detran-500; } // mdi-check-circle
+    strong { color: $detran-700; }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 12. LISTA DE LINKS VISUAIS (.links-list)
+  // Nativa do Wiki.js — ativada com {.links-list} no Markdown
+  // Referência: linhas 192-237 do protótipo design_system.html
+  // ---------------------------------------------------------------------------
+  ul.links-list {
+    list-style: none;
+    padding-left: 0;
+    margin: 2rem 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+
+    @include mobile {
+      grid-template-columns: 1fr;
+    }
+
+    li {
+      margin: 0;
+      padding: 0;
+
+      a {
+        display: flex;
+        align-items: center;
+        padding: 1rem 1.25rem;
+        background-color: $color-white;
+        border-radius: $radius-lg;
+        text-decoration: none;
+        color: $slate-800;
+        font-weight: 600;
+        transition: $transition-base;
+        box-shadow: 0 2px 10px -2px rgba(0, 0, 0, 0.05);
+
+        // Ícone de link via pseudo-elemento
+        &::before {
+          content: '\F0337'; // mdi-link
+          font-family: 'Material Design Icons';
+          font-weight: 400;
+          color: $detran-500;
+          background-color: $detran-100;
+          width: 2.5rem;
+          height: 2.5rem;
+          border-radius: $radius-md;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-right: 1rem;
+          font-size: 1.125rem;
+          line-height: 2.5rem;
+          text-align: center;
+          flex-shrink: 0;
+          transition: $transition-fast;
+        }
+
+        &:hover {
+          box-shadow: $shadow-interactive-hover;
+          transform: translateY(-2px);
+          color: $detran-700;
+          text-decoration: none;
+
+          &::before {
+            background-color: $detran-500;
+            color: $color-white;
+          }
+        }
+      }
+    }
+  }
+}
