@@ -211,6 +211,13 @@
                             prepend-icon='mdi-format-title'
                             v-model='current.label'
                           )
+                          v-text-field(
+                            outlined
+                            :label='$t("navigation.icon")'
+                            prepend-icon='mdi-dice-5'
+                            v-model='current.icon'
+                            hide-details
+                          )
                         v-divider
 
                       div(v-else-if='current.kind === "divider"')

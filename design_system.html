@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intranet Detran-MG - Redesign</title>
+    <!-- Adicionado o plugin de Typography do Tailwind na query string -->
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        detran: {
+                            50: '#f2fbf5',
+                            100: '#e1f6e8',
+                            200: '#c3ebce',
+                            300: '#94dbab',
+                            400: '#5fc381',
+                            500: '#33a65b', /* Primary Base */
+                            600: '#288b4a',
+                            700: '#206e3b', /* Tom de contraste */
+                            800: '#1b5830', /* Fundo da Sidebar */
+                            900: '#164828',
+                        },
+                        surface: '#f8fafc',
+                    },
+                    boxShadow: {
+                        'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)',
+                        'float': '0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04)',
+                    },
+                    animation: {
+                        'fade-in-up': 'fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                        'slide-in-right': 'slideInRight 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                    },
+                    keyframes: {
+                        fadeInUp: {
+                            '0%': { opacity: '0', transform: 'translateY(20px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        },
+                        slideInRight: {
+                            '0%': { opacity: '0', transform: 'translateX(-20px)' },
+                            '100%': { opacity: '1', transform: 'translateX(0)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom Easing and Micro-interactions */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        
+        .interactive-card {
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+        
+        .interactive-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px -8px rgba(51, 166, 91, 0.15);
+        }
+
+        /* Animações */
+        .stagger-1 { animation-delay: 100ms; }
+        .stagger-2 { animation-delay: 200ms; }
+        .stagger-3 { animation-delay: 300ms; }
+        .stagger-4 { animation-delay: 400ms; }
+        .stagger-5 { animation-delay: 500ms; }
+        .stagger-6 { animation-delay: 600ms; }
+
+        /* Global Smooth Scroll & Scrollbar */
+        html, body, main, .overflow-y-auto, #sidebar nav {
+            scroll-behavior: smooth !important;
+        }
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(148, 163, 184, 0.4) transparent;
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.35);
+            border-radius: 9999px;
+            transition: background 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(51, 166, 91, 0.65); }
+
+        /* Smooth scroll margin for headings */
+        h1, h2, h3, h4, h5, h6, [id] {
+            scroll-margin-top: 7rem;
+            transition: color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .is-info, .is-success, .is-warning, .is-danger {
+            transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .is-info:hover, .is-success:hover, .is-warning:hover, .is-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px -2px rgba(0, 0, 0, 0.08);
+        }
+
+        /* Typing Indicator Chat */
+        .typing-indicator span {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            background-color: #94a3b8;
+            border-radius: 50%;
+            animation: typing 1.4s infinite both;
+            margin: 0 1px;
+        }
+        .typing-indicator span:nth-child(1) { animation-delay: 0s; }
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typing {
+            0%, 80%, 100% { transform: scale(0); opacity: 0.5; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+
+        /* Sidebar Collapse Animations */
+        #sidebar { transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        #sidebar.collapsed { width: 5.5rem; }
+        #sidebar.collapsed .sidebar-text { display: none; }
+        #sidebar.collapsed .sidebar-switcher { display: none !important; }
+        #sidebar.collapsed .logo-area { padding-left: 0; padding-right: 0; justify-content: center; }
+        #sidebar.collapsed .sidebar-px { padding-left: 0.75rem; padding-right: 0.75rem; }
+        #sidebar.collapsed .nav-link { justify-content: center; padding-left: 0; padding-right: 0; }
+        #sidebar-toggle-icon.rotated { transform: rotate(180deg); }
+
+        /* ========================================================
+           EFEITOS GLASSMORPHISM (NOVO)
+           ======================================================== */
+        .sidebar-glass {
+            background: rgba(255, 255, 255, 0.03); /* Fundo quase transparente */
+            backdrop-filter: blur(24px); /* Desfoque intenso do vidro */
+            -webkit-backdrop-filter: blur(24px);
+            box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.05);
+        }
+
+        .glass-active {
+            background: rgba(255, 255, 255, 0.15); /* Vidro mais leitoso para o item ativo */
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            color: #ffffff;
+        }
+
+        .glass-hover {
+            transition: all 0.3s ease;
+        }
+        .glass-hover:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+        }
+
+        /* ========================================================
+           ESPECIFICAÇÃO DE TIPOGRAFIA MARKDOWN E WIKI.JS
+           ======================================================== */
+        
+        /* Alertas Wiki.js */
+        .prose .is-info, 
+        .prose .is-warning, 
+        .prose .is-danger, 
+        .prose .is-success {
+            padding: 1rem 1.25rem 1rem 3.5rem;
+            border-radius: 0.75rem;
+            position: relative;
+            margin: 1.5rem 0;
+            font-size: 0.95rem;
+            color: #334155;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .prose .is-info > *:first-child,
+        .prose .is-warning > *:first-child,
+        .prose .is-danger > *:first-child,
+        .prose .is-success > *:first-child {
+            margin-top: 0;
+        }
+
+        .prose .is-info > *:last-child,
+        .prose .is-warning > *:last-child,
+        .prose .is-danger > *:last-child,
+        .prose .is-success > *:last-child {
+            margin-bottom: 0;
+        }
+
+        .prose .is-info::before, 
+        .prose .is-warning::before, 
+        .prose .is-danger::before, 
+        .prose .is-success::before {
+            font-family: "Font Awesome 6 Free";
+            font-weight: 900;
+            position: absolute;
+            left: 1.25rem;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.25rem;
+            line-height: 1;
+        }
+
+        /* Info (Azul) */
+        .prose .is-info { background-color: #eff6ff; border-left: 4px solid #3b82f6; }
+        .prose .is-info::before { content: "\f05a"; color: #3b82f6; } 
+        .prose .is-info strong { color: #1d4ed8; }
+
+        /* Warning (Laranja) */
+        .prose .is-warning { background-color: #fffbeb; border-left: 4px solid #f59e0b; }
+        .prose .is-warning::before { content: "\f071"; color: #f59e0b; } 
+        .prose .is-warning strong { color: #b45309; }
+
+        /* Danger (Vermelho) */
+        .prose .is-danger { background-color: #fef2f2; border-left: 4px solid #ef4444; }
+        .prose .is-danger::before { content: "\f057"; color: #ef4444; } 
+        .prose .is-danger strong { color: #b91c1c; }
+
+        /* Success (Verde Detran) */
+        .prose .is-success { background-color: #f2fbf5; border-left: 4px solid #33a65b; }
+        .prose .is-success::before { content: "\f058"; color: #33a65b; } 
+        .prose .is-success strong { color: #206e3b; }
+
+        /* Lista de Links Wiki.js */
+        .prose ul.links-list {
+            list-style: none !important;
+            list-style-type: none !important;
+            padding-left: 0 !important;
+            margin: 2rem 0;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 1.25rem;
+        }
+        .prose ul.links-list li {
+            list-style: none !important;
+            list-style-type: none !important;
+            margin: 0 !important;
+            padding: 1.125rem 1.25rem !important;
+            position: relative;
+            background-color: #ffffff;
+            border: 1px solid rgba(0, 0, 0, 0.07);
+            border-radius: 1rem;
+            box-shadow: 0 4px 14px -2px rgba(0,0,0,0.05);
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            display: grid;
+            grid-template-columns: auto 1fr;
+            column-gap: 1rem;
+            align-items: center;
+        }
+        .prose ul.links-list li::marker {
+            content: none !important;
+            display: none !important;
+        }
+        .prose ul.links-list li::before {
+            content: "\f0c1"; 
+            grid-column: 1;
+            grid-row: 1 / span 2;
+            font-family: "Font Awesome 6 Free";
+            font-weight: 900;
+            color: #33a65b;
+            background-color: #e1f6e8;
+            width: 2.75rem;
+            height: 2.75rem;
+            border-radius: 0.625rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.125rem;
+            transition: all 0.25s;
+        }
+        .prose ul.links-list li a {
+            grid-column: 2;
+            grid-row: 1;
+            text-decoration: none;
+            color: #1e293b;
+            font-weight: 600;
+            font-size: 0.9375rem;
+            line-height: 1.35;
+            transition: color 0.2s;
+        }
+        .prose ul.links-list li a::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+            border-radius: inherit;
+        }
+        .prose ul.links-list li em,
+        .prose ul.links-list li a > em {
+            grid-column: 2;
+            grid-row: 2;
+            display: block;
+            font-style: normal;
+            font-weight: 400;
+            color: #64748b;
+            font-size: 0.8125rem;
+            line-height: 1.4;
+            margin-top: 3px;
+        }
+        .prose ul.links-list li:hover {
+            box-shadow: 0 12px 24px -4px rgba(51, 166, 91, 0.15), 0 4px 6px -2px rgba(51, 166, 91, 0.05);
+            transform: translateY(-3px);
+            border-color: rgba(51, 166, 91, 0.3);
+        }
+        .prose ul.links-list li:hover a {
+            color: #206e3b;
+        }
+        .prose ul.links-list li:hover::before {
+            background-color: #33a65b;
+            color: #ffffff;
+            transform: scale(1.05);
+        }
+
+        /* Checkboxes para Task Lists (Markdown) */
+        .prose input[type="checkbox"] {
+            width: 1.1em;
+            height: 1.1em;
+            margin-right: 0.5em;
+            accent-color: #33a65b;
+            border-radius: 0.25em;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<!-- Body modificado para ter o fundo verde escuro por trás do vidro -->
+<body class="text-slate-800 font-sans h-screen flex overflow-hidden selection:bg-detran-100 selection:text-detran-900 bg-detran-900">
+
+    <!-- Fundo abstrato (Blobs) para o Glassmorphism brilhar -->
+    <div class="absolute inset-y-0 left-0 w-80 z-0 overflow-hidden pointer-events-none">
+        <div class="absolute -top-20 -left-20 w-72 h-72 bg-detran-400/40 rounded-full mix-blend-screen filter blur-[50px] opacity-80"></div>
+        <div class="absolute top-1/2 -left-10 w-64 h-64 bg-detran-300/20 rounded-full mix-blend-screen filter blur-[40px] opacity-60"></div>
+        <div class="absolute -bottom-20 -left-20 w-80 h-80 bg-detran-500/40 rounded-full mix-blend-screen filter blur-[50px] opacity-80"></div>
+    </div>
+
+    <!-- 1. BARRA LATERAL COM GLASSMORPHISM -->
+    <aside id="sidebar" class="w-72 sidebar-glass text-white flex flex-col h-full z-30 relative shrink-0">
+        
+        <!-- Botão recolher em cor sólida -->
+        <button id="sidebar-toggle" class="absolute -right-3 top-9 w-6 h-6 bg-detran-500 hover:bg-detran-600 text-white rounded-full flex items-center justify-center shadow-md z-40 transition-colors opacity-0 animate-fade-in-up stagger-1" title="Recolher menu">
+            <i class="fa-solid fa-chevron-left text-[10px] transition-transform duration-300" id="sidebar-toggle-icon"></i>
+        </button>
+
+        <div class="logo-area h-24 flex items-center px-8 border-b border-white/10 opacity-0 animate-slide-in-right">
+            <div class="flex items-center gap-3 overflow-hidden w-full">
+                <div class="w-10 h-10 bg-white/20 backdrop-blur-md border border-white/30 rounded-lg flex items-center justify-center text-white font-bold text-xl shadow-lg shrink-0">
+                    <i class="fa-solid fa-car-side"></i>
+                </div>
+                <div class="sidebar-text">
+                    <h1 class="font-bold text-lg leading-tight tracking-tight">Detran<span class="font-light">MG</span></h1>
+                    <p class="text-[10px] text-detran-100 uppercase tracking-wider opacity-80">Intranet Corporativa</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar-px sidebar-switcher px-4 mt-6 mb-2 opacity-0 animate-fade-in-up stagger-1">
+            <div id="switcher-wrap" class="bg-black/20 p-1 rounded-xl flex items-center shadow-inner transition-all overflow-hidden border border-white/5 relative">
+                <!-- Pílula deslizante estilo botão liga/desliga -->
+                <div id="switcher-slider" class="absolute top-1 bottom-1 left-1 w-[calc(50%-4px)] bg-white/15 backdrop-blur-md rounded-lg shadow-md border border-white/10 transition-transform duration-300 pointer-events-none z-0"></div>
+                <button id="switcher-btn-menu" class="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-bold transition-colors duration-200 min-w-0 relative z-10 text-white" title="Menu Rápido">
+                    <i class="fa-solid fa-list-ul shrink-0"></i>
+                    <span class="sidebar-text truncate">Menu</span>
+                </button>
+                <button id="switcher-btn-tree" class="flex-1 flex items-center justify-center gap-2 py-2 text-white/50 hover:text-white rounded-lg text-xs font-bold transition-colors duration-200 min-w-0 relative z-10" title="Árvore de Diretórios">
+                    <i class="fa-solid fa-sitemap shrink-0"></i>
+                    <span class="sidebar-text truncate">Árvore</span>
+                </button>
+            </div>
+        </div>
+
+        <nav class="sidebar-px flex-1 overflow-y-auto py-2 px-4 space-y-1 overflow-x-hidden">
+            <p class="sidebar-text px-4 text-xs font-bold text-white/60 uppercase tracking-widest mb-4 mt-2">Principal</p>
+            
+            <!-- Item: Início (Com glass-active) -->
+            <a href="#" title="Início" class="nav-link flex items-center px-3 py-2.5 glass-active rounded-xl text-white font-medium transition-all duration-200 relative group">
+                <div class="w-8 h-8 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                    <i class="fa-solid fa-house-chimney text-lg"></i>
+                </div>
+                <span class="sidebar-text truncate ml-2">Início</span>
+            </a>
+            
+            <div class="pt-4 pb-2 sidebar-text">
+                <p class="px-4 text-xs font-bold text-white/60 uppercase tracking-widest mb-2">Acesso Rápido</p>
+            </div>
+
+            <!-- Item com Subitens: Habilitação (Com glass-hover) -->
+            <div class="nav-group">
+                <button class="nav-link w-full flex items-center px-3 py-2.5 rounded-xl text-[#cce0d2] glass-hover group relative">
+                    <div class="w-8 h-8 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                        <i class="fa-regular fa-id-card text-lg"></i>
+                    </div>
+                    <span class="sidebar-text truncate ml-2 flex-1 text-left">Habilitação</span>
+                    <i class="fa-solid fa-chevron-down text-[10px] opacity-70 transition-transform sidebar-text shrink-0 nav-chevron absolute right-4"></i>
+                </button>
+                <div class="nav-subitems hidden flex-col mt-1 space-y-1 sidebar-text">
+                    <a href="#" class="flex items-center gap-3 ml-7 pl-4 py-2 border-l border-white/20 text-[13px] text-[#cce0d2] glass-hover rounded-r-lg">Renovação de CNH</a>
+                    <a href="#" class="flex items-center gap-3 ml-7 pl-4 py-2 border-l border-white/20 text-[13px] text-[#cce0d2] glass-hover rounded-r-lg">Primeira Habilitação</a>
+                </div>
+            </div>
+
+            <!-- Item: Veículos -->
+            <a href="#" title="Veículos" class="nav-link flex items-center px-3 py-2.5 rounded-xl text-[#cce0d2] glass-hover group relative">
+                <div class="w-8 h-8 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                    <i class="fa-solid fa-car text-lg"></i>
+                </div>
+                <span class="sidebar-text truncate ml-2">Veículos</span>
+            </a>
+
+            <!-- Item: Sistemas -->
+            <a href="#" title="Sistemas" class="nav-link flex items-center px-3 py-2.5 rounded-xl text-[#cce0d2] glass-hover group relative">
+                <div class="w-8 h-8 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                    <i class="fa-solid fa-desktop text-lg"></i>
+                </div>
+                <span class="sidebar-text truncate ml-2">Sistemas</span>
+            </a>
+
+            <!-- Item: Normativos -->
+            <a href="#" title="Normativos" class="nav-link flex items-center px-3 py-2.5 rounded-xl text-[#cce0d2] glass-hover group relative">
+                <div class="w-8 h-8 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                    <i class="fa-regular fa-file-lines text-lg"></i>
+                </div>
+                <span class="sidebar-text truncate ml-2">Normativos</span>
+            </a>
+        </nav>
+
+        <div class="sidebar-px p-3 border-t border-white/10 bg-white/5 flex items-center justify-between gap-2">
+            <button class="nav-link flex-1 flex items-center p-2 rounded-xl glass-hover text-left overflow-hidden min-w-0" title="Acessar Meu Perfil">
+                <img src="https://i.pravatar.cc/150?img=11" alt="Danilo Santana" class="w-10 h-10 rounded-full border-2 border-white/20 shrink-0">
+                <div class="flex-1 overflow-hidden sidebar-text ml-3">
+                    <p class="text-sm font-semibold text-white truncate">Danilo Santana</p>
+                    <p class="text-xs text-white/70 truncate">Analista de Sistemas</p>
+                </div>
+            </button>
+            
+            <a href="#" class="w-10 h-10 rounded-xl flex items-center justify-center text-white/50 glass-hover shrink-0 sidebar-text" title="Configurações Gerais (Admin)">
+                <i class="fa-solid fa-gear text-sm"></i>
+            </a>
+        </div>
+    </aside>
+
+    <!-- ÁREA PRINCIPAL (Agora possui fundo branco/cinza e bordas retas na esquerda) -->
+    <main class="flex-1 flex flex-col relative w-full h-full bg-surface z-20 shadow-[-10px_0_30px_rgba(0,0,0,0.2)] overflow-hidden">
+        
+        <header class="absolute top-6 left-0 right-0 z-20 flex justify-center px-8 pointer-events-none opacity-0 animate-fade-in-up stagger-1">
+            <div class="w-full max-w-7xl flex justify-between items-center">
+                <div class="glass-panel w-full max-w-2xl rounded-2xl shadow-float flex items-center px-4 py-3 pointer-events-auto transition-all focus-within:ring-2 focus-within:ring-detran-500 focus-within:bg-white">
+                    <i class="fa-solid fa-magnifying-glass text-slate-400 mr-3"></i>
+                    <input type="text" placeholder="Pesquisar procedimentos, manuais, sistemas..." 
+                           class="bg-transparent border-none outline-none flex-1 text-slate-700 placeholder-slate-400 text-sm font-medium">
+                </div>
+
+                <div class="flex items-center gap-4 pointer-events-auto ml-4">
+                    <button class="glass-panel px-5 py-3 rounded-xl flex items-center gap-2 text-sm font-semibold text-detran-700 hover:bg-detran-700 hover:text-white transition-all shadow-float group">
+                        <i class="fa-solid fa-plus transition-transform group-hover:rotate-90"></i>
+                        Nova Página
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto w-full pt-32 pb-12 px-8 flex justify-center">
+            <div class="w-full max-w-7xl flex flex-col lg:flex-row gap-10">
+                
+                <div class="flex-1 flex flex-col space-y-8">
+                    
+                    <div class="opacity-0 animate-fade-in-up stagger-2 flex justify-between items-end">
+                        <div>
+                            <nav class="flex text-sm text-slate-500 mb-2 gap-2 items-center">
+                                <i class="fa-solid fa-house text-xs"></i>
+                                <span>/</span>
+                                <span class="font-medium text-slate-800 hover:text-detran-700 cursor-pointer">Design System</span>
+                                <span>/</span>
+                                <span class="font-medium text-slate-800 hover:text-detran-700 cursor-pointer">Documentação</span>
+                            </nav>
+                            <h2 class="text-3xl font-bold text-slate-800 tracking-tight">Guia de Estilos Markdown</h2>
+                        </div>
+                        <button class="text-sm font-medium text-white bg-detran-600 hover:bg-detran-700 transition-colors flex items-center gap-2 px-4 py-2 rounded-lg shadow-soft hover:shadow-md">
+                            <i class="fa-solid fa-pen-to-square"></i> Editar Página
+                        </button>
+                    </div>
+
+                    <article class="opacity-0 animate-fade-in-up stagger-3 bg-white p-8 md:p-12 rounded-2xl shadow-soft w-full">
+                        
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-8 pb-6 border-b border-slate-100">
+                            <div class="flex items-center gap-4">
+                                <div class="w-12 h-12 bg-detran-50 text-detran-600 rounded-xl flex items-center justify-center text-xl shrink-0">
+                                    <i class="fa-solid fa-palette"></i>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium text-slate-800 mb-1">Arquitetura de TI</p>
+                                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                                        <span class="flex items-center gap-1"><i class="fa-regular fa-clock"></i> 5 min de leitura</span>
+                                        <span class="hidden sm:inline">&bull;</span>
+                                        <span class="flex items-center gap-1"><i class="fa-regular fa-calendar-plus"></i> Criado em 16/09/2026</span>
+                                    </div>
+                                    <div class="flex flex-wrap gap-1.5 mt-3">
+                                        <span class="px-2 py-0.5 bg-detran-50 text-detran-700 text-[10px] font-bold uppercase tracking-wider rounded-md">#design-system</span>
+                                        <span class="px-2 py-0.5 bg-detran-50 text-detran-700 text-[10px] font-bold uppercase tracking-wider rounded-md">#markdown</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="prose prose-slate prose-lg max-w-none 
+                                    prose-headings:text-slate-800 prose-headings:font-bold prose-headings:tracking-tight
+                                    prose-h1:text-3xl prose-h1:mb-6 prose-h1:border-b prose-h1:border-slate-100 prose-h1:pb-2
+                                    prose-h2:mt-10 prose-h2:mb-4 prose-h2:text-2xl prose-h2:pb-2 prose-h2:border-b prose-h2:border-slate-100
+                                    prose-h3:mt-8 prose-h3:mb-3 prose-h3:text-xl
+                                    prose-h4:mt-6 prose-h4:mb-2 prose-h4:text-lg
+                                    prose-h5:mt-6 prose-h5:mb-2 prose-h5:text-base prose-h5:uppercase prose-h5:tracking-wide prose-h5:text-slate-500
+                                    prose-h6:mt-6 prose-h6:mb-2 prose-h6:text-sm prose-h6:italic
+                                    prose-p:text-slate-600 prose-p:leading-relaxed prose-p:mb-6
+                                    prose-a:text-detran-600 hover:prose-a:text-detran-700 prose-a:no-underline hover:prose-a:underline prose-a:font-semibold
+                                    prose-img:rounded-2xl prose-img:border prose-img:border-slate-200 prose-img:shadow-sm prose-img:w-full
+                                    prose-hr:border-slate-200 prose-hr:my-10
+                                    prose-blockquote:border-l-4 prose-blockquote:border-slate-300 prose-blockquote:bg-slate-50 prose-blockquote:py-1 prose-blockquote:px-6 prose-blockquote:rounded-r-xl prose-blockquote:text-slate-600 prose-blockquote:not-italic prose-blockquote:my-6 prose-blockquote:shadow-sm
+                                    prose-ul:my-6 prose-ol:my-6 prose-li:my-2 prose-li:marker:text-detran-500 prose-ol:marker:text-slate-500 prose-ol:marker:font-semibold
+                                    prose-code:text-pink-600 prose-code:bg-slate-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:before:content-none prose-code:after:content-none prose-code:font-medium prose-code:text-sm
+                                    prose-pre:bg-slate-800 prose-pre:text-slate-100 prose-pre:rounded-xl prose-pre:shadow-sm
+                                    prose-table:w-full prose-table:text-sm prose-table:text-left prose-table:border-collapse
+                                    prose-th:bg-white prose-th:p-4 prose-th:font-bold prose-th:border-b-2 prose-th:border-slate-200 prose-th:text-slate-800
+                                    prose-td:p-4 prose-td:border-b prose-td:border-slate-100 prose-td:text-slate-600 prose-tr:transition-colors hover:prose-tr:bg-slate-50/50">
+                            
+                            <p>Este documento serve como referência visual e técnica para todos os elementos <strong>Markdown</strong> suportados nativamente pelo editor da Intranet do Detran-MG (Wiki.js). Use esta página para validar o SCSS do novo <em>Design System</em>.</p>
+
+                            <h1 id="sec-1">1. Cabeçalhos (H1 a H6)</h1>
+                            <p>Demonstração da hierarquia tipográfica. O H1 e H2 possuem uma linha separadora suave abaixo (border-bottom).</p>
+                            <h2>Cabeçalho Nível 2 (H2)</h2>
+                            <h3>Cabeçalho Nível 3 (H3)</h3>
+                            <h4>Cabeçalho Nível 4 (H4)</h4>
+                            <h5>Cabeçalho Nível 5 (H5) - Uppercase</h5>
+                            <h6>Cabeçalho Nível 6 (H6) - Italic</h6>
+
+                            <h2 id="sec-2">2. Tipografia e Formatação de Texto</h2>
+                            <p>O texto fluido principal é definido em <code>slate-600</code> com espaçamento de linha relaxado para leitura em telas grandes. Aqui estão as variações:</p>
+                            <ul>
+                                <li><strong>Negrito:</strong> Use para destacar palavras-chave importantes.</li>
+                                <li><em>Itálico:</em> Use para estrangeirismos ou ênfase leve.</li>
+                                <li><s>Tachado:</s> Informação obsoleta ou revogada.</li>
+                                <li>Código Inline: Use para referenciar comandos como <code>npm install</code> ou variáveis do sistema.</li>
+                                <li><a href="https://www.detran.mg.gov.br" target="_blank">Links Externos ou Internos</a> recebem a cor primária e sublinhado no hover.</li>
+                            </ul>
+
+                            <h2 id="sec-3">3. Listas Estruturadas</h2>
+                            <h3>Lista Não Ordenada (Ul)</h3>
+                            <ul>
+                                <li>Primeiro item da lista com marcador customizado.</li>
+                                <li>Segundo item, contendo uma sub-lista para testar aninhamento:
+                                    <ul>
+                                        <li>Sub-item A (nível 2)</li>
+                                        <li>Sub-item B (nível 2)</li>
+                                    </ul>
+                                </li>
+                                <li>Terceiro item da lista raiz.</li>
+                            </ul>
+
+                            <h3>Lista Ordenada (Ol)</h3>
+                            <ol>
+                                <li>Passo inicial do procedimento.</li>
+                                <li>Processamento no sistema local.</li>
+                                <li>Validação final com a base estadual.</li>
+                            </ol>
+
+                            <h3>Lista de Tarefas (Task List)</h3>
+                            <ul class="contains-task-list" style="list-style-type: none; padding-left: 0;">
+                                <li class="task-list-item"><input type="checkbox" checked disabled> Atualizar layout do header.</li>
+                                <li class="task-list-item"><input type="checkbox" checked disabled> Injetar tipografia Tailwind.</li>
+                                <li class="task-list-item"><input type="checkbox" disabled> Homologar componentes no ambiente de staging.</li>
+                            </ul>
+
+                            <h2 id="sec-4">4. Blocos de Citação (Blockquote)</h2>
+                            <p>Utilizados para ressaltar trechos de normativos, portarias ou citações longas.</p>
+                            <blockquote>
+                                <p>Art. 1º - Fica estabelecido o novo padrão de desenvolvimento de interfaces para todos os sistemas internos do órgão, visando padronização, acessibilidade e melhoria da experiência do usuário (UX).</p>
+                                <footer>— Resolução Conjunta Nº 45/2026</footer>
+                            </blockquote>
+
+                            <h2 id="sec-5">5. Blocos de Código (Pre/Code)</h2>
+                            <p>Suporte para blocos com realce de sintaxe nativo.</p>
+<pre><code class="language-javascript">// Configuração do Tailwind (tailwind.config.js)
+module.exports = {
+  theme: {
+    extend: {
+      colors: {
+        detran: {
+          500: '#33a65b', // Verde Oficial
+        }
+      }
+    }
+  }
+}</code></pre>
+
+                            <h2 id="sec-6">6. Tabelas de Dados</h2>
+                            <p>As tabelas seguem o padrão Material Design, com bordas verticais invisíveis e linhas horizontais suaves para separação (Hover ativado na linha).</p>
+                            
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Componente</th>
+                                        <th>Status do Redesign</th>
+                                        <th>Responsável</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Sidebar (Menu)</strong></td>
+                                        <td>Concluído (Vue.js)</td>
+                                        <td>Danilo S.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Tema Markdown</strong></td>
+                                        <td>Em Andamento</td>
+                                        <td>Time de UX</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>API GraphQL</strong></td>
+                                        <td>Mantida (Intocável)</td>
+                                        <td>Wiki.js Core</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+
+                            <h2 id="sec-7">7. Imagens Responsivas</h2>
+                            <p>As imagens enviadas para a intranet são automaticamente arredondadas, ganham uma borda sutil e preenchem a largura do contêiner.</p>
+                            <img src="https://placehold.co/800x300/e1f6e8/206e3b?text=Exemplo+de+M%C3%ADdia+Markdown" alt="Placeholder Imagem Wiki">
+
+                            <hr>
+
+                            <h2 id="sec-8">8. Blocos Especiais (Wiki.js Native Extensions)</h2>
+                            <p>Os blocos abaixo são renderizados pelo Wiki.js inserindo as diretivas <code>> [!info]</code>, <code>> [!warning]</code>, etc. O CSS intercepta essas classes.</p>
+
+                            <div class="is-info">
+                                <strong>Bloco Info:</strong> Usado para informações neutras, dicas de uso do sistema ou notas explicativas adicionais.
+                            </div>
+
+                            <div class="is-success">
+                                <strong>Bloco Success:</strong> Ideal para mensagens de sucesso, como "O sistema está operando normalmente" ou "Operação validada". (Usa o verde institucional).
+                            </div>
+
+                            <div class="is-warning">
+                                <strong>Bloco Warning:</strong> Alertas importantes que exigem atenção, como prazos de sistemas próximos do vencimento ou instabilidade parcial.
+                            </div>
+
+                            <div class="is-danger">
+                                <strong>Bloco Danger:</strong> Informação crítica. Sistemas fora do ar, quebra de regras de segurança ou procedimentos bloqueados.
+                            </div>
+
+                            <h3>Lista de Links Visuais (.links-list)</h3>
+                            <p>Esta é uma funcionalidade nativa útil do Wiki.js para criar matrizes de botões (grid) a partir de listas não ordenadas, apenas adicionando <code>{.links-list}</code> ao final do Markdown. Suporta descrições inserindo <code>*descrição*</code> entre asteriscos:</p>
+                            
+                            <ul class="links-list">
+                                <li><a href="#">Manual do Sistema de Veículos</a> <em>Procedimentos operacionais para gestão de frota e emplacamento</em></li>
+                                <li><a href="#">Portal de Atendimento (UAI)</a> <em>Agendamentos presenciais e consultas de serviços ao condutor</em></li>
+                                <li><a href="#">Tabela de Taxas Vigentes 2026</a> <em>Valores atualizados de DAE para licenciamento, CNH e vistorias</em></li>
+                                <li><a href="#">Base de Conhecimento TI</a> <em>Tutoriais técnicos, abertura de chamados e acessos internos</em></li>
+                            </ul>
+
+                        </div>
+                    </article>
+                </div>
+
+                <aside class="w-full lg:w-80 space-y-8 opacity-0 animate-fade-in-up stagger-5 shrink-0">
+                    <div class="bg-white rounded-2xl p-6 shadow-soft sticky top-6">
+                        <h4 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Índice do Guia</h4>
+                        <ul class="space-y-3 text-sm" id="toc-list">
+                            <li><a href="#sec-1" class="toc-link flex items-center text-detran-700 font-medium transition-all duration-200 hover:translate-x-1"><div class="toc-dot w-1.5 h-1.5 rounded-full bg-detran-500 mr-2 transition-all duration-200 scale-125 shadow-[0_0_8px_rgba(51,166,91,0.5)]"></div>1. Cabeçalhos</a></li>
+                            <li><a href="#sec-2" class="toc-link flex items-center text-slate-500 hover:text-slate-800 transition-all duration-200 hover:translate-x-1"><div class="toc-dot w-1.5 h-1.5 rounded-full bg-slate-300 mr-2 transition-all duration-200"></div>2. Tipografia</a></li>
+                            <li><a href="#sec-3" class="toc-link flex items-center text-slate-500 hover:text-slate-800 transition-all duration-200 hover:translate-x-1"><div class="toc-dot w-1.5 h-1.5 rounded-full bg-slate-300 mr-2 transition-all duration-200"></div>3. Listas Estruturadas</a></li>
+                            <li><a href="#sec-4" class="toc-link flex items-center text-slate-500 hover:text-slate-800 transition-all duration-200 hover:translate-x-1"><div class="toc-dot w-1.5 h-1.5 rounded-full bg-slate-300 mr-2 transition-all duration-200"></div>4. Citações</a></li>
+                            <li><a href="#sec-5" class="toc-link flex items-center text-slate-500 hover:text-slate-800 transition-all duration-200 hover:translate-x-1"><div class="toc-dot w-1.5 h-1.5 rounded-full bg-slate-300 mr-2 transition-all duration-200"></div>5. Código</a></li>
+                            <li><a href="#sec-6" class="toc-link flex items-center text-slate-500 hover:text-slate-800 transition-all duration-200 hover:translate-x-1"><div class="toc-dot w-1.5 h-1.5 rounded-full bg-slate-300 mr-2 transition-all duration-200"></div>6. Tabelas e Imagens</a></li>
+                            <li><a href="#sec-8" class="toc-link flex items-center text-slate-500 hover:text-slate-800 transition-all duration-200 hover:translate-x-1"><div class="toc-dot w-1.5 h-1.5 rounded-full bg-slate-300 mr-2 transition-all duration-200"></div>8. Blocos Especiais Wiki.js</a></li>
+                        </ul>
+                    </div>
+                </aside>
+            </div>
+        </div>
+        
+        <!-- Menu Flutuante de Ações (Speed Dial) - Substitui o Chat -->
+        <div class="fixed bottom-8 right-8 z-50 flex flex-col items-center gap-3 group">
+            
+            <!-- Ações Secundárias (Cascata) -->
+            <div class="flex flex-col items-center gap-3 opacity-0 translate-y-4 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 pointer-events-none group-hover:pointer-events-auto">
+                
+                <!-- Excluir -->
+                <button class="w-11 h-11 bg-red-500 text-white rounded-full flex items-center justify-center shadow-md hover:bg-red-600 hover:scale-110 transition-all" title="Excluir">
+                    <i class="fa-solid fa-trash-can text-[15px]"></i>
+                </button>
+
+                <!-- Exportar -->
+                <button class="w-11 h-11 bg-white text-slate-700 rounded-full flex items-center justify-center shadow-md hover:bg-slate-50 hover:scale-110 transition-all border border-slate-100" title="Exportar">
+                    <i class="fa-solid fa-file-export text-[15px]"></i>
+                </button>
+
+                <!-- Copiar -->
+                <button class="w-11 h-11 bg-white text-slate-700 rounded-full flex items-center justify-center shadow-md hover:bg-slate-50 hover:scale-110 transition-all border border-slate-100" title="Copiar">
+                    <i class="fa-regular fa-clone text-[15px]"></i>
+                </button>
+
+                <!-- Ações -->
+                <button class="w-11 h-11 bg-white text-slate-700 rounded-full flex items-center justify-center shadow-md hover:bg-slate-50 hover:scale-110 transition-all border border-slate-100" title="Ações Rápidas">
+                    <i class="fa-solid fa-bolt text-[15px]"></i>
+                </button>
+
+                <!-- Código -->
+                <button class="w-11 h-11 bg-white text-slate-700 rounded-full flex items-center justify-center shadow-md hover:bg-slate-50 hover:scale-110 transition-all border border-slate-100" title="Código Fonte">
+                    <i class="fa-solid fa-code text-[15px]"></i>
+                </button>
+
+                <!-- Histórico -->
+                <button class="w-11 h-11 bg-white text-slate-700 rounded-full flex items-center justify-center shadow-md hover:bg-slate-50 hover:scale-110 transition-all border border-slate-100" title="Histórico">
+                    <i class="fa-solid fa-clock-rotate-left text-[15px]"></i>
+                </button>
+            </div>
+
+            <!-- Botão Principal de Edição -->
+            <button class="w-[3.25rem] h-[3.25rem] bg-detran-500 text-white rounded-full flex items-center justify-center shadow-[0_4px_14px_rgba(51,166,91,0.4)] hover:bg-detran-600 transition-colors relative z-10 group/main">
+                <i class="fa-solid fa-pen text-xl transition-transform duration-300 group-hover:rotate-[360deg]"></i>
+                <!-- Tooltip Fiel à Imagem -->
+                <span class="absolute right-16 bg-slate-500 text-white font-medium text-[13px] px-3 py-1.5 rounded opacity-0 group-hover/main:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-sm">Editar página</span>
+            </button>
+        </div>
+
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Lógica do Sidebar Recolhível
+            const sidebar = document.getElementById('sidebar');
+            const sidebarToggle = document.getElementById('sidebar-toggle');
+            const sidebarToggleIcon = document.getElementById('sidebar-toggle-icon');
+
+            sidebarToggle.addEventListener('click', () => {
+                sidebar.classList.toggle('collapsed');
+                sidebarToggleIcon.classList.toggle('rotated');
+                if (sidebar.classList.contains('collapsed')) {
+                    sidebarToggle.title = "Expandir menu";
+                } else {
+                    sidebarToggle.title = "Recolher menu";
+                }
+            });
+
+            // Lógica de Subitens (Acordeão) da Sidebar
+            const navGroups = document.querySelectorAll('.nav-group > button');
+            navGroups.forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    if (sidebar.classList.contains('collapsed')) sidebarToggle.click();
+                    
+                    const subitems = this.nextElementSibling;
+                    const chevron = this.querySelector('.nav-chevron');
+                    
+                    if (subitems.classList.contains('hidden')) {
+                        subitems.classList.remove('hidden');
+                        subitems.classList.add('flex');
+                        chevron.classList.add('rotate-180');
+                    } else {
+                        subitems.classList.add('hidden');
+                        subitems.classList.remove('flex');
+                        chevron.classList.remove('rotate-180');
+                    }
+                });
+            });
+
+            // Switcher Menu / Árvore (efeito deslizante botão liga/desliga)
+            const switchSlider = document.getElementById('switcher-slider');
+            const switchBtnMenu = document.getElementById('switcher-btn-menu');
+            const switchBtnTree = document.getElementById('switcher-btn-tree');
+
+            if (switchBtnMenu && switchBtnTree && switchSlider) {
+                switchBtnMenu.addEventListener('click', () => {
+                    switchSlider.style.transform = 'translateX(0)';
+                    switchBtnMenu.classList.remove('text-white/50');
+                    switchBtnMenu.classList.add('text-white');
+                    switchBtnTree.classList.remove('text-white');
+                    switchBtnTree.classList.add('text-white/50');
+                });
+                switchBtnTree.addEventListener('click', () => {
+                    switchSlider.style.transform = 'translateX(100%)';
+                    switchBtnTree.classList.remove('text-white/50');
+                    switchBtnTree.classList.add('text-white');
+                    switchBtnMenu.classList.remove('text-white');
+                    switchBtnMenu.classList.add('text-white/50');
+                });
+            }
+
+            // Scroll Suave e ScrollSpy para o TOC
+            const scrollContainer = document.querySelector('.overflow-y-auto');
+            const tocLinks = document.querySelectorAll('.toc-link');
+            
+            function updateActiveToc(activeLink) {
+                tocLinks.forEach(l => {
+                    l.classList.remove('text-detran-700', 'font-medium', 'translate-x-1');
+                    l.classList.add('text-slate-500');
+                    const dot = l.querySelector('.toc-dot');
+                    if (dot) {
+                        dot.classList.remove('bg-detran-500', 'scale-125', 'shadow-[0_0_8px_rgba(51,166,91,0.5)]');
+                        dot.classList.add('bg-slate-300');
+                    }
+                });
+                if (activeLink) {
+                    activeLink.classList.remove('text-slate-500');
+                    activeLink.classList.add('text-detran-700', 'font-medium', 'translate-x-1');
+                    const dot = activeLink.querySelector('.toc-dot');
+                    if (dot) {
+                        dot.classList.remove('bg-slate-300');
+                        dot.classList.add('bg-detran-500', 'scale-125', 'shadow-[0_0_8px_rgba(51,166,91,0.5)]');
+                    }
+                }
+            }
+
+            tocLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const targetId = this.getAttribute('href').replace('#', '');
+                    const targetEl = document.getElementById(targetId);
+                    if (targetEl) {
+                        targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        updateActiveToc(this);
+                    }
+                });
+            });
+
+            if (scrollContainer) {
+                const observedHeadings = document.querySelectorAll('h1[id], h2[id]');
+                const observerOptions = {
+                    root: scrollContainer,
+                    rootMargin: '-80px 0px -60% 0px',
+                    threshold: 0
+                };
+                const tocObserver = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            const link = document.querySelector(`.toc-link[href="#${entry.target.id}"]`);
+                            if (link) updateActiveToc(link);
+                        }
+                    });
+                }, observerOptions);
+
+                observedHeadings.forEach(h => tocObserver.observe(h));
+            }
+        });
+    </script>
+</body>
+</html>

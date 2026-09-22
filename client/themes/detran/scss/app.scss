@@ -5,6 +5,9 @@
 //   import('./themes/' + siteConfig.theme + '/scss/app.scss')
 // =============================================================================
 
+// Fonte Inter via Google Fonts (deve ser o primeiro import CSS do bundle)
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 // 1. Tokens e variáveis (deve vir primeiro)
 @import 'variables';
 
