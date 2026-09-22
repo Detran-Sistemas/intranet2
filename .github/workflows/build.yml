@@ -9,6 +9,7 @@ on:
 
 env:
   BASE_DEV_VERSION: 2.5.0
+  IMAGE_NAME: detran-sistemas/intranet2
 
 jobs:
 
@@ -57,13 +58,13 @@ jobs:
         file: dev/build/Dockerfile
         push: true
         tags: |
-          ghcr.io/${{ github.repository }}:canary
-          ghcr.io/${{ github.repository }}:canary-${{ env.REL_VERSION_STRICT }}
+          ghcr.io/${{ env.IMAGE_NAME }}:canary
+          ghcr.io/${{ env.IMAGE_NAME }}:canary-${{ env.REL_VERSION_STRICT }}
 
     - name: Extract compiled files
       run: |
         mkdir -p _dist
-        docker create --name wiki ghcr.io/${{ github.repository }}:canary-$REL_VERSION_STRICT
+        docker create --name wiki ghcr.io/${{ env.IMAGE_NAME }}:canary-$REL_VERSION_STRICT
         docker cp wiki:/wiki _dist
         docker rm wiki
         rm _dist/wiki/config.yml
@@ -162,7 +163,7 @@ jobs:
         provenance: false
         push: true
         tags: |
-          ghcr.io/${{ github.repository }}:canary-arm64-${{ env.REL_VERSION_STRICT }}
+          ghcr.io/${{ env.IMAGE_NAME }}:canary-arm64-${{ env.REL_VERSION_STRICT }}
 
   windows:
     name: Windows Build
@@ -232,11 +233,11 @@ jobs:
       run: |
         echo "Creating the manifests..."
 
-        docker manifest create ghcr.io/${{ github.repository }}:beta-$REL_VERSION_STRICT ghcr.io/${{ github.repository }}:canary-$REL_VERSION_STRICT ghcr.io/${{ github.repository }}:canary-arm64-$REL_VERSION_STRICT
+        docker manifest create ghcr.io/${{ env.IMAGE_NAME }}:beta-$REL_VERSION_STRICT ghcr.io/${{ env.IMAGE_NAME }}:canary-$REL_VERSION_STRICT ghcr.io/${{ env.IMAGE_NAME }}:canary-arm64-$REL_VERSION_STRICT
 
         echo "Pushing the manifests..."
 
-        docker manifest push -p ghcr.io/${{ github.repository }}:beta-$REL_VERSION_STRICT
+        docker manifest push -p ghcr.io/${{ env.IMAGE_NAME }}:beta-$REL_VERSION_STRICT
 
   release:
     name: Publish Release Images
@@ -274,17 +275,17 @@ jobs:
         echo "Using major $MAJOR and minor $MINOR..."
         echo "Creating the manifests..."
 
-        docker manifest create ghcr.io/${{ github.repository }}:$REL_VERSION_STRICT ghcr.io/${{ github.repository }}:canary-$REL_VERSION_STRICT ghcr.io/${{ github.repository }}:canary-arm64-$REL_VERSION_STRICT
-        docker manifest create ghcr.io/${{ github.repository }}:$MAJOR ghcr.io/${{ github.repository }}:canary-$REL_VERSION_STRICT ghcr.io/${{ github.repository }}:canary-arm64-$REL_VERSION_STRICT
-        docker manifest create ghcr.io/${{ github.repository }}:$MAJORMINOR ghcr.io/${{ github.repository }}:canary-$REL_VERSION_STRICT ghcr.io/${{ github.repository }}:canary-arm64-$REL_VERSION_STRICT
-        docker manifest create ghcr.io/${{ github.repository }}:latest ghcr.io/${{ github.repository }}:canary-$REL_VERSION_STRICT ghcr.io/${{ github.repository }}:canary-arm64-$REL_VERSION_STRICT
+        docker manifest create ghcr.io/${{ env.IMAGE_NAME }}:$REL_VERSION_STRICT ghcr.io/${{ env.IMAGE_NAME }}:canary-$REL_VERSION_STRICT ghcr.io/${{ env.IMAGE_NAME }}:canary-arm64-$REL_VERSION_STRICT
+        docker manifest create ghcr.io/${{ env.IMAGE_NAME }}:$MAJOR ghcr.io/${{ env.IMAGE_NAME }}:canary-$REL_VERSION_STRICT ghcr.io/${{ env.IMAGE_NAME }}:canary-arm64-$REL_VERSION_STRICT
+        docker manifest create ghcr.io/${{ env.IMAGE_NAME }}:$MAJORMINOR ghcr.io/${{ env.IMAGE_NAME }}:canary-$REL_VERSION_STRICT ghcr.io/${{ env.IMAGE_NAME }}:canary-arm64-$REL_VERSION_STRICT
+        docker manifest create ghcr.io/${{ env.IMAGE_NAME }}:latest ghcr.io/${{ env.IMAGE_NAME }}:canary-$REL_VERSION_STRICT ghcr.io/${{ env.IMAGE_NAME }}:canary-arm64-$REL_VERSION_STRICT
 
         echo "Pushing the manifests..."
 
-        docker manifest push -p ghcr.io/${{ github.repository }}:$REL_VERSION_STRICT
-        docker manifest push -p ghcr.io/${{ github.repository }}:$MAJOR
-        docker manifest push -p ghcr.io/${{ github.repository }}:$MAJORMINOR
-        docker manifest push -p ghcr.io/${{ github.repository }}:latest
+        docker manifest push -p ghcr.io/${{ env.IMAGE_NAME }}:$REL_VERSION_STRICT
+        docker manifest push -p ghcr.io/${{ env.IMAGE_NAME }}:$MAJOR
+        docker manifest push -p ghcr.io/${{ env.IMAGE_NAME }}:$MAJORMINOR
+        docker manifest push -p ghcr.io/${{ env.IMAGE_NAME }}:latest
 
     - name: Download Linux Build
       uses: actions/download-artifact@v8
