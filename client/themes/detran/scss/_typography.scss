@@ -28,6 +28,19 @@
     line-height: 1.3;
     scroll-margin-top: calc(#{$header-height} + 36px);
     transition: color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+
+    .toc-anchor {
+      display: none !important;
+      visibility: hidden !important;
+      pointer-events: none !important;
+      font-size: 0 !important;
+    }
+  }
+
+  .toc-anchor {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
   }
 
   h1 {

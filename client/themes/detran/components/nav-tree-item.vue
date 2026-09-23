@@ -62,7 +62,13 @@
     span.detran-sidebar__link-text {{ item.title }}
 
   //- 3. Sub-itens (Filhos) quando a pasta está expandida
-  transition(name='detran-tree-expand')
+  transition(
+    name='detran-tree-expand'
+    @enter='accordionEnter'
+    @after-enter='accordionAfterEnter'
+    @leave='accordionLeave'
+    @after-leave='accordionAfterLeave'
+  )
     .detran-tree__children(v-if='item.isFolder && isExpanded')
       template(v-if='children && children.length > 0')
         nav-tree-item(
@@ -194,6 +200,40 @@ export default {
       if (p.includes('lei') || p.includes('normat') || p.includes('portaria')) return 'mdi-scale-balance'
       if (p.includes('organograma') || p.includes('institucional')) return 'mdi-sitemap'
       return 'mdi-file-document-outline'
+    },
+
+    // -------------------------------------------------------------------------
+    // Animação de Acordeão Suave (Expand / Collapse de Subpastas)
+    // -------------------------------------------------------------------------
+    accordionEnter (el) {
+      el.style.height = '0'
+      el.style.opacity = '0'
+      el.style.overflow = 'hidden'
+      void el.offsetHeight
+      el.style.transition = 'height 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.24s ease'
+      el.style.height = `${el.scrollHeight}px`
+      el.style.opacity = '1'
+    },
+    accordionAfterEnter (el) {
+      el.style.height = ''
+      el.style.opacity = ''
+      el.style.overflow = ''
+      el.style.transition = ''
+    },
+    accordionLeave (el) {
+      el.style.height = `${el.scrollHeight}px`
+      el.style.opacity = '1'
+      el.style.overflow = 'hidden'
+      void el.offsetHeight
+      el.style.transition = 'height 0.24s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.20s ease'
+      el.style.height = '0'
+      el.style.opacity = '0'
+    },
+    accordionAfterLeave (el) {
+      el.style.height = ''
+      el.style.opacity = ''
+      el.style.overflow = ''
+      el.style.transition = ''
     }
   }
 }
@@ -284,6 +324,7 @@ export default {
 .detran-tree__children {
   width: 100%;
   position: relative;
+  will-change: height, opacity;
 
   &::before {
     content: '';
@@ -302,16 +343,5 @@ export default {
   font-style: italic;
   color: rgba(255, 255, 255, 0.45);
   margin: 4px 0 6px 0;
-}
-
-.detran-tree-expand-enter-active,
-.detran-tree-expand-leave-active {
-  transition: opacity 0.2s ease, transform 0.2s ease;
-}
-
-.detran-tree-expand-enter,
-.detran-tree-expand-leave-to {
-  opacity: 0;
-  transform: translateY(-4px);
 }
 </style>

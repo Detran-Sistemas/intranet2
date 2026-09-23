@@ -253,8 +253,8 @@
                         :class='`detran-toc__item--h${item.level}`'
                       )
                         a.detran-toc__link(
-                          :href='`#${item.anchor}`'
-                          :class='{ "is-active": activeTocAnchor === item.anchor }'
+                          :href='`#${cleanAnchor(item.anchor)}`'
+                          :class='{ "is-active": activeTocAnchor === cleanAnchor(item.anchor) }'
                           @click.prevent='scrollToAnchor(item.anchor)'
                         )
                           .detran-toc__dot(aria-hidden='true')
@@ -728,10 +728,7 @@ export default {
     // -> Scroll para âncora ao carregar a página
     if (window.location.hash && window.location.hash.length > 1) {
       const scrollTarget = () => {
-        const target = document.querySelector(decodeURIComponent(window.location.hash))
-        if (target) {
-          target.scrollIntoView({ behavior: 'smooth' })
-        }
+        this.scrollToAnchor(window.location.hash)
       }
       if (document.readyState === 'complete') {
         this.$nextTick(scrollTarget)
@@ -749,11 +746,7 @@ export default {
             ev.stopPropagation()
             const hash = ev.currentTarget.hash
             if (hash) {
-              const target = document.querySelector(decodeURIComponent(hash))
-              if (target) {
-                target.scrollIntoView({ behavior: 'smooth' })
-                history.pushState(null, '', hash)
-              }
+              this.scrollToAnchor(hash)
             }
           }
         })
@@ -935,12 +928,22 @@ export default {
     },
 
     // -------------------------------------------------------------------------
-    // TOC: observer de scroll para destaque do item ativo
+    // TOC: observer de scroll para destaque do item ativo e navegação suave
     // -------------------------------------------------------------------------
+    cleanAnchor (anchor) {
+      if (!anchor) return ''
+      return String(anchor).replace(/^#+/, '')
+    },
+
     initTocObserver () {
       if (!this.tocDecoded.length) return
 
-      const options = { rootMargin: '-80px 0px -60% 0px', threshold: 0 }
+      const scrollContainer = this.$el.querySelector('.detran-content')
+      const options = {
+        root: scrollContainer || null,
+        rootMargin: '-80px 0px -60% 0px',
+        threshold: 0
+      }
       this._tocObserver = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
           if (entry.isIntersecting) {
@@ -959,13 +962,30 @@ export default {
 
     scrollToAnchor (anchor) {
       if (!anchor) return
-      const target = document.getElementById(anchor) || document.querySelector(`[id="${anchor}"]`) || document.querySelector(`a[name="${anchor}"]`)
+      const clean = this.cleanAnchor(anchor)
+      const target = document.getElementById(clean) ||
+        document.querySelector(`[id="${clean}"]`) ||
+        document.querySelector(`a[name="${clean}"]`) ||
+        document.querySelector(`[id="${anchor}"]`)
+
       if (target) {
-        target.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        if (history && history.pushState) {
-          history.pushState(null, '', `#${anchor}`)
+        const scrollContainer = this.$el.querySelector('.detran-content')
+        if (scrollContainer) {
+          const containerRect = scrollContainer.getBoundingClientRect()
+          const targetRect = target.getBoundingClientRect()
+          const headerOffset = window.innerWidth <= 768 ? 76 : 100
+          const targetTop = targetRect.top - containerRect.top + scrollContainer.scrollTop - headerOffset
+          scrollContainer.scrollTo({
+            top: Math.max(0, targetTop),
+            behavior: 'smooth'
+          })
+        } else {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' })
         }
-        this.activeTocAnchor = anchor
+        if (history && history.pushState) {
+          history.pushState(null, '', `#${clean}`)
+        }
+        this.activeTocAnchor = clean
       }
     },
 
@@ -1234,13 +1254,19 @@ export default {
     border: none;
     cursor: pointer;
 
-    .v-icon { transition: transform 0.3s ease; }
+    .v-icon {
+      color: $detran-700 !important;
+      transition: transform 0.3s ease, color 0.2s ease !important;
+    }
 
     &:hover {
-      background: $detran-700;
-      color: white;
+      background: $detran-700 !important;
+      color: #ffffff !important;
 
-      .v-icon { transform: rotate(90deg); }
+      .v-icon {
+        color: #ffffff !important;
+        transform: rotate(90deg) !important;
+      }
     }
 
     @include mobile {
@@ -1254,7 +1280,17 @@ export default {
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 
       span { display: none !important; }
-      .v-icon { margin: 0; font-size: 18px !important; }
+      .v-icon {
+        margin: 0;
+        font-size: 18px !important;
+        color: $detran-700 !important;
+      }
+
+      &:hover {
+        .v-icon {
+          color: #ffffff !important;
+        }
+      }
     }
   }
 

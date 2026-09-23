@@ -52,6 +52,20 @@ html, body {
 }
 
 // -----------------------------------------------------------------------------
+// ÂNCORAS DE CABEÇALHO DO WIKI.JS (Símbolo ¶)
+// -----------------------------------------------------------------------------
+.toc-anchor,
+a.toc-anchor {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  font-size: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+}
+
+// -----------------------------------------------------------------------------
 // OVERRIDE ROOT — v-app do Vuetify
 // O Vuetify gera .v-application e .v-application--wrap
 // Precisamos que o layout ocupe 100% da tela

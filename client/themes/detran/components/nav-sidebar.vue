@@ -85,18 +85,26 @@
                 :class='{ "is-rotated": !isGroupExpanded(item) }'
               ) mdi-chevron-down
 
-            .detran-sidebar__subitems(v-show='isGroupExpanded(item)')
-              a.detran-sidebar__sublink.glass-hover(
-                v-for='sub in item.subitems'
-                :key='sub.i'
-                :href='resolveTarget(sub)'
-                :title='sub.l'
-                :class='{ "glass-active": isActive(sub) }'
-                :aria-current='isActive(sub) ? "page" : undefined'
-                :target='sub.y === "externalblank" ? "_blank" : undefined'
-                :rel='sub.y === "externalblank" ? "noopener noreferrer" : undefined'
-              )
-                span.detran-sidebar__sublink-text {{ sub.l }}
+            transition(
+              name='detran-accordion'
+              @enter='accordionEnter'
+              @after-enter='accordionAfterEnter'
+              @leave='accordionLeave'
+              @after-leave='accordionAfterLeave'
+            )
+              .detran-sidebar__subitems(v-show='isGroupExpanded(item)')
+                a.detran-sidebar__sublink.glass-hover(
+                  v-for='sub in item.subitems'
+                  :key='sub.i'
+                  :href='resolveTarget(sub)'
+                  :title='sub.l'
+                  :class='{ "glass-active": isActive(sub) }'
+                  :aria-current='isActive(sub) ? "page" : undefined'
+                  :target='sub.y === "externalblank" ? "_blank" : undefined'
+                  :rel='sub.y === "externalblank" ? "noopener noreferrer" : undefined'
+                )
+                  v-icon.detran-sidebar__sublink-icon(v-if='sub.c && sub.c !== "mdi-chevron-right" && sub.c !== "link"' size='14' color='rgba(255,255,255,0.7)') {{ resolveIcon(sub.c) }}
+                  span.detran-sidebar__sublink-text {{ sub.l }}
 
         //- Link simples
         template(v-else-if='item.k === "link"')
@@ -400,13 +408,12 @@ export default {
         // Link
         if (item.k === 'link') {
           // Se o link for um subitem sob o Cabeçalho atual
-          if (currentGroup && (item.c === 'mdi-chevron-right' || !item.c || item.c === 'link' || item.c === 'mdi-link')) {
+          if (currentGroup) {
             currentGroup.subitems.push(item)
             continue
           }
 
-          // Se for um link de primeiro nível com ícone próprio
-          currentGroup = null
+          // Se for um link de primeiro nível (fora de grupo)
           result.push(item)
         }
       }
@@ -484,26 +491,100 @@ export default {
       return !this.collapsedGroups[id]
     },
 
+    // -------------------------------------------------------------------------
+    // Animação de Acordeão Suave (Expand / Collapse de Subitens)
+    // -------------------------------------------------------------------------
+    accordionEnter (el) {
+      el.style.height = '0'
+      el.style.opacity = '0'
+      el.style.overflow = 'hidden'
+      void el.offsetHeight
+      el.style.transition = 'height 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.24s ease'
+      el.style.height = `${el.scrollHeight}px`
+      el.style.opacity = '1'
+    },
+    accordionAfterEnter (el) {
+      el.style.height = ''
+      el.style.opacity = ''
+      el.style.overflow = ''
+      el.style.transition = ''
+    },
+    accordionLeave (el) {
+      el.style.height = `${el.scrollHeight}px`
+      el.style.opacity = '1'
+      el.style.overflow = 'hidden'
+      void el.offsetHeight
+      el.style.transition = 'height 0.24s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.20s ease'
+      el.style.height = '0'
+      el.style.opacity = '0'
+    },
+    accordionAfterLeave (el) {
+      el.style.height = ''
+      el.style.opacity = ''
+      el.style.overflow = ''
+      el.style.transition = ''
+    },
+
     onAvatarError () {
       this.avatarFailed = true
     },
 
     isActive (item) {
+      if (!item) return false
       if (item.y === 'home') {
-        const p = (this.currentPath || '').toLowerCase()
-        return p === '' || p === 'home'
+        const p = (this.currentPath || '').toLowerCase().replace(/^\/+/, '')
+        return p === '' || p === 'home' || p === `${this.locale.toLowerCase()}/home` || p === this.locale.toLowerCase()
       }
       if (!item.t) return false
-      const path = (this.currentPath || '').replace(/^\//, '').replace(/^pt\//, '').replace(/^en\//, '')
-      const target = item.t.replace(/^\//, '').replace(/^pt\//, '').replace(/^en\//, '')
-      return path === target || (target !== '' && path.startsWith(target + '/'))
+
+      const normalize = (val) => {
+        let s = (val || '').toLowerCase().replace(/^\/+/, '').replace(/\/+$/, '')
+        const locPrefix = `${this.locale.toLowerCase()}/`
+        while (s.startsWith(locPrefix)) {
+          s = s.substring(locPrefix.length).replace(/^\/+/, '')
+        }
+        return s
+      }
+
+      const current = normalize(this.currentPath)
+      const target = normalize(item.t)
+      return current === target || (target !== '' && current.startsWith(target + '/'))
     },
 
     resolveTarget (item) {
-      if (item.y === 'home') return '/'
-      if (item.y === 'external' || item.y === 'externalblank') return item.t
-      if (item.y === 'page') return `/${this.locale}/${item.t.replace(/^\//, '')}`
-      return item.t || '#'
+      if (!item) return '#'
+      if (item.y === 'home') return `/${this.locale}/home`
+      if (item.y === 'external' || item.y === 'externalblank') return item.t || '#'
+
+      const raw = (item.t || '').trim()
+      if (!raw) return '#'
+
+      // URLs externas completas (http, https, //, mailto, tel)
+      if (/^(?:[a-z]+:)?\/\//i.test(raw) || raw.startsWith('mailto:') || raw.startsWith('tel:')) {
+        return raw
+      }
+
+      // Remove barras iniciais
+      let clean = raw.replace(/^\/+/, '')
+
+      // Remove repetições do locale atual se já presente (ex: pt-br/pt-br/...)
+      const locPrefix = `${this.locale.toLowerCase()}/`
+      while (clean.toLowerCase().startsWith(locPrefix)) {
+        clean = clean.substring(locPrefix.length).replace(/^\/+/, '')
+      }
+
+      // Verifica se o caminho aponta para outro idioma conhecido (ex: en/...)
+      const hasOtherLocale = (this.locales || []).some(lc => {
+        const code = (typeof lc === 'string' ? lc : lc.code || '').toLowerCase()
+        return code && code !== this.locale.toLowerCase() && clean.toLowerCase().startsWith(`${code}/`)
+      })
+
+      if (hasOtherLocale) {
+        return `/${clean}`
+      }
+
+      // Previne duplicação prefixando com o idioma atual de forma canônica
+      return `/${this.locale}/${clean}`
     },
 
     resolveIcon (icon) {
@@ -1035,7 +1116,7 @@ export default {
 
   &__group-chevron {
     margin-left: auto !important;
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1) !important;
     color: rgba(255, 255, 255, 0.70) !important;
 
     &.is-rotated {
@@ -1046,8 +1127,9 @@ export default {
   &__subitems {
     display: flex;
     flex-direction: column;
-    margin-top: 2px;
+    padding-top: 2px;
     gap: 2px;
+    will-change: height, opacity;
   }
 
   &__sublink {
@@ -1061,6 +1143,11 @@ export default {
     text-decoration: none !important;
     border-radius: 0 $radius-md $radius-md 0 !important;
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+
+    .detran-sidebar__sublink-icon {
+      margin-right: 0.5rem !important;
+      flex-shrink: 0 !important;
+    }
 
     .detran-sidebar__sublink-text {
       color: #cce0d2 !important;
