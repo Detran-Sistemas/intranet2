@@ -1,0 +1,21 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<deployment>
+  <id>39238b9ad5174baadf8ce3c219654157e2a092a01790169981235</id>
+  <author>cezarazvdo</author>
+  <deployer>GitHub</deployer>
+  <authorEmail />
+  <message>{"type":"Deployment","sha":"39238b9ad5174baadf8ce3c219654157e2a092a0","repoName":"Detran-Sistemas/intranet2","actor":"cezarazvdo","slotName":"production"}</message>
+  <progress />
+  <status>Success</status>
+  <statusText />
+  <lastSuccessEndTime>2026-09-23T13:26:21.3587565Z</lastSuccessEndTime>
+  <receivedTime>2026-09-23T13:26:21.3587565Z</receivedTime>
+  <startTime>2026-09-23T13:26:21.3587565Z</startTime>
+  <endTime>2026-09-23T13:26:21.3587565Z</endTime>
+  <complete>True</complete>
+  <is_temp>False</is_temp>
+  <is_readonly>True</is_readonly>
+  <containerId>eac2fd5579e2</containerId>
+  <deploymentTag />
+  <buildSummary />
+</deployment>
