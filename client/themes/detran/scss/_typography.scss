@@ -181,43 +181,29 @@
     overflow-x: auto !important;
     overflow-y: hidden !important;
     -webkit-overflow-scrolling: touch;
-    text-align: center;
     display: block;
 
     svg {
       max-width: 100% !important;
       height: auto !important;
-      display: inline-block !important;
+      display: block !important;
       margin: 0 auto !important;
       color-scheme: light !important;
       direction: ltr !important;
-      vertical-align: middle;
 
-      // Isola e protege os textos de caixas dentro do foreignObject do Draw.io
+      // NUNCA sobrescrever margin, padding ou display de <div> dentro do foreignObject:
+      // O Draw.io utiliza 'margin-left' e 'padding-top' inline para posicionar (x, y) cada caixa no diagrama!
       foreignObject {
         overflow: visible !important;
 
-        p, div, span {
-          margin: 0 !important;
-          padding: 0;
-          line-height: 1.2 !important;
-          color: inherit;
-          font-family: inherit;
-        }
-
         p {
+          margin: 0 !important;
           margin-bottom: 0 !important;
         }
 
         // Links internos/externos dentro do diagrama clicáveis
         a {
           pointer-events: auto !important;
-          text-decoration: none !important;
-          color: inherit !important;
-
-          &:hover {
-            text-decoration: underline !important;
-          }
         }
       }
     }
