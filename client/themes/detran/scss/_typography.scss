@@ -143,7 +143,7 @@
   // 5. BLOCOS DE CÓDIGO (PRE)
   // prose-pre:bg-slate-800 prose-pre:text-slate-100 prose-pre:rounded-xl
   // ---------------------------------------------------------------------------
-  pre {
+  pre:not(.diagram) {
     background-color: $slate-800;
     color: $slate-100;
     border-radius: $radius-lg;
@@ -160,6 +160,82 @@
       padding: 0;
       border-radius: 0;
       font-size: inherit;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // 5.1 DIAGRAMAS DRAW.IO & MERMAID (.diagram, pre.diagram, .mermaid)
+  // ---------------------------------------------------------------------------
+  .diagram,
+  pre.diagram {
+    background-color: $color-white !important;
+    color: $slate-800 !important;
+    border: 1px solid rgba($slate-200, 0.8) !important;
+    border-radius: $radius-xl !important;
+    box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.03) !important;
+    padding: 1.5rem !important;
+    margin: 2rem 0 !important;
+    font-family: inherit !important;
+    font-size: inherit !important;
+    line-height: normal !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch;
+    text-align: center;
+    display: block;
+
+    svg {
+      max-width: 100% !important;
+      height: auto !important;
+      display: inline-block !important;
+      margin: 0 auto !important;
+      color-scheme: light !important;
+      direction: ltr !important;
+      vertical-align: middle;
+
+      // Isola e protege os textos de caixas dentro do foreignObject do Draw.io
+      foreignObject {
+        overflow: visible !important;
+
+        p, div, span {
+          margin: 0 !important;
+          padding: 0;
+          line-height: 1.2 !important;
+          color: inherit;
+          font-family: inherit;
+        }
+
+        p {
+          margin-bottom: 0 !important;
+        }
+
+        // Links internos/externos dentro do diagrama clicáveis
+        a {
+          pointer-events: auto !important;
+          text-decoration: none !important;
+          color: inherit !important;
+
+          &:hover {
+            text-decoration: underline !important;
+          }
+        }
+      }
+    }
+  }
+
+  .mermaid {
+    background-color: $color-white;
+    border: 1px solid rgba($slate-200, 0.8);
+    border-radius: $radius-xl;
+    box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.05);
+    padding: 1.5rem;
+    margin: 2rem 0;
+    text-align: center;
+    overflow-x: auto;
+
+    svg {
+      max-width: 100%;
+      height: auto;
     }
   }
 
@@ -304,6 +380,27 @@
     height: auto;
     display: block;
     margin: 1.5rem auto;
+
+    // Evita esticar diagramas UML / Kroki / PlantUML pequenos
+    &.uml-diagram {
+      width: auto !important;
+      max-width: 100%;
+      background-color: $color-white;
+      padding: 1rem;
+    }
+  }
+
+  .uml-diagram {
+    max-width: 100%;
+    width: auto !important;
+    height: auto;
+    margin: 1.5rem auto;
+    display: block;
+    border-radius: $radius-lg;
+    background-color: $color-white;
+    padding: 1rem;
+    border: 1px solid $slate-200;
+    box-shadow: $shadow-soft;
   }
 
   // ---------------------------------------------------------------------------
