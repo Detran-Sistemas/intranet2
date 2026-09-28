@@ -254,7 +254,7 @@
                       )
                         a.detran-toc__link(
                           :href='`#${cleanAnchor(item.anchor)}`'
-                          :class='{ "is-active": activeTocAnchor === cleanAnchor(item.anchor) }'
+                          :class='{ "is-active": isTocActive(item.anchor) }'
                           @click.prevent='scrollToAnchor(item.anchor)'
                         )
                           .detran-toc__dot(aria-hidden='true')
@@ -423,32 +423,33 @@ export default {
   // Não alterar nomes ou tipos sem verificar o template Pug
   // ---------------------------------------------------------------------------
   props: {
-    locale:               { type: String, default: 'pt' },
-    path:                 { type: String, default: 'home' },
-    title:                { type: String, default: '' },
-    description:          { type: String, default: '' },
-    tags:                 { type: Array, default: () => [] },
-    createdAt:            { type: String, default: '' },
-    updatedAt:            { type: String, default: '' },
-    authorName:           { type: String, default: '' },
-    authorId:             { type: Number, default: 0 },
-    editor:               { type: String, default: '' },
-    isPublished:          { type: String, default: 'true' },
-    toc:                  { type: String, default: '' },           // base64 JSON
-    pageId:               { type: Number, default: 0 },
-    sidebar:              { type: String, default: '' },           // base64 JSON
-    navMode:              { type: String, default: 'SIDEBAR' },
-    commentsEnabled:      { type: String, default: 'false' },
-    effectivePermissions: { type: String, default: '' },           // base64 JSON
-    commentsExternal:     { type: String, default: '' },
-    editShortcuts:        { type: String, default: '' },           // base64 JSON
-    filename:             { type: String, default: '' }
+    locale: { type: String, default: 'pt' },
+    path: { type: String, default: 'home' },
+    title: { type: String, default: '' },
+    description: { type: String, default: '' },
+    tags: { type: Array, default: () => [] },
+    createdAt: { type: String, default: '' },
+    updatedAt: { type: String, default: '' },
+    authorName: { type: String, default: '' },
+    authorId: { type: Number, default: 0 },
+    editor: { type: String, default: '' },
+    isPublished: { type: String, default: 'true' },
+    toc: { type: String, default: '' }, // base64 JSON
+    pageId: { type: Number, default: 0 },
+    sidebar: { type: String, default: '' }, // base64 JSON
+    navMode: { type: String, default: 'SIDEBAR' },
+    commentsEnabled: { type: String, default: 'false' },
+    effectivePermissions: { type: String, default: '' }, // base64 JSON
+    commentsExternal: { type: String, default: '' },
+    editShortcuts: { type: String, default: '' }, // base64 JSON
+    filename: { type: String, default: '' }
   },
 
   data () {
     return {
       mobileSidebarOpen: false,
       activeTocAnchor: '',
+      isScrolling: false,
       calculatedReadTime: 0,
       deletePageModal: false,
       newPageModal: false,
@@ -516,9 +517,28 @@ export default {
       }
     },
     tocDecoded () {
-      try { return JSON.parse(Buffer.from(this.toc, 'base64').toString('utf8')) } catch (e) {
-        try { return JSON.parse(decodeURIComponent(escape(atob(this.toc)))) } catch (err) { return [] }
+      let raw = []
+      try {
+        raw = JSON.parse(Buffer.from(this.toc, 'base64').toString('utf8'))
+      } catch (e) {
+        try { raw = JSON.parse(decodeURIComponent(escape(atob(this.toc)))) } catch (err) { raw = [] }
       }
+      if (!Array.isArray(raw)) return []
+
+      const flatten = (items, level = 1) => {
+        let result = []
+        for (const item of items) {
+          result.push({
+            ...item,
+            level: item.level || level
+          })
+          if (Array.isArray(item.children) && item.children.length > 0) {
+            result = result.concat(flatten(item.children, level + 1))
+          }
+        }
+        return result
+      }
+      return flatten(raw)
     },
     effectivePermsObj () {
       try { return JSON.parse(Buffer.from(this.effectivePermissions, 'base64').toString('utf8')) } catch (e) {
@@ -770,6 +790,8 @@ export default {
   beforeDestroy () {
     window.removeEventListener('keydown', this.handleGlobalKeydown)
     if (this._tocObserver) this._tocObserver.disconnect()
+    if (this._scrollRafId) cancelAnimationFrame(this._scrollRafId)
+    if (this._scrollCleanup) this._scrollCleanup()
   },
 
   methods: {
@@ -792,10 +814,12 @@ export default {
     },
 
     searchEnter () {
+      // eslint-disable-next-line vue/custom-event-name-casing
       this.$root.$emit('searchEnter', true)
     },
 
     searchMove (dir) {
+      // eslint-disable-next-line vue/custom-event-name-casing
       this.$root.$emit('searchMove', dir)
     },
 
@@ -822,7 +846,7 @@ export default {
     scrollToTop () {
       const content = this.$el.querySelector('.detran-content')
       if (content) {
-        content.scrollTo({ top: 0, behavior: 'smooth' })
+        this.smoothScrollTo(content, 0, 500)
       } else {
         window.scrollTo({ top: 0, behavior: 'smooth' })
       }
@@ -932,21 +956,40 @@ export default {
     // -------------------------------------------------------------------------
     cleanAnchor (anchor) {
       if (!anchor) return ''
-      return String(anchor).replace(/^#+/, '')
+      return String(anchor).replace(/^#+/, '').trim()
+    },
+
+    isTocActive (anchor) {
+      if (!this.activeTocAnchor || !anchor) return false
+      const clean = this.cleanAnchor(anchor).toLowerCase()
+      const active = String(this.activeTocAnchor).toLowerCase()
+      if (clean === active) return true
+      if (`h-${clean}` === active || clean === `h-${active}`) return true
+      try {
+        const decoded = decodeURIComponent(clean).toLowerCase()
+        if (decoded === active || `h-${decoded}` === active || decoded === `h-${active}`) return true
+      } catch (e) {}
+      return false
     },
 
     initTocObserver () {
       if (!this.tocDecoded.length) return
 
+      if (this._tocObserver) {
+        this._tocObserver.disconnect()
+        this._tocObserver = null
+      }
+
       const scrollContainer = this.$el.querySelector('.detran-content')
       const options = {
         root: scrollContainer || null,
-        rootMargin: '-80px 0px -60% 0px',
+        rootMargin: '-90px 0px -55% 0px',
         threshold: 0
       }
       this._tocObserver = new IntersectionObserver((entries) => {
+        if (this.isScrolling) return
         entries.forEach(entry => {
-          if (entry.isIntersecting) {
+          if (entry.isIntersecting && entry.target.id) {
             this.activeTocAnchor = entry.target.id
           }
         })
@@ -960,32 +1003,206 @@ export default {
       }
     },
 
+    findTargetElement (anchor) {
+      if (!anchor) return null
+
+      const clean = this.cleanAnchor(anchor)
+      if (!clean) return null
+
+      const candidateSet = new Set()
+      candidateSet.add(clean)
+
+      try {
+        const decoded = decodeURIComponent(clean)
+        if (decoded) candidateSet.add(decoded)
+      } catch (e) {}
+
+      try {
+        const encoded = encodeURIComponent(clean)
+        if (encoded) candidateSet.add(encoded)
+      } catch (e) {}
+
+      // Add 'h-' prefixed versions (Wiki.js prepends 'h-' when slug starts with a number)
+      const currentList = Array.from(candidateSet)
+      currentList.forEach(cand => {
+        if (/^\d/.test(cand)) {
+          candidateSet.add(`h-${cand}`)
+        }
+        if (cand.startsWith('h-')) {
+          candidateSet.add(cand.slice(2))
+        }
+      })
+
+      // 1. Direct getElementById lookup (fastest and handles special characters natively)
+      for (const cand of candidateSet) {
+        const el = document.getElementById(cand)
+        if (el) return el
+      }
+
+      // 2. Search inside page contents (.detran-contents or .detran-content)
+      const contentEl = this.$el && (this.$el.querySelector('.detran-contents') || this.$el.querySelector('.detran-content'))
+      if (contentEl) {
+        // Safe querySelector with CSS.escape
+        for (const cand of candidateSet) {
+          try {
+            if (window.CSS && CSS.escape) {
+              const el = contentEl.querySelector(`[id="${CSS.escape(cand)}"], a[name="${CSS.escape(cand)}"]`)
+              if (el) return el
+            }
+          } catch (e) {}
+        }
+
+        // 3. Fallback: scan all headings
+        const headings = contentEl.querySelectorAll('h1, h2, h3, h4, h5, h6')
+        const lowerCandidates = Array.from(candidateSet).map(c => c.toLowerCase())
+
+        // Pass 3a: heading id case-insensitive match
+        for (let i = 0; i < headings.length; i++) {
+          const h = headings[i]
+          const hId = (h.getAttribute('id') || '').toLowerCase()
+          if (hId && lowerCandidates.includes(hId)) {
+            return h
+          }
+        }
+
+        // Pass 3b: inner anchor name or href
+        for (let i = 0; i < headings.length; i++) {
+          const h = headings[i]
+          const a = h.querySelector('a[name], a.toc-anchor')
+          if (a) {
+            const aName = (a.getAttribute('name') || '').toLowerCase()
+            const aHref = (a.getAttribute('href') || '').replace(/^#+/, '').toLowerCase()
+            if (lowerCandidates.includes(aName) || lowerCandidates.includes(aHref)) {
+              return h
+            }
+          }
+        }
+
+        // Pass 3c: text slug match
+        for (let i = 0; i < headings.length; i++) {
+          const h = headings[i]
+          const text = (h.textContent || '').trim().toLowerCase()
+          const textSlug = text.replace(/[^\w\s-]/g, '').replace(/\s+/g, '-')
+          if (lowerCandidates.includes(textSlug)) {
+            return h
+          }
+        }
+      }
+
+      return null
+    },
+
+    smoothScrollTo (container, targetY, customDuration = null) {
+      if (!container) return
+
+      // Abort any ongoing animation
+      if (this._scrollRafId) {
+        cancelAnimationFrame(this._scrollRafId)
+        this._scrollRafId = null
+      }
+      if (this._scrollCleanup) {
+        this._scrollCleanup()
+        this._scrollCleanup = null
+      }
+
+      const startY = container.scrollTop
+      const distance = targetY - startY
+
+      if (Math.abs(distance) < 2) {
+        container.scrollTop = targetY
+        return
+      }
+
+      // Calculate dynamic duration between 400ms and 750ms based on scroll distance
+      const duration = customDuration || Math.min(750, Math.max(400, Math.round(Math.sqrt(Math.abs(distance)) * 22)))
+
+      this.isScrolling = true
+
+      // Temporarily override CSS scroll-behavior to prevent browser native animation clash
+      const prevBehavior = container.style.scrollBehavior
+      container.style.setProperty('scroll-behavior', 'auto', 'important')
+
+      // Listen for user interrupt (wheel, touchmove) to abort animation gracefully
+      const interruptEvents = ['wheel', 'touchmove']
+      const onInterrupt = () => {
+        if (this._scrollRafId) {
+          cancelAnimationFrame(this._scrollRafId)
+          this._scrollRafId = null
+        }
+        cleanup()
+        this.isScrolling = false
+      }
+
+      const cleanup = () => {
+        interruptEvents.forEach(evt => {
+          container.removeEventListener(evt, onInterrupt)
+        })
+        if (prevBehavior) {
+          container.style.scrollBehavior = prevBehavior
+        } else {
+          container.style.removeProperty('scroll-behavior')
+        }
+        this._scrollCleanup = null
+      }
+
+      interruptEvents.forEach(evt => {
+        container.addEventListener(evt, onInterrupt, { passive: true })
+      })
+      this._scrollCleanup = cleanup
+
+      // Cubic ease-in-out curve
+      const easeInOutCubic = t => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
+
+      const startTime = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()
+
+      const step = (currentTime) => {
+        const now = currentTime || ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now())
+        const elapsed = now - startTime
+        const progress = Math.min(elapsed / duration, 1)
+        const ease = easeInOutCubic(progress)
+
+        container.scrollTop = Math.round(startY + distance * ease)
+
+        if (progress < 1) {
+          this._scrollRafId = requestAnimationFrame(step)
+        } else {
+          container.scrollTop = targetY
+          this._scrollRafId = null
+          cleanup()
+          setTimeout(() => {
+            this.isScrolling = false
+          }, 80)
+        }
+      }
+
+      this._scrollRafId = requestAnimationFrame(step)
+    },
+
     scrollToAnchor (anchor) {
       if (!anchor) return
+      const target = this.findTargetElement(anchor)
       const clean = this.cleanAnchor(anchor)
-      const target = document.getElementById(clean) ||
-        document.querySelector(`[id="${clean}"]`) ||
-        document.querySelector(`a[name="${clean}"]`) ||
-        document.querySelector(`[id="${anchor}"]`)
 
       if (target) {
         const scrollContainer = this.$el.querySelector('.detran-content')
         if (scrollContainer) {
           const containerRect = scrollContainer.getBoundingClientRect()
           const targetRect = target.getBoundingClientRect()
-          const headerOffset = window.innerWidth <= 768 ? 76 : 100
-          const targetTop = targetRect.top - containerRect.top + scrollContainer.scrollTop - headerOffset
-          scrollContainer.scrollTo({
-            top: Math.max(0, targetTop),
-            behavior: 'smooth'
-          })
+          const isMobile = window.innerWidth <= 768
+          const headerOffset = isMobile ? 76 : 108
+          const maxScroll = scrollContainer.scrollHeight - scrollContainer.clientHeight
+          const rawTargetTop = (targetRect.top - containerRect.top) + scrollContainer.scrollTop - headerOffset
+          const targetTop = Math.max(0, Math.min(rawTargetTop, maxScroll))
+
+          this.activeTocAnchor = target.id || clean
+          this.smoothScrollTo(scrollContainer, targetTop)
         } else {
           target.scrollIntoView({ behavior: 'smooth', block: 'start' })
         }
+
         if (history && history.pushState) {
           history.pushState(null, '', `#${clean}`)
         }
-        this.activeTocAnchor = clean
       }
     },
 
@@ -1060,6 +1277,7 @@ export default {
     border-radius: 50%;
     mix-blend-mode: screen;
     filter: blur(50px);
+    will-change: transform, opacity;
 
     &--top {
       width: 288px;
@@ -1068,17 +1286,19 @@ export default {
       top: -80px;
       left: -80px;
       opacity: 0.8;
+      animation: detranLivingSidebarBlobTop 16s ease-in-out infinite alternate;
     }
 
     &--mid {
       width: 256px;
       height: 256px;
-      background: rgba($detran-300, 0.20);
+      background: rgba($detran-300, 0.25);
       top: 50%;
       left: -40px;
       transform: translateY(-50%);
       opacity: 0.6;
       filter: blur(40px);
+      animation: detranLivingSidebarBlobMid 22s ease-in-out infinite alternate-reverse;
     }
 
     &--bottom {
@@ -1088,6 +1308,7 @@ export default {
       bottom: -80px;
       left: -80px;
       opacity: 0.8;
+      animation: detranLivingSidebarBlobBottom 19s ease-in-out infinite alternate;
     }
   }
 }
@@ -1104,8 +1325,16 @@ export default {
   height: 100vh;
   background: $color-surface;
   z-index: 20;
-  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.20);
+  border-top-left-radius: 1.25rem;
+  border-bottom-left-radius: 1.25rem;
+  box-shadow: -14px 0 36px rgba(0, 0, 0, 0.25), -4px 0 10px rgba(0, 0, 0, 0.12);
   overflow: hidden;
+
+  @include mobile {
+    border-top-left-radius: 0 !important;
+    border-bottom-left-radius: 0 !important;
+    box-shadow: none !important;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1439,7 +1668,7 @@ export default {
   padding-bottom: 2.5rem;
   padding-left: 2rem;
   padding-right: 2rem;
-  scroll-behavior: smooth !important;
+  scroll-behavior: smooth;
   scroll-padding-top: calc(#{$header-height} + 36px);
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;

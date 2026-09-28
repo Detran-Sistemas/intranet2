@@ -32,7 +32,7 @@
         v-icon(size='20' color='white') mdi-close
 
     //- Switcher Menu / Árvore (apenas exibido quando navMode é MIXED ou não fixado e sidebar não recolhida)
-    .detran-sidebar__switcher.anim-hidden.anim-fade-in-up.stagger-1(v-if='(navMode === "MIXED" || !navMode || navMode === "SIDEBAR") && !collapsed')
+    .detran-sidebar__switcher.anim-hidden.anim-fade-in-up.stagger-1(v-if='navMode === "MIXED" || !navMode || navMode === "SIDEBAR"')
       .detran-sidebar__switch-wrap(:class='{ "is-tab-browse": navTab === "browse" }')
         .detran-sidebar__switch-slider(aria-hidden='true')
         button.detran-sidebar__switch-btn(
@@ -71,20 +71,76 @@
         //- Item de Grupo com Subitens (Cabeçalho do Wiki.js)
         template(v-else-if='item.isGroup')
           .detran-sidebar__group(:key='item.i')
+
+            //- Menu Flutuante Flyout (ativo no hover apenas quando colapsado)
+            v-menu(
+              v-if='item.subitems && item.subitems.length > 0'
+              :disabled='!collapsed'
+              open-on-hover
+              :close-on-content-click='true'
+              offset-x
+              right
+              :nudge-right='14'
+              :open-delay='80'
+              :close-delay='150'
+              transition='slide-x-transition'
+              content-class='detran-collapsed-menu-popover'
+            )
+              template(v-slot:activator='{ on }')
+                button.detran-sidebar__group-btn.glass-hover(
+                  v-on='on'
+                  @click='onGroupClick(item)'
+                  :title='item.l'
+                  :aria-label='item.l'
+                  type='button'
+                )
+                  .detran-sidebar__link-icon
+                    v-icon(size='18' color='#cce0d2') {{ resolveIcon(item.c || item.l) }}
+                  span.detran-sidebar__link-text {{ item.l }}
+                  v-icon.detran-sidebar__group-chevron(
+                    size='12'
+                    color='rgba(255,255,255,0.7)'
+                    :class='{ "is-rotated": !isGroupExpanded(item) }'
+                  ) mdi-chevron-down
+                  span.detran-sidebar__collapsed-dot(aria-hidden='true')
+
+              //- Conteúdo flutuante estilizado Detran Design System
+              .detran-collapsed-flyout
+                .detran-collapsed-flyout__header
+                  .detran-collapsed-flyout__header-icon
+                    v-icon(size='16' color='#288b4a') {{ resolveIcon(item.c || item.l) }}
+                  span.detran-collapsed-flyout__title {{ item.l }}
+                  span.detran-collapsed-flyout__count {{ item.subitems.length }}
+                .detran-collapsed-flyout__list
+                  a.detran-collapsed-flyout__item(
+                    v-for='sub in item.subitems'
+                    :key='sub.i'
+                    :href='resolveTarget(sub)'
+                    :title='sub.l'
+                    :class='{ "is-active": isActive(sub) }'
+                    :aria-current='isActive(sub) ? "page" : undefined'
+                    :target='sub.y === "externalblank" ? "_blank" : undefined'
+                    :rel='sub.y === "externalblank" ? "noopener noreferrer" : undefined'
+                  )
+                    v-icon.detran-collapsed-flyout__item-icon(
+                      v-if='sub.c && sub.c !== "mdi-chevron-right" && sub.c !== "link"'
+                      size='14'
+                    ) {{ resolveIcon(sub.c) }}
+                    v-icon.detran-collapsed-flyout__item-icon(v-else size='12') mdi-circle-medium
+                    span.detran-collapsed-flyout__item-text {{ sub.l }}
+
+            //- Quando sem subitens
             button.detran-sidebar__group-btn.glass-hover(
-              @click='toggleGroup(item)'
+              v-else
               :title='item.l'
+              :aria-label='item.l'
               type='button'
             )
               .detran-sidebar__link-icon
                 v-icon(size='18' color='#cce0d2') {{ resolveIcon(item.c || item.l) }}
               span.detran-sidebar__link-text {{ item.l }}
-              v-icon.detran-sidebar__group-chevron(
-                size='12'
-                color='rgba(255,255,255,0.7)'
-                :class='{ "is-rotated": !isGroupExpanded(item) }'
-              ) mdi-chevron-down
 
+            //- Subitens no corpo da sidebar (quando expandido)
             transition(
               name='detran-accordion'
               @enter='accordionEnter'
@@ -92,7 +148,7 @@
               @leave='accordionLeave'
               @after-leave='accordionAfterLeave'
             )
-              .detran-sidebar__subitems(v-show='isGroupExpanded(item)')
+              .detran-sidebar__subitems(v-show='!collapsed && isGroupExpanded(item)')
                 a.detran-sidebar__sublink.glass-hover(
                   v-for='sub in item.subitems'
                   :key='sub.i'
@@ -457,6 +513,13 @@ export default {
         }
       } catch (e) {}
     }
+
+    try {
+      const savedCollapsed = window.localStorage.getItem('sidebarCollapsed')
+      if (savedCollapsed !== null && typeof window !== 'undefined' && window.innerWidth > 960) {
+        this.collapsed = savedCollapsed === '1'
+      }
+    } catch (e) {}
   },
 
   methods: {
@@ -479,11 +542,19 @@ export default {
         return
       }
       this.collapsed = !this.collapsed
+      try {
+        window.localStorage.setItem('sidebarCollapsed', this.collapsed ? '1' : '0')
+      } catch (e) {}
     },
 
     toggleGroup (item) {
       const id = item.i || item.l
       this.$set(this.collapsedGroups, id, !this.collapsedGroups[id])
+    },
+
+    onGroupClick (item) {
+      if (this.collapsed) return
+      this.toggleGroup(item)
     },
 
     isGroupExpanded (item) {
@@ -668,14 +739,20 @@ export default {
   position: relative;
   width: $sidebar-width;
   min-width: $sidebar-width;
+  max-width: $sidebar-width;
   height: 100vh;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  z-index: 30;
+  z-index: auto !important;
   color: white;
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              min-width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: width, min-width;
   overflow: visible;
+  border: none !important;
+  border-right: none !important;
 
   // Renderização e nitidez tipográfica
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
@@ -683,11 +760,11 @@ export default {
   -moz-osx-font-smoothing: grayscale !important;
   text-rendering: optimizeLegibility !important;
 
-  // Fundo com transparência sutil e desfoque suave
-  background: rgba(255, 255, 255, 0.03) !important;
-  backdrop-filter: blur(24px) !important;
-  -webkit-backdrop-filter: blur(24px) !important;
-  box-shadow: inset 1px 0 0 rgba(255, 255, 255, 0.05) !important;
+  // Fundo transparente limpo sem bordas
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
 
   // Garante que links internos nunca herdem azul
   a {
@@ -705,28 +782,133 @@ export default {
   &.is-collapsed {
     width: $sidebar-width-collapsed;
     min-width: $sidebar-width-collapsed;
+    max-width: $sidebar-width-collapsed;
 
-    .detran-sidebar__switcher,
-    .detran-sidebar__switch-label,
+    .detran-sidebar__switcher {
+      max-height: 0 !important;
+      opacity: 0 !important;
+      padding-top: 0 !important;
+      padding-bottom: 0 !important;
+      margin: 0 !important;
+      pointer-events: none !important;
+      visibility: hidden;
+      transition: opacity 0.12s ease,
+                  max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                  padding 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                  margin 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                  visibility 0s 0.2s !important;
+    }
+
     .detran-sidebar__link-text,
+    .detran-sidebar__sublink-text {
+      opacity: 0 !important;
+      max-width: 0 !important;
+      margin-left: 0 !important;
+      transform: translateX(-10px);
+      pointer-events: none !important;
+      visibility: hidden;
+      transition: opacity 0.12s ease,
+                  max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                  transform 0.18s ease,
+                  margin 0.35s ease,
+                  visibility 0s 0.2s !important;
+    }
+
     .detran-sidebar__section-label,
-    .detran-sidebar__subitems,
-    .detran-sidebar__group-chevron,
-    .detran-sidebar__user-info,
-    .detran-sidebar__settings-btn { display: none !important; }
+    .detran-sidebar__tree-header {
+      opacity: 0 !important;
+      max-height: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: hidden !important;
+      pointer-events: none !important;
+      visibility: hidden;
+      transition: opacity 0.12s ease,
+                  max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                  margin 0.35s ease,
+                  padding 0.35s ease,
+                  visibility 0s 0.2s !important;
+    }
+
+    .detran-sidebar__group-chevron {
+      opacity: 0 !important;
+      max-width: 0 !important;
+      margin-left: 0 !important;
+      transform: scale(0.5) !important;
+      pointer-events: none !important;
+      visibility: hidden;
+      transition: opacity 0.12s ease,
+                  max-width 0.35s ease,
+                  transform 0.2s ease,
+                  margin 0.35s ease,
+                  visibility 0s 0.2s !important;
+    }
+
+    .detran-sidebar__user-info {
+      opacity: 0 !important;
+      max-width: 0 !important;
+      margin-left: 0 !important;
+      transform: translateX(-10px);
+      pointer-events: none !important;
+      visibility: hidden;
+      transition: opacity 0.12s ease,
+                  max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                  margin 0.35s ease,
+                  transform 0.18s ease,
+                  visibility 0s 0.2s !important;
+    }
+
+    .detran-sidebar__settings-btn {
+      opacity: 0 !important;
+      max-width: 0 !important;
+      margin: 0 !important;
+      transform: scale(0.5) !important;
+      pointer-events: none !important;
+      visibility: hidden;
+      transition: opacity 0.12s ease,
+                  max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                  transform 0.2s ease,
+                  margin 0.35s ease,
+                  visibility 0s 0.2s !important;
+    }
 
     .detran-sidebar__logo {
       padding: 0 0.5rem;
+    }
+
+    .detran-sidebar__logo-img {
+      max-width: 36px;
+      max-height: 28px;
+    }
+
+    .detran-sidebar__nav {
+      padding: 0.5rem 0.5rem;
+    }
+
+    .detran-sidebar__link,
+    .detran-sidebar__group-btn {
+      justify-content: center !important;
+      padding: 0.625rem 0.375rem !important;
+    }
+
+    .detran-sidebar__link-icon {
+      margin: 0 !important;
+    }
+
+    .detran-sidebar__collapsed-dot {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .detran-sidebar__user-footer {
+      justify-content: center !important;
+      padding: 0.75rem 0.5rem !important;
+    }
+
+    .detran-sidebar__user-btn {
+      padding: 0.25rem;
       justify-content: center;
     }
-    .detran-sidebar__logo-img {
-      max-width: 48px;
-      max-height: 38px;
-    }
-    .detran-sidebar__link, .detran-sidebar__group-btn { justify-content: center; padding: 0.625rem; }
-    .detran-sidebar__link-icon { margin: 0; }
-    .detran-sidebar__user-footer { justify-content: center; padding: 0.75rem; }
-    .detran-sidebar__user-btn { padding: 0.25rem; justify-content: center; }
   }
 
   // ---------------------------------------------------------------------------
@@ -767,7 +949,7 @@ export default {
   }
 
   &__toggle-icon {
-    transition: transform 0.3s ease;
+    transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     &.is-rotated { transform: rotate(180deg); }
   }
 
@@ -777,13 +959,18 @@ export default {
   &__header-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+    justify-content: center;
+    position: relative;
+    border-bottom: none !important;
     overflow: hidden;
   }
 
   &__close-mobile {
     display: none;
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
     width: 36px;
     height: 36px;
     border-radius: $radius-md;
@@ -792,13 +979,13 @@ export default {
     cursor: pointer;
     align-items: center;
     justify-content: center;
-    margin-right: 1rem;
     transition: background 0.2s ease, transform 0.2s ease;
     flex-shrink: 0;
+    z-index: 10;
 
     &:hover {
       background: rgba(255, 255, 255, 0.20);
-      transform: scale(1.05);
+      transform: translateY(-50%) scale(1.05);
     }
 
     @include mobile {
@@ -810,16 +997,17 @@ export default {
   // Logo / Branding
   // ---------------------------------------------------------------------------
   &__logo {
-    height: 96px; // h-24
+    height: 80px;
     display: flex;
     align-items: center;
-    padding: 0 1.25rem;
+    justify-content: center;
+    padding: 0 1rem;
     overflow: hidden;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: padding 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     text-decoration: none;
     color: inherit;
     cursor: pointer;
-    flex: 1;
+    width: 100%;
 
     &:hover &__logo-img {
       opacity: 0.95;
@@ -828,12 +1016,15 @@ export default {
   }
 
   &__logo-img {
-    max-height: 48px;
-    max-width: 205px;
+    max-height: 38px;
+    max-width: 155px;
     width: auto;
     height: auto;
     object-fit: contain;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                transform 0.2s ease,
+                opacity 0.2s ease;
     display: block;
     filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.25));
   }
@@ -843,7 +1034,13 @@ export default {
   // ---------------------------------------------------------------------------
   &__switcher {
     padding: 1.5rem 1rem 0.5rem; // mt-6 mb-2 px-4
-    transition: padding 0.3s ease;
+    max-height: 80px;
+    opacity: 1;
+    overflow: hidden;
+    transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                padding 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                margin 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   &__switch-wrap {
@@ -937,6 +1134,7 @@ export default {
     gap: 4px;
     scroll-behavior: smooth !important;
     -webkit-overflow-scrolling: touch;
+    transition: padding 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   &__tree-header {
@@ -945,6 +1143,13 @@ export default {
     justify-content: space-between;
     padding-right: 0.5rem;
     margin: 0.75rem 0 0.5rem;
+    max-height: 40px;
+    opacity: 1;
+    overflow: hidden;
+    transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                margin 0.35s ease,
+                padding 0.35s ease;
 
     .detran-sidebar__section-label {
       margin: 0;
@@ -986,12 +1191,21 @@ export default {
     text-transform: uppercase;
     letter-spacing: 0.1em;
     margin: 0.75rem 0 0.5rem;
-    transition: color 0.25s ease;
+    max-height: 30px;
+    opacity: 1;
+    overflow: hidden;
+    white-space: nowrap;
+    transition: color 0.25s ease,
+                opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                margin 0.35s ease,
+                padding 0.35s ease;
   }
 
   &__divider {
-    border: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.10);
+    border: none !important;
+    border-top: none !important;
+    height: 0;
     margin: 0.5rem 0;
   }
 
@@ -1005,12 +1219,20 @@ export default {
     font-size: 0.9375rem !important;
     font-weight: 500 !important;
     text-decoration: none !important;
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    transition: background 0.2s ease,
+                color 0.2s ease,
+                transform 0.2s ease,
+                padding 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
     position: relative !important;
+    overflow: hidden !important;
 
     .detran-sidebar__link-text {
       color: #cce0d2 !important;
-      transition: color 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+      transition: color 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                  opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                  max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                  transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                  margin 0.35s ease !important;
     }
 
     .v-icon {
@@ -1067,6 +1289,13 @@ export default {
     text-overflow: ellipsis;
     white-space: nowrap;
     margin-left: 0.5rem;
+    opacity: 1;
+    max-width: 190px;
+    transform: translateX(0);
+    transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                margin 0.35s ease;
   }
 
   // ---------------------------------------------------------------------------
@@ -1091,12 +1320,20 @@ export default {
     border: none !important;
     background: transparent !important;
     text-align: left !important;
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    transition: background 0.2s ease,
+                color 0.2s ease,
+                transform 0.2s ease,
+                padding 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
     position: relative !important;
+    overflow: hidden !important;
 
     .detran-sidebar__link-text {
       color: #cce0d2 !important;
-      transition: color 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+      transition: color 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                  opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                  max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                  transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                  margin 0.35s ease !important;
     }
 
     .v-icon {
@@ -1111,13 +1348,34 @@ export default {
 
       .detran-sidebar__link-text { color: #ffffff !important; }
       .v-icon { color: #ffffff !important; transform: scale(1.1); }
+      .detran-sidebar__collapsed-dot { background: #a7f3d0; transform: scale(1.3); }
     }
+  }
+
+  &__collapsed-dot {
+    position: absolute;
+    top: 7px;
+    right: 7px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #5fc381;
+    box-shadow: 0 0 6px rgba(95, 195, 129, 0.7);
+    transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+    opacity: 0;
+    transform: scale(0);
   }
 
   &__group-chevron {
     margin-left: auto !important;
-    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.25s ease,
+                max-width 0.35s ease,
+                margin 0.35s ease !important;
     color: rgba(255, 255, 255, 0.70) !important;
+    opacity: 1;
+    max-width: 20px;
 
     &.is-rotated {
       transform: rotate(-90deg) !important;
@@ -1137,11 +1395,11 @@ export default {
     align-items: center !important;
     margin-left: 28px !important; // ml-7
     padding: 0.5rem 1rem !important; // pl-4 py-2
-    border-left: 1px solid rgba(255, 255, 255, 0.20) !important;
+    border-left: none !important;
     font-size: 0.8125rem !important; // text-[13px]
     color: #cce0d2 !important;
     text-decoration: none !important;
-    border-radius: 0 $radius-md $radius-md 0 !important;
+    border-radius: $radius-md !important;
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
 
     .detran-sidebar__sublink-icon {
@@ -1180,6 +1438,13 @@ export default {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    opacity: 1;
+    max-width: 170px;
+    transform: translateX(0);
+    transition: opacity 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+                max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                transform 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+                color 0.25s ease !important;
   }
 
   // ---------------------------------------------------------------------------
@@ -1203,13 +1468,14 @@ export default {
   // ---------------------------------------------------------------------------
   &__user-footer {
     padding: 0.75rem 1rem !important; // p-3
-    border-top: 1px solid rgba(255, 255, 255, 0.10) !important;
-    background: rgba(255, 255, 255, 0.05) !important;
+    border-top: none !important;
+    background: transparent !important;
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
     gap: 0.5rem !important;
     flex-shrink: 0 !important;
+    transition: padding 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
   }
 
   &__user-btn {
@@ -1289,6 +1555,13 @@ export default {
     flex: 1 !important;
     overflow: hidden !important;
     margin-left: 0.75rem !important;
+    opacity: 1;
+    max-width: 160px;
+    transform: translateX(0);
+    transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                margin 0.35s ease,
+                transform 0.25s ease !important;
   }
 
   &__user-name {
@@ -1322,7 +1595,15 @@ export default {
     color: rgba(255, 255, 255, 0.50) !important;
     text-decoration: none !important;
     flex-shrink: 0 !important;
-    transition: all 0.2s ease !important;
+    opacity: 1;
+    max-width: 40px;
+    transform: scale(1);
+    transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                margin 0.35s ease,
+                background 0.2s ease,
+                color 0.2s ease !important;
 
     .v-icon {
       color: rgba(255, 255, 255, 0.50) !important;
@@ -1566,6 +1847,123 @@ export default {
     font-size: 0.75rem;
     color: #64748b;
     margin-top: 2px;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SUBMENU FLUTUANTE QUANDO O MENU ESTÁ RECOLHIDO (.is-collapsed)
+// ---------------------------------------------------------------------------
+.v-menu__content.detran-collapsed-menu-popover {
+  border-radius: 16px !important;
+  box-shadow: 0 16px 36px -6px rgba(0, 0, 0, 0.28), 0 4px 14px -2px rgba(0, 0, 0, 0.12) !important;
+  background: transparent !important;
+  contain: none !important;
+  overflow: visible !important;
+  z-index: 100 !important;
+}
+
+.detran-collapsed-flyout {
+  min-width: 220px;
+  max-width: 290px;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 16px;
+  padding: 0.625rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+
+  &__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0.375rem 0.625rem 0.5rem;
+    border-bottom: 1px solid #f1f5f9;
+    margin-bottom: 0.375rem;
+  }
+
+  &__header-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: #e1f6e8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  &__title {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: #164828;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__count {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: #288b4a;
+    background: #e1f6e8;
+    padding: 2px 7px;
+    border-radius: 9999px;
+  }
+
+  &__list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0.5rem 0.625rem;
+    border-radius: 10px;
+    color: #334155 !important;
+    text-decoration: none !important;
+    font-size: 0.84rem;
+    font-weight: 500;
+    transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+
+    &:hover {
+      background: #f0fdf4;
+      color: #1b5830 !important;
+      transform: translateX(3px);
+
+      .detran-collapsed-flyout__item-icon {
+        color: #288b4a !important;
+      }
+    }
+
+    &.is-active {
+      background: #288b4a !important;
+      color: #ffffff !important;
+      font-weight: 600;
+
+      .detran-collapsed-flyout__item-icon {
+        color: #ffffff !important;
+      }
+    }
+  }
+
+  &__item-icon {
+    color: #64748b;
+    flex-shrink: 0;
+    transition: color 0.18s ease;
+  }
+
+  &__item-text {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 </style>

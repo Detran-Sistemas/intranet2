@@ -184,7 +184,7 @@
 
                   //- Link para Registro (se ativado)
                   .detran-login-card__extra.mt-4(v-if='selectedStrategyKey === `local` && selectedStrategy.selfRegistration')
-                    span.detran-login-card__extra-text Não possui acesso? 
+                    span.detran-login-card__extra-text Não possui acesso?&nbsp;
                     a.detran-login-card__extra-link(href='/register') {{ $t('auth:switchToRegister.link', 'Criar cadastro') }}
 
               //- ---------------------------------------------------------
@@ -895,7 +895,7 @@ export default {
       top: -120px;
       right: -80px;
       background: radial-gradient(circle, #33a65b 0%, rgba(51, 166, 91, 0) 70%);
-      animation: detranLoginFloat 12s ease-in-out infinite alternate;
+      animation: detranLivingOrb1 16s ease-in-out infinite alternate;
     }
 
     &--mid {
@@ -904,24 +904,19 @@ export default {
       bottom: -150px;
       left: 10%;
       background: radial-gradient(circle, #288b4a 0%, rgba(40, 139, 74, 0) 70%);
-      animation: detranLoginFloat 16s ease-in-out infinite alternate-reverse;
+      animation: detranLivingOrb2 22s ease-in-out infinite alternate-reverse;
     }
 
     &--bottom {
-      width: 360px;
-      height: 360px;
-      top: 40%;
-      right: 25%;
+      width: 400px;
+      height: 400px;
+      top: 35%;
+      right: 20%;
       background: radial-gradient(circle, #5fc381 0%, rgba(95, 195, 129, 0) 70%);
-      opacity: 0.25;
+      opacity: 0.35;
+      animation: detranLivingOrb3 18s ease-in-out infinite alternate;
     }
   }
-}
-
-@keyframes detranLoginFloat {
-  0% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(30px, -20px) scale(1.05); }
-  100% { transform: translate(-20px, 25px) scale(0.95); }
 }
 
 // -----------------------------------------------------------------------------
@@ -1121,6 +1116,7 @@ export default {
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.3);
   padding: 2.25rem 2rem;
   color: $slate-800;
+  animation: detranCardLivingGlow 9s ease-in-out infinite;
 
   &__header {
     margin-bottom: 1.75rem;
