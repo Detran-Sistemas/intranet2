@@ -42,7 +42,8 @@
             )
             template(slot='item', slot-scope='props')
               v-icon(v-if='props.item.path === "/"', small, @click='goHome') mdi-home
-              v-btn.ma-0(v-else, :href='props.item.path', small, text) {{props.item.name}}
+              v-btn.ma-0(v-else-if='props.item.exists', :href='props.item.path', small, text) {{props.item.name}}
+              span.v-breadcrumbs__item.px-2.grey--text(v-else, :title='$t("common:page.pageNotCreated", "Página ainda não criada")') {{props.item.name}}
           template(v-if='!isPublished')
             v-spacer
             .caption.red--text {{$t('common:page.unpublished')}}
@@ -366,6 +367,7 @@ import { get, sync } from 'vuex-pathify'
 import _ from 'lodash'
 import ClipboardJS from 'clipboard'
 import Vue from 'vue'
+import gql from 'graphql-tag'
 
 /* global siteLangs */
 
@@ -491,11 +493,16 @@ export default {
     filename: {
       type: String,
       default: ''
+    },
+    ancestors: {
+      type: String,
+      default: ''
     }
   },
   data() {
     return {
       locales: siteLangs,
+      verifiedAncestors: [],
       navShown: false,
       navExpanded: false,
       upBtnShown: false,
@@ -539,12 +546,33 @@ export default {
 
       }
     },
+    existingAncestors () {
+      if (this.ancestors && this.ancestors.length > 0) {
+        try {
+          return JSON.parse(Buffer.from(this.ancestors, 'base64').toString('utf8'))
+        } catch (e) {
+          try {
+            return JSON.parse(decodeURIComponent(escape(atob(this.ancestors))))
+          } catch (err) {
+            return []
+          }
+        }
+      }
+      return this.verifiedAncestors
+    },
     breadcrumbs() {
-      return [{ path: '/', name: 'Home' }].concat(
-        _.reduce(this.path.split('/'), (result, value) => {
+      const parts = this.path.split('/').filter(Boolean)
+      let rawAcc = ''
+      return [{ path: '/', name: 'Home', exists: true }].concat(
+        _.reduce(parts, (result, value, idx) => {
+          rawAcc = rawAcc ? `${rawAcc}/${value}` : value
+          const isLast = idx === parts.length - 1
+          const exists = isLast || this.existingAncestors.some(a => (typeof a === 'string' ? a === rawAcc : a.path === rawAcc))
           result.push({
             path: _.get(_.last(result), 'path', this.locales.length > 0 ? `/${this.locale}` : '') + `/${value}`,
-            name: value
+            rawPath: rawAcc,
+            name: value,
+            exists: exists
           })
           return result
         }, []))
@@ -648,10 +676,38 @@ export default {
         }
       })
 
+      this.verifyAncestors()
       window.boot.notify('page-ready')
     })
   },
   methods: {
+    async verifyAncestors () {
+      if (this.ancestors && this.ancestors.length > 0) return
+      const parts = (this.path || '').split('/').filter(Boolean)
+      if (parts.length <= 1) return
+      try {
+        const resp = await this.$apollo.query({
+          query: gql`
+            query ($path: String!, $locale: String!) {
+              pages {
+                tree(path: $path, mode: PAGES, locale: $locale, includeAncestors: true) {
+                  path
+                  isFolder
+                  pageId
+                }
+              }
+            }
+          `,
+          variables: {
+            path: this.path,
+            locale: this.locale
+          },
+          fetchPolicy: 'network-only'
+        })
+        const items = _.get(resp, 'data.pages.tree', [])
+        this.verifiedAncestors = items.filter(it => it.pageId !== null).map(it => it.path)
+      } catch (e) {}
+    },
     goHome () {
       if (this.locales && this.locales.length > 0) {
         window.location.assign(`/${this.locale}/home`)
@@ -676,6 +732,7 @@ export default {
         })
       }
     },
+    /* eslint-disable vue/custom-event-name-casing */
     pageEdit () {
       this.$root.$emit('pageEdit')
     },
@@ -697,6 +754,7 @@ export default {
     pageDelete () {
       this.$root.$emit('pageDelete')
     },
+    /* eslint-enable vue/custom-event-name-casing */
     handleSideNavVisibility () {
       if (window.innerWidth === this.winWidth) { return }
       this.winWidth = window.innerWidth

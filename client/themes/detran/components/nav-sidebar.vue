@@ -1450,6 +1450,46 @@ export default {
   // ---------------------------------------------------------------------------
   // Browse Mode (Árvore)
   // ---------------------------------------------------------------------------
+  &__tree-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.25rem 0.5rem 0.5rem 0.75rem;
+    margin-bottom: 0.25rem;
+
+    .detran-sidebar__section-label {
+      margin: 0;
+      padding: 0;
+    }
+  }
+
+  &__tree-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  &__tree-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.12);
+
+      .v-icon {
+        color: #ffffff !important;
+      }
+    }
+  }
+
   &__browse-loader {
     display: flex;
     justify-content: center;

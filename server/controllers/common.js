@@ -548,6 +548,23 @@ router.get('/*', async (req, res, next) => {
           let pageFilename = WIKI.config.lang.namespacing ? `${pageArgs.locale}/${page.path}` : page.path
           pageFilename += page.contentType === 'markdown' ? '.md' : '.html'
 
+          // -> Check existing ancestor pages for breadcrumbs
+          const pathParts = (page.path || '').split('/').filter(Boolean)
+          const intermediatePaths = []
+          let acc = ''
+          for (let i = 0; i < pathParts.length - 1; i++) {
+            acc = acc ? `${acc}/${pathParts[i]}` : pathParts[i]
+            intermediatePaths.push(acc)
+          }
+          let existingAncestors = []
+          if (intermediatePaths.length > 0) {
+            const found = await WIKI.models.pages.query()
+              .select('path')
+              .where('localeCode', page.localeCode)
+              .whereIn('path', intermediatePaths)
+            existingAncestors = found.map(p => p.path)
+          }
+
           // -> Render view
           res.render('page', {
             page,
@@ -555,7 +572,8 @@ router.get('/*', async (req, res, next) => {
             injectCode,
             comments: commentTmpl,
             effectivePermissions,
-            pageFilename
+            pageFilename,
+            existingAncestors
           })
         }
       } else if (pageArgs.path === 'home') {

@@ -153,21 +153,31 @@
             .detran-page-header.anim-hidden.anim-fade-in-up.stagger-2
 
               //- Breadcrumb
-              nav.detran-breadcrumb(aria-label='Trilha de navegação')
-                a.detran-breadcrumb__home(
-                  :href='`/${locale}/home`'
-                  :title='$t("common:header.home", "Início")'
-                  @click='onHomeCrumbClick'
-                )
-                  v-icon(size='14' color='#94a3b8') mdi-home
+              nav.detran-breadcrumb(v-if='path !== "home" && breadcrumbs.length > 0', aria-label='Trilha de navegação')
                 template(v-for='(crumb, idx) in breadcrumbs')
-                  span.detran-breadcrumb__sep(aria-hidden='true') /
-                  a.detran-breadcrumb__item(
-                    :href='crumb.path'
-                    :class='{ "is-current": idx === breadcrumbs.length - 1 }'
-                    :aria-current='idx === breadcrumbs.length - 1 ? "page" : undefined'
-                    @click='onCrumbClick($event, crumb, idx === breadcrumbs.length - 1)'
-                  ) {{ crumb.label }}
+                  template(v-if='crumb.path === "/"')
+                    a.detran-breadcrumb__home(
+                      :href='homeUrl'
+                      :title='$t("common:header.home", "Início")'
+                      @click='goHome'
+                    )
+                      v-icon(size='14' color='#94a3b8') mdi-home
+                  template(v-else)
+                    span.detran-breadcrumb__sep(aria-hidden='true') /
+                    span.detran-breadcrumb__item.is-current(
+                      v-if='idx === breadcrumbs.length - 1'
+                      aria-current='page'
+                      @click='scrollToTop'
+                    ) {{ crumb.name }}
+                    a.detran-breadcrumb__item(
+                      v-else-if='crumb.exists'
+                      :href='crumb.path'
+                      @click='onCrumbClick($event, crumb, false)'
+                    ) {{ crumb.name }}
+                    span.detran-breadcrumb__item.is-uncreated(
+                      v-else
+                      :title='$t("common:page.pageNotCreated", "Página ainda não criada")'
+                    ) {{ crumb.name }}
 
               .detran-page-header__row
                 h2.detran-page-title {{ title }}
@@ -228,9 +238,29 @@
                           :title='"Filtrar páginas pela tag #" + tag'
                         ) {{ '#' + tag }}
 
+                  //- Ações do Artigo (Botão Voltar)
+                  .detran-article__actions
+                    button.detran-back-btn(
+                      type='button'
+                      @click='goBack'
+                      :title='$t("common:page.goBack", "Voltar à página anterior")'
+                    )
+                      v-icon.detran-back-btn__icon(size='16') mdi-arrow-left
+                      span {{ $t('common:page.back', 'Voltar') }}
+
                 //- Conteúdo renderizado (page.render — HTML do Wiki.js)
                 .detran-contents(ref='container')
                   slot(name='contents')
+
+                //- Rodapé do artigo com navegação de retorno
+                .detran-article__footer
+                  button.detran-back-btn(
+                    type='button'
+                    @click='goBack'
+                    :title='$t("common:page.goBack", "Voltar à página anterior")'
+                  )
+                    v-icon.detran-back-btn__icon(size='16') mdi-arrow-left
+                    span {{ $t('common:page.back', 'Voltar à página anterior') }}
 
                 //- Comentários (slot nativo do Wiki.js)
                 .detran-comments(v-if='commentsEnabled === "true" || commentsEnabled === true')
@@ -369,6 +399,7 @@ import ClipboardJS from 'clipboard'
 import _ from 'lodash'
 import { get, sync } from 'vuex-pathify'
 import movePageMutation from 'gql/common/common-pages-mutation-move.gql'
+import gql from 'graphql-tag'
 
 /* global siteLangs */
 
@@ -442,7 +473,8 @@ export default {
     effectivePermissions: { type: String, default: '' }, // base64 JSON
     commentsExternal: { type: String, default: '' },
     editShortcuts: { type: String, default: '' }, // base64 JSON
-    filename: { type: String, default: '' }
+    filename: { type: String, default: '' },
+    ancestors: { type: String, default: '' } // base64 JSON of string[]
   },
 
   data () {
@@ -456,6 +488,7 @@ export default {
       movePageModal: false,
       convertPageModal: false,
       avatarFailed: false,
+      verifiedAncestors: [],
       duplicateOpts: {
         locale: 'pt',
         path: 'new-page',
@@ -655,22 +688,49 @@ export default {
       return this.calculatedReadTime || this.readTime || 5
     },
 
+    existingAncestors () {
+      if (this.ancestors && this.ancestors.length > 0) {
+        try {
+          return JSON.parse(Buffer.from(this.ancestors, 'base64').toString('utf8'))
+        } catch (e) {
+          try {
+            return JSON.parse(decodeURIComponent(escape(atob(this.ancestors))))
+          } catch (err) {
+            return []
+          }
+        }
+      }
+      return this.verifiedAncestors
+    },
+
+    homeUrl () {
+      if (this.locales && this.locales.length > 0) {
+        return `/${this.locale}/home`
+      }
+      return '/'
+    },
+
     // -------------------------------------------------------------------------
-    // Breadcrumbs gerados a partir do path
+    // Breadcrumbs gerados a partir do path (mesma funcionalidade do tema default)
     // -------------------------------------------------------------------------
     breadcrumbs () {
-      if (!this.path) return []
+      if (!this.path || this.path === 'home') return []
       const parts = this.path.split('/').filter(Boolean)
-      const crumbs = []
-      let acc = ''
-      parts.forEach((part, idx) => {
-        acc += (idx === 0 ? '' : '/') + part
-        crumbs.push({
-          label: part.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-          path: `/${this.locale}/${acc}`
-        })
-      })
-      return crumbs
+      let rawAcc = ''
+      return [{ path: '/', name: 'Home', label: 'Home', exists: true }].concat(
+        _.reduce(parts, (result, value, idx) => {
+          rawAcc = rawAcc ? `${rawAcc}/${value}` : value
+          const isLast = idx === parts.length - 1
+          const exists = isLast || this.existingAncestors.some(a => (typeof a === 'string' ? a === rawAcc : a.path === rawAcc))
+          result.push({
+            path: _.get(_.last(result), 'path', this.locales.length > 0 ? `/${this.locale}` : '') + `/${value}`,
+            rawPath: rawAcc,
+            name: value,
+            label: value,
+            exists: exists
+          })
+          return result
+        }, []))
     },
 
     // -------------------------------------------------------------------------
@@ -781,6 +841,7 @@ export default {
     this.$nextTick(() => {
       this.initTocObserver()
       this.updateReadingTime()
+      this.verifyAncestors()
     })
 
     // Atalho de teclado ⌘K / Ctrl+K para focar na busca
@@ -843,12 +904,51 @@ export default {
       }
     },
 
+    async verifyAncestors () {
+      if (this.ancestors && this.ancestors.length > 0) return
+      const parts = (this.path || '').split('/').filter(Boolean)
+      if (parts.length <= 1) return
+      try {
+        const resp = await this.$apollo.query({
+          query: gql`
+            query ($path: String!, $locale: String!) {
+              pages {
+                tree(path: $path, mode: PAGES, locale: $locale, includeAncestors: true) {
+                  path
+                  isFolder
+                  pageId
+                }
+              }
+            }
+          `,
+          variables: {
+            path: this.path,
+            locale: this.locale
+          },
+          fetchPolicy: 'network-only'
+        })
+        const items = _.get(resp, 'data.pages.tree', [])
+        this.verifiedAncestors = items.filter(it => it.pageId !== null).map(it => it.path)
+      } catch (e) {}
+    },
+
     scrollToTop () {
       const content = this.$el.querySelector('.detran-content')
       if (content) {
         this.smoothScrollTo(content, 0, 500)
       } else {
         window.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+    },
+
+    goHome (event) {
+      if (event && typeof event.preventDefault === 'function') {
+        event.preventDefault()
+      }
+      if (this.locales && this.locales.length > 0) {
+        window.location.assign(`/${this.locale}/home`)
+      } else {
+        window.location.assign('/')
       }
     },
 
@@ -860,10 +960,25 @@ export default {
     },
 
     onHomeCrumbClick (event) {
-      if (this.path === 'home' || this.path === '') {
-        event.preventDefault()
-        this.scrollToTop()
+      this.goHome(event)
+    },
+
+    goBack () {
+      if (typeof window === 'undefined') return
+      if (window.history && window.history.length > 1 && document.referrer && document.referrer.includes(window.location.host)) {
+        window.history.back()
+        return
       }
+      if (this.breadcrumbs && this.breadcrumbs.length > 1) {
+        for (let i = this.breadcrumbs.length - 2; i >= 0; i--) {
+          const crumb = this.breadcrumbs[i]
+          if (crumb && crumb.exists && crumb.path) {
+            window.location.assign(crumb.path)
+            return
+          }
+        }
+      }
+      window.location.assign(this.homeUrl || `/${this.locale}/home`)
     },
 
     // -------------------------------------------------------------------------
@@ -1803,6 +1918,17 @@ export default {
         text-decoration: none;
       }
     }
+
+    &.is-uncreated {
+      color: $slate-400;
+      cursor: default;
+      user-select: text;
+
+      &:hover {
+        color: $slate-500;
+        text-decoration: none;
+      }
+    }
   }
 }
 
@@ -1902,6 +2028,72 @@ export default {
     flex-wrap: wrap;
     gap: 6px;
     margin-top: 0.5rem;
+  }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+
+    @include mobile {
+      width: 100%;
+      justify-content: flex-start;
+      margin-top: 0.25rem;
+    }
+  }
+
+  &__footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    padding-top: 1.75rem;
+    margin-top: 2.5rem;
+    border-top: 1px solid $slate-100;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// BOTÃO VOLTAR (Artigo)
+// ---------------------------------------------------------------------------
+.detran-back-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  padding: 0.45rem 0.95rem !important;
+  background: $detran-50 !important;
+  color: $detran-700 !important;
+  border: 1px solid $detran-200 !important;
+  border-radius: $radius-md !important;
+  font-size: 0.8125rem !important;
+  font-weight: 500 !important;
+  line-height: 1.25 !important;
+  cursor: pointer !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+  text-decoration: none !important;
+
+  .v-icon {
+    color: $detran-600 !important;
+    transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  }
+
+  &:hover {
+    background: $detran-100 !important;
+    border-color: $detran-300 !important;
+    color: $detran-800 !important;
+    box-shadow: 0 3px 8px rgba($detran-500, 0.12) !important;
+
+    .v-icon {
+      color: $detran-700 !important;
+      transform: translateX(-3px) !important;
+    }
+  }
+
+  &:active {
+    transform: scale(0.98) !important;
   }
 }
 
@@ -2330,6 +2522,7 @@ export default {
   .detran-speed-dial,
   .detran-toc,
   .detran-edit-inline-btn,
+  .detran-back-btn,
   .detran-mobile-overlay,
   .detran-sidebar-blobs,
   .detran-footer {
