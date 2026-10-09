@@ -81,78 +81,19 @@ export default {
 </script>
 
 <style lang='scss'>
-@import '../themes/detran/scss/variables';
-
-// =============================================================================
-// DETRAN-MG — Source Code View Page
-// Overrides sobre a estrutura Vuetify existente. Template PUG preservado.
-// =============================================================================
 
 .source {
-  font-family: $font-family-base;
-
-  // Toolbar primária no topo com gradiente Detran
-  .v-toolbar.primary,
-  .v-toolbar[color="primary"] {
-    background-color: $detran-700 !important;
-    background-image: linear-gradient(135deg, $detran-600 0%, $detran-800 100%) !important;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1) !important;
-    color: #ffffff !important;
-
-    .subheading {
-      font-weight: 600;
-      letter-spacing: -0.01em;
-    }
-  }
-
-  // Subtextos e metadados no header
-  .blue--text.text--lighten-3 {
-    color: #cce0d2 !important;
-    font-weight: 500;
-  }
-
-  // Botões na toolbar
-  .v-btn.blue.darken-1,
-  .v-btn.ml-4 {
-    background-color: rgba(255, 255, 255, 0.15) !important;
-    border: 1px solid rgba(255, 255, 255, 0.25) !important;
-    color: #ffffff !important;
-    border-radius: $radius-md !important;
-    font-weight: 600;
-    transition: all 0.2s ease;
-
-    &:hover {
-      background-color: rgba(255, 255, 255, 0.25) !important;
-      transform: translateY(-1px);
-    }
-  }
-
-  // Card do container de código
-  .v-card.grey.radius-7 {
-    border-radius: $radius-xl !important;
-    border: 1px solid $slate-200 !important;
-    box-shadow: $shadow-soft !important;
-    background-color: #f8fafc !important;
-  }
-
-  pre {
-    margin: 0;
-    padding: 0.5rem;
-    overflow-x: auto;
-  }
-
   pre > code {
     box-shadow: none;
-    background-color: transparent !important;
-    color: $slate-800;
-    font-family: 'Fira Code', 'Roboto Mono', 'SFMono-Regular', Consolas, monospace;
+    background-color: transparent;
+    color: mc('grey', '800');
+    font-family: 'Roboto Mono', sans-serif;
     font-weight: 400;
-    font-size: 0.9375rem;
-    line-height: 1.6;
+    font-size: 1rem;
 
     @at-root .theme--dark.source pre > code {
-      background-color: transparent;
-      color: $slate-200;
+      background-color: mc('grey', '900');
+      color: mc('grey', '400');
     }
 
     &::before {
@@ -160,4 +101,5 @@ export default {
     }
   }
 }
+
 </style>

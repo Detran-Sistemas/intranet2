@@ -15,7 +15,7 @@
                 v-icon(v-if='isSelected(tag.tag)', color='primary') mdi-checkbox-intermediate
                 v-icon(v-else) mdi-checkbox-blank-outline
               v-list-item-title {{tag.title}}
-    v-main.grey(:class='$vuetify.theme.dark ? `darken-4-d5` : `lighten-3`')
+    v-content.grey(:class='$vuetify.theme.dark ? `darken-4-d5` : `lighten-3`')
       v-toolbar(color='primary', dark, flat, height='58')
         template(v-if='selection.length > 0')
           .overline.mr-3.animated.fadeInLeft {{$t('tags:currentSelection')}}
@@ -329,135 +329,12 @@ export default {
 </script>
 
 <style lang='scss'>
-@import '../themes/detran/scss/variables';
-
-// =============================================================================
-// DETRAN-MG — Tags Page
-// Overrides sobre a estrutura Vuetify existente.
-// =============================================================================
-
-.tags {
-
-  // Toolbar principal de seleção de tags
-  .v-toolbar.primary {
-    background-color: $detran-700 !important;
-    background-image: linear-gradient(135deg, $detran-600 0%, $detran-800 100%) !important;
-    box-shadow: 0 2px 12px rgba($detran-900, 0.25) !important;
+.tags-search {
+  .v-input__control {
+    min-height: initial !important;
   }
-
-  // Toolbar secundária de busca
-  .v-toolbar {
-    font-family: $font-family-base !important;
-  }
-
-  // Campo de busca de tags
-  .tags-search {
-    .v-input__control {
-      min-height: initial !important;
-    }
-    .v-input__prepend-outer {
-      margin-top: 8px !important;
-    }
-    .v-input__slot {
-      border-radius: $radius-lg !important;
-      background: $color-white !important;
-      box-shadow: $shadow-soft !important;
-    }
-  }
-
-  // Chips de tags selecionadas na toolbar
-  .v-chip.primary--text {
-    background-color: rgba(255, 255, 255, 0.15) !important;
-    color: #ffffff !important;
-    border: 1px solid rgba(255, 255, 255, 0.3) !important;
-    font-family: $font-family-base !important;
-    font-weight: 600 !important;
-    border-radius: $radius-full !important;
-
-    .v-icon {
-      color: rgba(255, 255, 255, 0.70) !important;
-    }
-  }
-
-  // Botão "Limpar seleção"
-  .v-btn.blue.lighten-4 {
-    background-color: rgba(255, 255, 255, 0.12) !important;
-    border-color: rgba(255, 255, 255, 0.40) !important;
-    color: #ffffff !important;
-    border-radius: $radius-lg !important;
-    text-transform: none !important;
-    font-family: $font-family-base !important;
-    font-weight: 500 !important;
-  }
-
-  // Tabela de resultados
-  .v-data-table {
-    border-radius: $radius-xl !important;
-    box-shadow: $shadow-soft !important;
-    font-family: $font-family-base !important;
-    overflow: hidden;
-
-    thead > tr > th {
-      background-color: $detran-50 !important;
-      color: $detran-700 !important;
-      font-weight: 700 !important;
-      font-size: 0.75rem !important;
-      text-transform: uppercase !important;
-      letter-spacing: 0.07em !important;
-      border-bottom: 2px solid $detran-100 !important;
-    }
-
-    tbody > tr:hover td {
-      background-color: rgba($detran-500, 0.04) !important;
-    }
-  }
-
-  // Sidebar de seleção de tags
-  .v-navigation-drawer {
-    background: linear-gradient(175deg, $detran-800 0%, $detran-900 100%) !important;
-    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.20) !important;
-
-    .v-subheader {
-      color: rgba(255, 255, 255, 0.45) !important;
-      font-size: 0.625rem !important;
-      font-weight: 700 !important;
-      text-transform: uppercase !important;
-      letter-spacing: 0.12em !important;
-    }
-
-    .v-divider {
-      border-color: rgba(255, 255, 255, 0.08) !important;
-    }
-
-    .v-list {
-      background: transparent !important;
-    }
-
-    .v-list-item {
-      border-radius: 10px !important;
-      margin: 2px 8px !important;
-      color: rgba(255, 255, 255, 0.70) !important;
-      transition: background-color 0.18s ease !important;
-
-      &:hover {
-        background-color: rgba(255, 255, 255, 0.08) !important;
-        color: #ffffff !important;
-      }
-
-      .v-list-item__title {
-        font-family: $font-family-base !important;
-        font-size: 0.8125rem !important;
-        color: inherit !important;
-      }
-
-      .v-icon {
-        color: rgba(255, 255, 255, 0.55) !important;
-      }
-
-      .v-icon.primary--text {
-        color: $detran-400 !important;
-      }
-    }
+  .v-input__prepend-outer {
+    margin-top: 8px !important;
   }
 }
 </style>

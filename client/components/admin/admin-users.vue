@@ -5,7 +5,7 @@
         .admin-header
           img.animated.fadeInUp(src='/_assets/svg/icon-customer.svg', alt='Users', style='width: 80px;')
           .admin-header-title
-            .headline.primary--text.animated.fadeInLeft Users
+            .headline.blue--text.text--darken-2.animated.fadeInLeft Users
             .subtitle-1.grey--text.animated.fadeInLeft.wait-p2s Manage users
           v-spacer
           v-btn.animated.fadeInDown.wait-p2s.mr-3(outlined, color='grey', icon, @click='refresh')
@@ -14,7 +14,7 @@
             v-icon(left) mdi-plus
             span New User
         v-card.mt-3.animated.fadeInUp
-          .pa-3.d-flex.align-center.detran-filter-bar(:class='$vuetify.theme.dark ? `grey darken-3-d5` : ``')
+          .pa-2.d-flex.align-center(:class='$vuetify.theme.dark ? `grey darken-3-d5` : `grey lighten-3`')
             v-text-field(
               solo
               flat
@@ -188,30 +188,5 @@ export default {
 </script>
 
 <style lang='scss'>
-@import '../../themes/detran/scss/variables';
 
-.admin-header {
-  .headline {
-    font-family: $font-family-base !important;
-    font-weight: 700 !important;
-  }
-}
-
-.detran-filter-bar {
-  background: $slate-50;
-  border-bottom: 1px solid $slate-200;
-
-  .v-text-field--solo .v-input__slot,
-  .v-select--solo .v-input__slot {
-    background: $color-white !important;
-    border: 1px solid $slate-200 !important;
-    border-radius: $radius-md !important;
-    transition: all 0.2s ease;
-
-    &:hover, &:focus-within {
-      border-color: $detran-400 !important;
-      box-shadow: 0 0 0 2px rgba($detran-500, 0.12) !important;
-    }
-  }
-}
 </style>

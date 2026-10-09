@@ -775,34 +775,19 @@ export default {
 </script>
 
 <style lang="scss">
-@import '../../detran/scss/variables';
 
 .breadcrumbs-nav {
   .v-btn {
     min-width: 0;
-    font-family: $font-family-base;
-    font-size: 0.8125rem;
-    font-weight: 500;
-    color: $slate-600;
-    transition: color 0.15s ease;
-
-    &:hover {
-      color: $detran-600;
-    }
-
     &__content {
       text-transform: none;
     }
   }
-
   .v-breadcrumbs__divider:nth-child(2n) {
     padding: 0 6px;
-    color: $slate-300;
   }
-
   .v-breadcrumbs__divider:nth-child(2) {
     padding: 0 6px 0 12px;
-    color: $slate-300;
   }
 }
 
@@ -814,114 +799,14 @@ export default {
   max-height: calc(100vh - 64px);
   overflow-y: auto;
   -ms-overflow-style: none;
-  scrollbar-width: none;
+}
 
-  &::-webkit-scrollbar {
-    display: none;
-  }
-
-  // Cards de suporte lateral
-  .page-toc-card,
-  .page-tags-card,
-  .page-author-card,
-  .page-comments-card,
-  .page-shortcuts-card {
-    border-radius: $radius-lg !important;
-    border: 1px solid $slate-200 !important;
-    box-shadow: $shadow-soft !important;
-    background-color: $color-white !important;
-    overflow: hidden;
-    transition: box-shadow 0.2s ease, border-color 0.2s ease;
-
-    &:hover {
-      box-shadow: $shadow-float !important;
-      border-color: $slate-300 !important;
-    }
-
-    @at-root .theme--dark & {
-      background-color: #1e293b !important;
-      border-color: #334155 !important;
-      box-shadow: none !important;
-    }
-  }
-
-  .page-toc-card {
-    .overline {
-      font-family: $font-family-base;
-      font-weight: 700;
-      color: $detran-700 !important;
-      letter-spacing: 0.08em;
-    }
-
-    .v-list-item {
-      border-radius: $radius-sm;
-      margin: 2px 8px;
-      min-height: 32px;
-      transition: background-color 0.15s ease, color 0.15s ease;
-
-      &:hover {
-        background-color: rgba($detran-500, 0.08);
-
-        .v-list-item__title {
-          color: $detran-700;
-          font-weight: 500;
-        }
-
-        .v-icon {
-          color: $detran-500 !important;
-        }
-      }
-    }
-  }
-
-  .page-tags-card {
-    .overline {
-      font-family: $font-family-base;
-      font-weight: 700;
-      color: $detran-700 !important;
-    }
-
-    .v-chip {
-      border-radius: $radius-md !important;
-      border: 1px solid $detran-200 !important;
-      background: $detran-50 !important;
-      color: $detran-700 !important;
-      font-weight: 500;
-      transition: transform 0.15s ease, box-shadow 0.15s ease;
-
-      .v-icon {
-        color: $detran-600 !important;
-      }
-
-      &:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 2px 6px rgba($detran-500, 0.20);
-      }
-    }
-  }
-
-  .page-author-card {
-    .overline {
-      font-family: $font-family-base;
-      font-weight: 700;
-      color: $slate-600 !important;
-    }
-
-    &-name {
-      font-weight: 600;
-      color: $slate-800 !important;
-    }
-
-    &-date {
-      color: $slate-500 !important;
-    }
-  }
+.page-col-sd::-webkit-scrollbar {
+  display: none;
 }
 
 .page-header-section {
   position: relative;
-  background-color: $slate-50;
-  border-bottom: 1px solid $slate-200;
 
   > .is-page-header {
     position: relative;
@@ -932,18 +817,6 @@ export default {
     display: flex;
     justify-content: center;
     flex-direction: column;
-
-    .headline {
-      font-family: $font-family-base !important;
-      font-weight: 700 !important;
-      color: $slate-900 !important;
-      letter-spacing: -0.02em;
-    }
-
-    .caption {
-      color: $slate-500 !important;
-      font-size: 0.875rem !important;
-    }
   }
 
   .page-edit-shortcuts {
@@ -952,45 +825,32 @@ export default {
     right: 10px;
 
     .v-btn {
-      border: 1px solid $slate-200 !important;
-      border-radius: $radius-md !important;
-      color: $slate-700 !important;
-      background-color: $color-white !important;
-      box-shadow: $shadow-soft !important;
-      margin-left: 6px;
-      font-weight: 500;
-      transition: all 0.15s ease;
+      border-right: 1px solid #DDD !important;
+      border-bottom: 1px solid #DDD !important;
+      border-radius: 0;
+      color: #777;
+      background-color: #FFF !important;
 
       @at-root .theme--dark & {
-        background-color: #1e293b !important;
-        border-color: #334155 !important;
-        color: $slate-200 !important;
+        background-color: #222 !important;
+        border-right-color: #444 !important;
+        border-bottom-color: #444 !important;
+        color: #CCC;
       }
 
       .v-icon {
-        color: $detran-600 !important;
+        color: mc('blue', '700');
       }
 
-      &:hover {
-        background-color: $detran-50 !important;
-        border-color: $detran-300 !important;
-        color: $detran-700 !important;
-        transform: translateY(-1px);
-        box-shadow: $shadow-float !important;
+      &:first-child {
+        border-top-left-radius: 5px;
+        border-bottom-left-radius: 5px;
       }
-    }
-  }
-}
 
-.btn-animate-edit {
-  &.v-btn--floating {
-    background: linear-gradient(135deg, $detran-500 0%, $detran-600 100%) !important;
-    box-shadow: $shadow-fab !important;
-    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease !important;
-
-    &:hover {
-      transform: scale(1.06);
-      box-shadow: 0 6px 20px rgba($detran-500, 0.50) !important;
+      &:last-child {
+        border-top-right-radius: 5px;
+        border-bottom-right-radius: 5px;
+      }
     }
   }
 }

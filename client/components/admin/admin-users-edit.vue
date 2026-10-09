@@ -5,7 +5,7 @@
         .admin-header
           img.animated.fadeInUp(src='/_assets/svg/icon-male-user.svg', :alt='$t(`admin:users.edit`)', style='width: 80px;')
           .admin-header-title
-            .headline.primary--text.animated.fadeInLeft {{$t('admin:users.edit')}}
+            .headline.blue--text.text--darken-2.animated.fadeInLeft {{$t('admin:users.edit')}}
             .subtitle-1.grey--text.animated.fadeInLeft.wait-p2s {{user.name}}
           v-spacer
           i18next.pr-4.caption.grey--text.animated.fadeInDown(path='admin:users.id', tag='div')
@@ -27,7 +27,7 @@
             v-icon mdi-arrow-left
           v-menu(offset-y, origin='top right')
             template(v-slot:activator='{ on }')
-              v-btn.ml-3.animated.fadeInDown.wait-p2s(color='primary', v-on='on', depressed, dark)
+              v-btn.ml-3.animated.fadeInDown.wait-p2s(color='black', v-on='on', depressed, dark)
                 span Actions
                 v-icon(right) mdi-chevron-down
             v-list(dense, nav)
@@ -1073,12 +1073,5 @@ export default {
 </script>
 
 <style lang='scss'>
-@import '../../themes/detran/scss/variables';
 
-.admin-header {
-  .headline {
-    font-family: $font-family-base !important;
-    font-weight: 700 !important;
-  }
-}
 </style>

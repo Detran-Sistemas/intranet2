@@ -3,16 +3,6 @@
 @import "base/material";
 @import "base/mixins";
 
-// =============================================================================
-// DETRAN-MG DESIGN SYSTEM — Tokens globais
-// Importa variáveis, mixins e keyframes do tema Detran para que fiquem
-// disponíveis em TODO o bundle (incluindo painel administrativo).
-// Os arquivos são importados do tema detran mas NÃO carregam estilos de layout,
-// apenas tokens ($detran-*, $slate-*, @mixin glass-*, etc.)
-// =============================================================================
-@import "../themes/detran/scss/variables";
-@import "../themes/detran/scss/animations";
-
 $tablet: 769px !default;
 $desktop: 980px !default;
 $widescreen: 1180px !default;
