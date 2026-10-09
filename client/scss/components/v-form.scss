@@ -30,3 +30,76 @@
     }
   }
 }
+
+// =============================================================================
+// DETRAN-MG DESIGN SYSTEM — Vuetify Form / Input Overrides
+// =============================================================================
+
+.v-application {
+
+  // --- Inputs com foco verde ---
+  .v-text-field.primary--text,
+  .v-text-field {
+    &.v-input--is-focused {
+      fieldset,
+      .v-input__slot::before {
+        border-color: $detran-500 !important;
+      }
+
+      .v-label {
+        color: $detran-600 !important;
+      }
+    }
+
+    // Label flutuante ativa e com cor primary
+    .v-label.primary--text {
+      color: $detran-700 !important;
+    }
+
+    // Underline ativo
+    .v-input__slot::after {
+      border-color: $detran-500 !important;
+    }
+  }
+
+  // --- Outlined inputs ---
+  .v-text-field--outlined {
+    border-radius: $radius-md !important;
+
+    fieldset {
+      border-color: $slate-300;
+      transition: border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    &:hover fieldset {
+      border-color: $slate-400;
+    }
+
+    &.v-input--is-focused fieldset {
+      border-color: $detran-500 !important;
+      border-width: 2px !important;
+    }
+  }
+
+  // --- Select / Autocomplete focado ---
+  .v-select.v-input--is-focused .v-input__slot::after {
+    border-color: $detran-500 !important;
+  }
+
+  // --- Checkboxes e radios ---
+  .v-input--selection-controls .v-icon.primary--text {
+    color: $detran-500 !important;
+  }
+
+  .v-input--checkbox.v-input--is-dirty .v-icon {
+    color: $detran-500 !important;
+  }
+
+  // --- Switch ---
+  .v-input--switch .v-input--switch__track.primary--text {
+    color: $detran-400 !important;
+  }
+  .v-input--switch .v-input--switch__thumb.primary--text {
+    color: $detran-500 !important;
+  }
+}

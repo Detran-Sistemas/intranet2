@@ -55,20 +55,30 @@ export default {
 </script>
 
 <style lang="scss">
+@import '../../detran/scss/variables';
+
   .v-footer {
     a {
       text-decoration: none;
+      color: $detran-600;
+      font-weight: 500;
+      transition: color 0.15s ease;
+
+      &:hover {
+        color: $detran-700;
+        text-decoration: underline;
+      }
     }
 
     &.altbg {
-      background: mc('theme', 'primary');
+      background: $detran-800;
 
       span {
-        color: mc('blue', '300');
+        color: $detran-200;
       }
 
       a {
-        color: mc('blue', '200');
+        color: $detran-100;
       }
     }
   }

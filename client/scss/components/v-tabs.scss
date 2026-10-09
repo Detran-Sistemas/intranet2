@@ -8,3 +8,37 @@
     border-bottom-color: transparent;
   }
 }
+
+// =============================================================================
+// DETRAN-MG DESIGN SYSTEM — Vuetify Tabs Overrides
+// =============================================================================
+
+.v-application {
+
+  // Slider indicador de tab ativa
+  .v-tabs-slider-wrapper .v-tabs-slider,
+  .v-tabs .v-tabs-slider {
+    background-color: $detran-500 !important;
+    caret-color: $detran-500 !important;
+    height: 2px;
+    border-radius: 2px 2px 0 0;
+  }
+
+  // Tab ativa
+  .v-tabs .v-tab.v-tab--active {
+    color: $detran-700 !important;
+    caret-color: $detran-700 !important;
+    font-weight: 600;
+  }
+
+  // Tab inativa (hover)
+  .v-tabs .v-tab:not(.v-tab--active):hover {
+    color: $detran-600 !important;
+    background-color: rgba($detran-500, 0.05);
+  }
+
+  // Tab bar — sem sombra Vuetify default (já usamos shadow-soft no container)
+  .v-tabs-bar {
+    font-family: $font-family-base;
+  }
+}

@@ -1,11 +1,11 @@
 <template lang='pug'>
-  v-app-bar.nav-header(color='black', dark, app, :clipped-left='!$vuetify.rtl', :clipped-right='$vuetify.rtl', fixed, flat, :extended='searchIsShown && $vuetify.breakpoint.smAndDown')
-    v-toolbar(color='deep-purple', flat, slot='extension', v-if='searchIsShown && $vuetify.breakpoint.smAndDown')
+  v-app-bar.nav-header(dark, app, :clipped-left='!$vuetify.rtl', :clipped-right='$vuetify.rtl', fixed, flat, :extended='searchIsShown && $vuetify.breakpoint.smAndDown')
+    v-toolbar(color='primary', flat, slot='extension', v-if='searchIsShown && $vuetify.breakpoint.smAndDown')
       v-text-field(
         ref='searchFieldMobile'
         v-model='search'
         clearable
-        background-color='deep-purple'
+        background-color='primary'
         color='white'
         :label='$t(`common:header.search`)'
         single-line
@@ -19,34 +19,22 @@
       )
     v-layout(row)
       v-flex(xs5, md4)
-        v-toolbar.nav-header-inner(color='black', dark, flat, :class='$vuetify.rtl ? `pr-3` : `pl-3`')
-          v-avatar(tile, size='34', @click='goHome')
-            v-img.org-logo(:src='logoUrl')
-          //- v-menu(open-on-hover, offset-y, bottom, left, min-width='250', transition='slide-y-transition')
-          //-   template(v-slot:activator='{ on }')
-          //-     v-app-bar-nav-icon.btn-animate-app(v-on='on', :class='$vuetify.rtl ? `mx-0` : ``')
-          //-       v-icon mdi-menu
-          //-   v-list(nav, :light='!$vuetify.theme.dark', :dark='$vuetify.theme.dark', :class='$vuetify.theme.dark ? `grey darken-4` : ``')
-          //-     v-list-item.pl-4(href='/')
-          //-       v-list-item-avatar(size='24'): v-icon(color='blue') mdi-home
-          //-       v-list-item-title.body-2 {{$t('common:header.home')}}
-          //-     v-list-item.pl-4(@click='')
-          //-       v-list-item-avatar(size='24'): v-icon(color='grey lighten-2') mdi-file-tree
-          //-       v-list-item-content
-          //-         v-list-item-title.body-2.grey--text.text--ligten-2 {{$t('common:header.siteMap')}}
-          //-         v-list-item-subtitle.overline.grey--text.text--lighten-2 Coming soon
-          //-     v-list-item.pl-4(href='/t')
-          //-       v-list-item-avatar(size='24'): v-icon(color='teal') mdi-tag-multiple
-          //-       v-list-item-title.body-2 {{$t('common:header.browseTags')}}
-          //-     v-list-item.pl-4(@click='assets')
-          //-       v-list-item-avatar(size='24'): v-icon(color='grey lighten-2') mdi-folder-multiple-image
-          //-       v-list-item-content
-          //-         v-list-item-title.body-2.grey--text.text--ligten-2 {{$t('common:header.imagesFiles')}}
-          //-         v-list-item-subtitle.overline.grey--text.text--lighten-2 Coming soon
-          v-toolbar-title(:class='{ "mx-3": $vuetify.breakpoint.mdAndUp, "mx-1": $vuetify.breakpoint.smAndDown }')
-            span.subheading {{title}}
+        v-toolbar.nav-header-inner(color='transparent', dark, flat, :class='$vuetify.rtl ? `pr-3` : `pl-3`')
+          template(v-if='effectiveMode === "admin"')
+            .d-flex.align-center.cursor-pointer(@click='goHome')
+              .admin-header-car-icon.mr-3
+                v-icon(color='white', size='20') mdi-car-estate
+              .admin-header-brand
+                span.font-weight-bold.white--text(style='font-size: 1.125rem; letter-spacing: -0.01em;') Detran
+                span.font-weight-light.white--text(style='font-size: 1.125rem;') MG
+                span.caption.ml-2.white--text(style='opacity: 0.75; font-size: 11px !important; letter-spacing: 0.05em;') • PAINEL ADMINISTRATIVO
+          template(v-else)
+            v-avatar(tile, size='34', @click='goHome')
+              v-img.org-logo(:src='logoUrl')
+            v-toolbar-title(:class='{ "mx-3": $vuetify.breakpoint.mdAndUp, "mx-1": $vuetify.breakpoint.smAndDown }')
+              span.subheading.font-weight-bold {{ title }}
       v-flex(md4, v-if='$vuetify.breakpoint.mdAndUp')
-        v-toolbar.nav-header-inner(color='black', dark, flat)
+        v-toolbar.nav-header-inner(color='transparent', dark, flat)
           slot(name='mid')
             transition(name='navHeaderSearch', v-if='searchIsShown')
               v-text-field(
@@ -76,10 +64,10 @@
                   v-icon(color='grey') mdi-tag-multiple
               span {{$t('common:header.browseTags')}}
       v-flex(xs7, md4)
-        v-toolbar.nav-header-inner.pr-4(color='black', dark, flat)
+        v-toolbar.nav-header-inner.pr-4(color='transparent', dark, flat)
           v-spacer
           .navHeaderLoading.mr-3
-            v-progress-circular(indeterminate, color='blue', :size='22', :width='2' v-show='isLoading')
+            v-progress-circular(indeterminate, color='primary', :size='22', :width='2' v-show='isLoading')
 
           slot(name='actions')
 
@@ -178,14 +166,14 @@
           //- ADMIN
 
           template(v-if='isAuthenticated && isAdmin')
-            v-tooltip(bottom, v-if='mode !== `admin`')
+            v-tooltip(bottom, v-if='effectiveMode !== `admin`')
               template(v-slot:activator='{ on }')
                 v-btn(icon, tile, height='64', v-on='on', href='/a', :aria-label='$t(`common:header.admin`)')
                   v-icon(color='grey') mdi-cog
               span {{$t('common:header.admin')}}
-            v-btn(v-else, text, tile, height='64', href='/', :aria-label='$t(`common:actions.exit`)')
-              v-icon(left, color='grey') mdi-exit-to-app
-              span {{$t('common:actions.exit')}}
+            v-btn.admin-exit-btn(v-else, text, height='38', rounded, href='/', :aria-label='$t(`common:actions.exit`)')
+              v-icon(left, size='18', color='white') mdi-arrow-left
+              span.white--text.font-weight-medium Voltar ao Portal
             v-divider(vertical)
 
           //- ACCOUNT
@@ -242,7 +230,7 @@
     page-delete(v-model='deletePageModal', v-if='path && path.length')
     page-convert(v-model='convertPageModal', v-if='path && path.length')
 
-    .nav-header-dev(v-if='isDevMode')
+    .nav-header-dev(v-if='isDevMode && effectiveMode !== `admin`')
       v-icon mdi-alert
       div
         .overline DEVELOPMENT VERSION
@@ -270,6 +258,10 @@ export default {
     hideSearch: {
       type: Boolean,
       default: false
+    },
+    mode: {
+      type: String,
+      default: ''
     }
   },
   data() {
@@ -301,7 +293,12 @@ export default {
     logoUrl: get('site/logoUrl'),
     path: get('page/path'),
     locale: get('page/locale'),
-    mode: get('page/mode'),
+    pageMode: get('page/mode'),
+    effectiveMode () {
+      if (this.mode) return this.mode
+      if (this.$route && this.$route.path && this.$route.path.startsWith('/a')) return 'admin'
+      return this.pageMode || ''
+    },
     name: get('user/name'),
     email: get('user/email'),
     pictureUrl: get('user/pictureUrl'),
@@ -487,12 +484,18 @@ export default {
 </script>
 
 <style lang='scss'>
+@import '../../themes/detran/scss/variables';
 
 .nav-header {
-  //z-index: 1000;
+  background: linear-gradient(135deg, $detran-900 0%, $detran-800 100%) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.15) !important;
+  font-family: $font-family-base;
 
   .v-toolbar__extension {
     padding: 0;
+    background: $detran-800 !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
 
     .v-toolbar__content {
       padding: 0;
@@ -505,19 +508,73 @@ export default {
 
   .org-logo {
     cursor: pointer;
+    filter: brightness(1.05);
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+    &:hover {
+      transform: scale(1.06);
+    }
   }
 
   &-inner {
+    background-color: transparent !important;
+
     .v-toolbar__content {
       padding: 0;
     }
+  }
+
+  .v-text-field--solo {
+    .v-input__control > .v-input__slot {
+      background: rgba(255, 255, 255, 0.12) !important;
+      border: 1px solid rgba(255, 255, 255, 0.16) !important;
+      border-radius: $radius-full !important;
+      box-shadow: none !important;
+      transition: background-color 0.2s ease, border-color 0.2s ease;
+
+      &:hover, &:focus-within {
+        background: rgba(255, 255, 255, 0.18) !important;
+        border-color: rgba(255, 255, 255, 0.35) !important;
+      }
+    }
+  }
+
+  .v-btn--icon {
+    border-radius: $radius-md !important;
+    transition: background-color 0.15s ease, transform 0.15s ease;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.10) !important;
+      transform: translateY(-1px);
+    }
+  }
+
+  .admin-exit-btn {
+    background: rgba(255, 255, 255, 0.12) !important;
+    border: 1px solid rgba(255, 255, 255, 0.20) !important;
+    font-weight: 600 !important;
+    font-size: 0.8125rem !important;
+    letter-spacing: 0 !important;
+    text-transform: none !important;
+    margin: 0 8px;
+    transition: all 0.2s ease !important;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.22) !important;
+      border-color: rgba(255, 255, 255, 0.35) !important;
+      transform: translateY(-1px);
+    }
+  }
+
+  .v-divider--vertical {
+    border-color: rgba(255, 255, 255, 0.12) !important;
   }
 
   &-search-adv {
     position: absolute;
     top: 7px;
     right: 12px;
-    border-radius: 4px !important;
+    border-radius: $radius-sm !important;
 
     @at-root .v-application--is-rtl & {
       right: initial;
@@ -525,26 +582,26 @@ export default {
     }
 
     &::before {
-      border-radius: 4px !important;
+      border-radius: $radius-sm !important;
     }
 
     &:hover, &:focus {
       position: absolute !important;
-
       &::before {
-        border-radius: 4px;
+        border-radius: $radius-sm;
       }
     }
   }
 
   &-dev {
-    background-color: mc('red', '600');
+    background-color: $color-error;
     position: absolute;
     top: 11px;
     left: 255px;
     padding: 5px 15px;
-    border-radius: 5px;
+    border-radius: $radius-md;
     display: flex;
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
 
     .v-icon {
       margin-right: 15px;
@@ -553,6 +610,32 @@ export default {
     .overline:nth-child(2) {
       text-transform: none;
     }
+  }
+}
+
+.admin-header-car-icon {
+  width: 34px;
+  height: 34px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+}
+
+.admin-exit-btn {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  border-radius: 20px !important;
+  padding: 0 16px !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.22) !important;
+    border-color: rgba(255, 255, 255, 0.4) !important;
+    transform: translateX(-2px);
   }
 }
 
