@@ -74,6 +74,9 @@
             v-list-item(to='/storage', color='primary')
               v-list-item-avatar(size='24', tile): v-icon mdi-harddisk
               v-list-item-title {{ $t('admin:storage.title') }}
+            v-list-item(to='/workflow-policies', color='primary')
+              v-list-item-avatar(size='24', tile): v-icon(color='#288b4a') mdi-source-branch
+              v-list-item-title Workflow Detran-MG
           template(v-if='hasPermission([`manage:system`, `manage:api`])')
             v-divider.my-2
             v-subheader.pl-4 {{ $t('admin:nav.system') }}
@@ -173,6 +176,7 @@ const router = new VueRouter({
     { path: '/system', component: () => import(/* webpackChunkName: "admin" */ './admin/admin-system.vue') },
     { path: '/utilities', component: () => import(/* webpackChunkName: "admin" */ './admin/admin-utilities.vue') },
     { path: '/webhooks', component: () => import(/* webpackChunkName: "admin" */ './admin/admin-webhooks.vue') },
+    { path: '/workflow-policies', component: () => import(/* webpackChunkName: "admin" */ './admin/admin-workflow-policies.vue') },
     { path: '/dev-flags', component: () => import(/* webpackChunkName: "admin-dev" */ './admin/admin-dev-flags.vue') },
     { path: '/contribute', component: () => import(/* webpackChunkName: "admin" */ './admin/admin-contribute.vue') }
   ]

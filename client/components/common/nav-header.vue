@@ -188,6 +188,33 @@
               span {{$t('common:actions.exit')}}
             v-divider(vertical)
 
+          //- DETRAN WORKFLOW NOTIFIER (Central de Tarefas)
+
+          template(v-if='isAuthenticated')
+            v-tooltip(bottom)
+              template(v-slot:activator='{ on }')
+                v-btn(
+                  icon
+                  tile
+                  height='64'
+                  v-on='on'
+                  href='/w'
+                  :aria-label='workflowTooltip'
+                  class='detran-nav-workflow-btn'
+                )
+                  v-badge(
+                    v-if='workflowPendingCount > 0'
+                    color='amber darken-3'
+                    :content='workflowPendingCount'
+                    overlap
+                    offset-x='10'
+                    offset-y='10'
+                  )
+                    v-icon(color='grey lighten-1') mdi-bell-outline
+                  v-icon(v-else, color='grey') mdi-clipboard-flow-outline
+              span {{ workflowTooltip }}
+            v-divider(vertical)
+
           //- ACCOUNT
 
           v-menu(v-if='isAuthenticated', offset-y, bottom, min-width='300', transition='slide-y-transition', left)
@@ -252,6 +279,7 @@
 <script>
 import { get, sync } from 'vuex-pathify'
 import _ from 'lodash'
+import gql from 'graphql-tag'
 
 import movePageMutation from 'gql/common/common-pages-mutation-move.gql'
 
@@ -283,6 +311,7 @@ export default {
       deletePageModal: false,
       locales: siteLangs,
       isDevMode: false,
+      workflowPendingCount: 0,
       duplicateOpts: {
         locale: 'en',
         path: 'new-page',
@@ -340,6 +369,12 @@ export default {
     hasAnyPagePermissions () {
       return this.hasAdminPermission || this.hasWritePagesPermission || this.hasManagePagesPermission ||
         this.hasDeletePagesPermission || this.hasReadSourcePermission || this.hasReadHistoryPermission
+    },
+    workflowTooltip () {
+      if (this.workflowPendingCount > 0) {
+        return `Central de Tarefas (${this.workflowPendingCount} pendência${this.workflowPendingCount > 1 ? 's' : ''})`
+      }
+      return 'Central de Governança & Workflow'
     }
   },
   created () {
@@ -370,6 +405,12 @@ export default {
       this.pageDelete()
     })
     this.isDevMode = siteConfig.devMode === true
+    if (this.isAuthenticated) {
+      this.fetchWorkflowPendingCount()
+    }
+    this.$root.$on('workflowRefreshTasks', () => {
+      this.fetchWorkflowPendingCount()
+    })
   },
   methods: {
     searchFocus () {
@@ -480,6 +521,26 @@ export default {
         window.location.assign(`/${this.locale}/home`)
       } else {
         window.location.assign('/')
+      }
+    },
+    async fetchWorkflowPendingCount () {
+      try {
+        const result = await this.$apollo.query({
+          query: gql`
+            query {
+              workflow {
+                pendingTasks {
+                  id
+                }
+              }
+            }
+          `,
+          fetchPolicy: 'network-only'
+        })
+        const tasks = result?.data?.workflow?.pendingTasks || []
+        this.workflowPendingCount = tasks.length
+      } catch {
+        // Silently continue if query fails
       }
     }
   }

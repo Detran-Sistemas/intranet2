@@ -145,3 +145,13 @@ dataPath: ./data
 # file uploads.
 
 bodyParserLimit: 5mb
+
+# ---------------------------------------------------------------------
+# Detran-MG Workflow & Governança Institucional
+# ---------------------------------------------------------------------
+detranWorkflow:
+  # Chave geral de contingência operacional (Feature Flag).
+  # Defina como false para contornar temporariamente o fluxo em incidentes sem reiniciar o servidor.
+  enabled: true
+  # URL do Webhook do Microsoft Teams para notificações de submissão e publicação (opcional)
+  teamsWebhookUrl: ''
