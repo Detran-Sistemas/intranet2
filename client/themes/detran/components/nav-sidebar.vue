@@ -442,8 +442,9 @@ export default {
 
         // Cabeçalho (Header das configurações do Wiki.js)
         if (item.k === 'header') {
-          // Se for título de seção em caixa alta (ex: "PRINCIPAL", "ACESSO RÁPIDO")
-          if (item.l && item.l === item.l.toUpperCase()) {
+          // Se for título de seção em caixa alta e sem ícone customizado de grupo (ex: "PRINCIPAL", "ACESSO RÁPIDO")
+          const isSection = (item.l && item.l === item.l.toUpperCase()) && (!item.c || item.c === 'mdi-format-title')
+          if (isSection) {
             currentGroup = null
             result.push({
               ...item,
