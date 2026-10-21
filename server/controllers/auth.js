@@ -19,11 +19,30 @@ const bruteforce = new ExpressBrute(new BruteKnex({
   }
 })
 
+const appsCatalog = require('../detran/apps/catalog')
+
 /**
  * Login form
  */
 router.get('/login', async (req, res, next) => {
   _.set(res.locals, 'pageMeta.title', 'Login')
+
+  // -> Fluxo de redirecionamento para aplicação satélite (?returnApp=)
+  if (req.query.returnApp && appsCatalog.isValidAppId(req.query.returnApp)) {
+    const returnApp = appsCatalog.getApp(req.query.returnApp)
+    // Se o utilizador já estiver autenticado na Intranet, redireciona imediatamente com login_hint
+    if (req.user && req.user.id !== 2 && appsCatalog.hasAccess(returnApp, req.user)) {
+      return res.redirect(appsCatalog.buildSsoUrl(returnApp, req.user))
+    }
+    // Caso contrário, armazena returnApp em cookie para redirecionar pós-login
+    res.cookie('returnApp', req.query.returnApp.trim().toLowerCase(), {
+      maxAge: 15 * 60 * 1000,
+      path: '/',
+      httpOnly: false,
+      sameSite: 'lax',
+      secure: req.secure || req.headers['x-forwarded-proto'] === 'https'
+    })
+  }
 
   if (req.query.legacy || (req.get('user-agent') && req.get('user-agent').indexOf('Trident') >= 0)) {
     const { formStrategies, socialStrategies } = await WIKI.models.authentication.getStrategiesForLegacyClient()
@@ -72,6 +91,18 @@ router.all('/login/:strategy/callback', async (req, res, next) => {
     }, { req, res })
     res.cookie('jwt', authResult.jwt, commonHelper.getCookieOpts())
 
+    // -> 1. Redirecionamento pós-login para aplicação satélite (?returnApp=)
+    const returnAppId = req.cookies['returnApp'] || req.query.returnApp
+    if (returnAppId && appsCatalog.isValidAppId(returnAppId)) {
+      res.clearCookie('returnApp')
+      const targetApp = appsCatalog.getApp(returnAppId)
+      const authenticatedUser = authResult.user || req.user
+      if (targetApp && authenticatedUser && appsCatalog.hasAccess(targetApp, authenticatedUser)) {
+        const ssoUrl = appsCatalog.buildSsoUrl(targetApp, authenticatedUser)
+        return res.redirect(ssoUrl)
+      }
+    }
+
     const loginRedirect = req.cookies['loginRedirect']
     const isValidRedirect = loginRedirect && loginRedirect.startsWith('/') && !loginRedirect.startsWith('//') && !loginRedirect.includes('://')
     if (loginRedirect === '/' && authResult.redirect) {
@@ -109,6 +140,18 @@ router.post('/login', bruteforce.prevent, async (req, res, next) => {
       }, { req, res })
       req.brute.reset()
       res.cookie('jwt', authResult.jwt, commonHelper.getCookieOpts())
+
+      // -> Redirecionamento pós-login para aplicação satélite (?returnApp=)
+      const returnAppId = req.cookies['returnApp'] || req.query.returnApp
+      if (returnAppId && appsCatalog.isValidAppId(returnAppId)) {
+        res.clearCookie('returnApp')
+        const targetApp = appsCatalog.getApp(returnAppId)
+        const authenticatedUser = authResult.user || req.user
+        if (targetApp && authenticatedUser && appsCatalog.hasAccess(targetApp, authenticatedUser)) {
+          return res.redirect(appsCatalog.buildSsoUrl(targetApp, authenticatedUser))
+        }
+      }
+
       res.redirect('/')
     } catch (err) {
       const { formStrategies, socialStrategies } = await WIKI.models.authentication.getStrategiesForLegacyClient()

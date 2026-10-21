@@ -87,6 +87,45 @@
 
             //- Ações do header
             .detran-header__actions
+              //- App Launcher / Sistemas Satélites Integrados (Entra ID Hub)
+              v-menu(
+                offset-y
+                bottom
+                transition='slide-y-transition'
+                content-class='detran-apps-popover-menu'
+                max-width='340'
+              )
+                template(v-slot:activator='{ on }')
+                  button.detran-header__action-btn(
+                    v-on='on'
+                    title='Aplicações e Sistemas Satélites'
+                    type='button'
+                    aria-label='Sistemas Satélites'
+                  )
+                    v-icon(size='20' color='#288b4a') mdi-apps
+                v-card.detran-apps-popover(flat)
+                  .detran-apps-popover__header(style='padding: 14px 16px; border-bottom: 1px solid #e2e8f0; background: #f8fafc;')
+                    .overline(style='font-size: 10px; font-weight: 700; color: #288b4a;') SISTEMAS INTEGRADOS
+                    .font-weight-bold(style='font-size: 14px; color: #1e293b;') Aplicações Satélites (Entra ID)
+                  v-list(dense style='padding: 6px 0;')
+                    v-list-item(
+                      v-for='app in (internalApps && internalApps.length ? internalApps : [{ id: "servicedesk", nome: "Service Desk", icone: "mdi-headset", descricao: "Suporte e Chamados", resolvedSsoUrl: "/apps/servicedesk" }])'
+                      :key='app.id'
+                      :href='app.resolvedSsoUrl || `/apps/${app.id}`'
+                      style='border-radius: 8px; margin: 4px 8px;'
+                    )
+                      v-list-item-avatar(size='36' color='green lighten-5')
+                        v-icon(color='primary' size='20') {{ app.icone || 'mdi-application' }}
+                      v-list-item-content
+                        v-list-item-title.font-weight-bold(style='font-size: 13px; color: #1e293b;') {{ app.nome }}
+                        v-list-item-subtitle(style='font-size: 11px; color: #64748b;') {{ app.descricao || 'Single Sign-On' }}
+                      v-list-item-action
+                        v-icon(size='16' color='#94a3b8') mdi-chevron-right
+                  v-divider
+                  .pa-2.text-center
+                    v-btn(text x-small color='primary' href='/apps')
+                      | Abrir Hub de Aplicações
+
               //- Seletor de Idiomas (quando há múltiplos idiomas configurados)
               v-menu(offset-y bottom transition='slide-y-transition' v-if='locales.length > 1')
                 template(v-slot:activator='{ on }')
@@ -489,6 +528,7 @@ export default {
       convertPageModal: false,
       avatarFailed: false,
       verifiedAncestors: [],
+      internalApps: [],
       duplicateOpts: {
         locale: 'pt',
         path: 'new-page',
@@ -774,6 +814,16 @@ export default {
   },
 
   mounted () {
+    // Carrega o catálogo de aplicações satélites autorizadas (Entra ID)
+    fetch('/api/detran/apps')
+      .then(res => res.json())
+      .then(data => {
+        if (data && Array.isArray(data.apps)) {
+          this.internalApps = data.apps
+        }
+      })
+      .catch(() => {})
+
     // Reseta estado de busca ao montar a página
     this.search = ''
     this.searchIsFocused = false
