@@ -9,6 +9,81 @@ const qs = require('querystring')
 /* global WIKI */
 
 const tmplCreateRegex = /^[0-9]+(,[0-9]+)?$/
+const appsCatalog = require('../detran/apps/catalog')
+
+// -------------------------------------------------------------
+// Interceptor Global de Redirecionamento Satélite (?returnApp=)
+// -------------------------------------------------------------
+router.use((req, res, next) => {
+  if (req.query && req.query.returnApp && appsCatalog.isValidAppId(req.query.returnApp)) {
+    const app = appsCatalog.getApp(req.query.returnApp)
+    // Se o utilizador já estiver autenticado na Intranet, redireciona imediatamente com login_hint
+    if (req.user && req.user.id !== 2 && appsCatalog.hasAccess(app, req.user)) {
+      return res.redirect(appsCatalog.buildSsoUrl(app, req.user))
+    }
+    // Caso não autenticado, armazena em cookie e redireciona para login
+    if (!req.user || req.user.id === 2) {
+      res.cookie('returnApp', req.query.returnApp.trim().toLowerCase(), {
+        maxAge: 15 * 60 * 1000,
+        path: '/',
+        httpOnly: false,
+        sameSite: 'lax',
+        secure: req.secure || req.headers['x-forwarded-proto'] === 'https'
+      })
+      return res.redirect(`/login?returnApp=${encodeURIComponent(req.query.returnApp)}`)
+    }
+  }
+  next()
+})
+
+/**
+ * Catálogo de Aplicações Satélites - Launch / SSO Start
+ */
+router.get(['/apps/:appId', '/sso/:appId'], (req, res, next) => {
+  const appId = req.params.appId
+  if (!appsCatalog.isValidAppId(appId)) {
+    return res.redirect('/apps')
+  }
+  const app = appsCatalog.getApp(appId)
+  if (!req.user || req.user.id === 2) {
+    res.cookie('returnApp', appId.trim().toLowerCase(), {
+      maxAge: 15 * 60 * 1000,
+      path: '/',
+      httpOnly: false,
+      sameSite: 'lax',
+      secure: req.secure || req.headers['x-forwarded-proto'] === 'https'
+    })
+    return res.redirect(`/login?returnApp=${encodeURIComponent(appId)}`)
+  }
+  if (!appsCatalog.hasAccess(app, req.user)) {
+    _.set(res.locals, 'pageMeta.title', 'Acesso Restrito')
+    return res.status(403).render('unauthorized', { action: 'view' })
+  }
+  return res.redirect(appsCatalog.buildSsoUrl(app, req.user))
+})
+
+/**
+ * Painel / Hub de Aplicações Satélites
+ */
+router.get(['/apps', '/apps/'], (req, res, next) => {
+  if (!req.user || req.user.id === 2) {
+    return res.redirect('/login')
+  }
+  _.set(res.locals, 'pageMeta.title', 'Painel de Aplicações Corporativas')
+  const userApps = appsCatalog.listUserApps(req.user)
+  res.render('apps', { apps: userApps, tenantId: appsCatalog.getTenantId() })
+})
+
+/**
+ * API REST para Listagem do Catálogo de Aplicações Satélites
+ */
+router.get('/api/detran/apps', (req, res) => {
+  const userApps = appsCatalog.listUserApps(req.user)
+  res.json({
+    tenantId: appsCatalog.getTenantId(),
+    apps: userApps
+  })
+})
 
 /**
  * Robots.txt

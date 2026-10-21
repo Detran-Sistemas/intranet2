@@ -794,6 +794,14 @@ export default {
         this.loaderTitle = this.$t('auth:loginSuccess')
         Cookies.set('jwt', respObj.jwt, { expires: 365, secure: window.location.protocol === 'https:' })
         _.delay(() => {
+          // -> Prioridade para retorno a aplicação satélite (?returnApp=)
+          const returnAppId = Cookies.get('returnApp')
+          if (returnAppId) {
+            Cookies.remove('returnApp')
+            window.location.replace(`/apps/${returnAppId}`)
+            return
+          }
+
           const loginRedirect = Cookies.get('loginRedirect')
           const isValidRedirect = loginRedirect && loginRedirect.startsWith('/') && !loginRedirect.startsWith('//') && !loginRedirect.includes('://')
           if (loginRedirect === '/' && respObj.redirect) {
