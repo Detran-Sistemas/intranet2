@@ -1,3 +1,4 @@
+const path = require('path')
 const express = require('express')
 const router = express.Router()
 const pageHelper = require('../helpers/page')
@@ -83,6 +84,15 @@ router.get('/api/detran/apps', (req, res) => {
     tenantId: appsCatalog.getTenantId(),
     apps: userApps
   })
+})
+
+/**
+ * Endpoint de CDN para o SDK Corporativo @detran/sso-client (Browser IIFE Bundle)
+ */
+router.get('/detran-sso.js', (req, res) => {
+  const bundlePath = path.join(WIKI.ROOTPATH, 'packages', 'detran-sso-client', 'dist', 'detran-sso.bundle.js')
+  res.type('application/javascript')
+  res.sendFile(bundlePath)
 })
 
 /**
