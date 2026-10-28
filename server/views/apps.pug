@@ -1,0 +1,41 @@
+extends master.pug
+
+block body
+  .detran-app.v-application.v-application--is-ltr.theme--light
+    .detran-layout
+      .detran-main(style='margin-left: 0; width: 100%; min-height: 100vh; padding: 24px;')
+        .detran-apps-hub-container(style='max-width: 1024px; margin: 0 auto;')
+          
+          //- Header do Hub de Aplicações
+          .detran-apps-header(style='display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; padding: 24px; background: #ffffff; border-radius: 16px; box-shadow: 0 4px 20px -2px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;')
+            .detran-apps-header__left(style='display: flex; align-items: center; gap: 16px;')
+              .detran-apps-header__avatar(style='width: 52px; height: 52px; border-radius: 12px; background: #e1f6e8; display: flex; align-items: center; justify-content: center;')
+                i.v-icon.notranslate.mdi.mdi-apps(style='font-size: 28px; color: #33a65b;')
+              div
+                .overline(style='color: #288b4a; font-weight: 700; letter-spacing: 0.05em; font-size: 11px; text-transform: uppercase;') MICROSOFT ENTRA ID SSO HUB
+                h1(style='font-size: 24px; font-weight: 700; color: #1e293b; margin: 2px 0 0;') Painel de Aplicações Satélites
+                p(style='color: #64748b; font-size: 13px; margin: 4px 0 0;') Acesso centralizado e autenticação única para sistemas institucionais do Detran-MG
+            .detran-apps-header__right
+              a.v-btn(href='/' style='display: inline-flex; align-items: center; gap: 8px; text-decoration: none; padding: 8px 16px; border-radius: 8px; background: #f1f5f9; color: #334155; font-size: 14px; font-weight: 600;')
+                i.v-icon.notranslate.mdi.mdi-arrow-left(style='font-size: 18px;')
+                span Voltar à Intranet
+
+          //- Grid de Aplicações Satélites
+          .detran-apps-grid(style='display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;')
+            each app in apps
+              a.detran-app-card(href=app.resolvedSsoUrl style='display: flex; flex-direction: column; justify-content: space-between; padding: 24px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; text-decoration: none; box-shadow: 0 4px 14px -2px rgba(0,0,0,0.05); transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);')
+                .detran-app-card__top(style='display: flex; align-items: flex-start; gap: 16px; margin-bottom: 16px;')
+                  .detran-app-card__icon(style='width: 48px; height: 48px; border-radius: 12px; background: #e1f6e8; display: flex; align-items: center; justify-content: center; flex-shrink: 0;')
+                    i.v-icon.notranslate.mdi(class=app.icone style='font-size: 26px; color: #33a65b;')
+                  .detran-app-card__meta(style='flex: 1; min-width: 0;')
+                    h2(style='font-size: 18px; font-weight: 700; color: #1e293b; margin: 0 0 6px;')= app.nome
+                    p(style='font-size: 13px; color: #64748b; line-height: 1.4; margin: 0;')= app.descricao || 'Aplicação integrada com Microsoft Entra ID'
+                .detran-app-card__bottom(style='display: flex; align-items: center; justify-content: space-between; padding-top: 14px; border-top: 1px solid #f1f5f9;')
+                  span.detran-app-card__badge(style='font-size: 11px; font-weight: 600; color: #206e3b; background: #f2fbf5; padding: 3px 8px; border-radius: 6px;') Single Sign-On
+                  span.detran-app-card__action(style='font-size: 13px; font-weight: 600; color: #33a65b; display: inline-flex; align-items: center; gap: 4px;')
+                    span Acessar
+                    i.v-icon.notranslate.mdi.mdi-arrow-right(style='font-size: 16px;')
+
+          //- Rodapé de Auditoria
+          .detran-apps-footer(style='margin-top: 40px; text-align: center; color: #94a3b8; font-size: 12px;')
+            p Tenant ID: #{tenantId} • Intranet Corporativa Detran-MG

@@ -45,6 +45,15 @@
           span.white--text(v-if='$vuetify.breakpoint.lgAndUp') {{ $t('common:actions.close') }}
         v-divider.ml-3(vertical)
     v-main
+      editor-workflow-bar(
+        :path='path'
+        :locale='locale'
+        :title='currentPageTitle'
+        :is-dirty='isDirty'
+        :page-id='pageId'
+        :mode='mode'
+        @save='save'
+      )
       component(:is='currentEditor', :save='save')
       editor-modal-properties(v-model='dialogProps')
       editor-modal-editorselect(v-model='dialogEditorSelector')
@@ -64,10 +73,14 @@ import { Base64 } from 'js-base64'
 import { StatusIndicator } from 'vue-status-indicator'
 
 import editorStore from '../store/editor'
+import detranWorkflowStore from '../store/detran-workflow'
 
 /* global WIKI */
 
 WIKI.$store.registerModule('editor', editorStore)
+if (!WIKI.$store.hasModule('detranWorkflow')) {
+  WIKI.$store.registerModule('detranWorkflow', detranWorkflowStore)
+}
 
 export default {
   i18nOptions: { namespaces: 'editor' },
@@ -75,6 +88,7 @@ export default {
     AtomSpinner,
     StatusIndicator,
     editorApi: () => import(/* webpackChunkName: "editor-api", webpackMode: "lazy" */ './editor/editor-api.vue'),
+    editorWorkflowBar: () => import(/* webpackChunkName: "editor-workflow", webpackMode: "eager" */ './editor/editor-workflow-bar.vue'),
     editorCode: () => import(/* webpackChunkName: "editor-code", webpackMode: "lazy" */ './editor/editor-code.vue'),
     editorCkeditor: () => import(/* webpackChunkName: "editor-ckeditor", webpackMode: "lazy" */ './editor/editor-ckeditor.vue'),
     editorAsciidoc: () => import(/* webpackChunkName: "editor-asciidoc", webpackMode: "lazy" */ './editor/editor-asciidoc.vue'),
@@ -260,8 +274,18 @@ export default {
       this.isConflict = false
     })
 
+    this.$root.$on('workflowDraftRecovered', (draft) => {
+      if (draft && draft.content !== undefined) {
+        this.initContentParsed = draft.content
+        this.setCurrentSavedState()
+      }
+    })
+
     // this.$store.set('editor/mode', 'edit')
     // this.currentEditor = `editorApi`
+  },
+  beforeDestroy() {
+    this.$root.$off('workflowDraftRecovered')
   },
   methods: {
     openPropsModal(name) {

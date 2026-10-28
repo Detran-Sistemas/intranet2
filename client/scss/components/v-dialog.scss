@@ -1,47 +1,120 @@
+// =============================================================================
+// DETRAN-MG DESIGN SYSTEM — Dialog / Modal Header
+// Substitui o azul padrão pelo gradiente verde Detran-MG.
+// Variantes coloridas mantidas para contextos de alerta.
+// =============================================================================
+
 .dialog-header {
-  background-color: mc('blue', '700');
-  background-image: radial-gradient(ellipse at top, mc('blue', '500'), mc('blue', '700')),
-                    radial-gradient(ellipse at bottom, mc('blue', '800'), mc('blue', '700'));
+  background-color: $detran-700;
+  background-image: radial-gradient(ellipse at top, $detran-500, $detran-700),
+                    radial-gradient(ellipse at bottom, $detran-800, $detran-700);
   height: 60px;
   color: #FFF;
   display: flex;
   align-items: center;
   padding: 0 1rem;
-  font-size: 1.2rem;
+  font-size: 1.1rem;
+  font-family: $font-family-base;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 
   &.is-red {
-    background-color: mc('red', '700');
-    background-image: radial-gradient(ellipse at top, mc('red', '500'), mc('red', '700')),
-                      radial-gradient(ellipse at bottom, mc('red', '800'), mc('red', '700'));
+    background-color: #b91c1c;
+    background-image: radial-gradient(ellipse at top, #ef4444, #b91c1c),
+                      radial-gradient(ellipse at bottom, #7f1d1d, #b91c1c);
   }
 
   &.is-orange {
-    background-color: mc('orange', '700');
-    background-image: radial-gradient(ellipse at top, mc('orange', '600'), mc('orange', '800')),
-                      radial-gradient(ellipse at bottom, mc('orange', '900'), mc('orange', '800'));
+    background-color: #b45309;
+    background-image: radial-gradient(ellipse at top, #f59e0b, #b45309),
+                      radial-gradient(ellipse at bottom, #78350f, #b45309);
   }
 
   &.is-indigo {
-    background-color: mc('indigo', '700');
-    background-image: radial-gradient(ellipse at top, mc('indigo', '500'), mc('indigo', '700')),
-                      radial-gradient(ellipse at bottom, mc('indigo', '800'), mc('indigo', '700'));
+    background-color: #4338ca;
+    background-image: radial-gradient(ellipse at top, #6366f1, #4338ca),
+                      radial-gradient(ellipse at bottom, #312e81, #4338ca);
   }
 
   &.is-dark {
-    background-color: mc('grey', '900');
-    background-image: radial-gradient(ellipse at top, mc('grey', '800'), mc('grey', '900')),
-                      radial-gradient(ellipse at bottom, mc('grey', '800'), mc('grey', '900'));
+    background-color: $slate-800;
+    background-image: radial-gradient(ellipse at top, $slate-700, $slate-800),
+                      radial-gradient(ellipse at bottom, $slate-900, $slate-800);
   }
 
   &.is-teal {
-    background-color: mc('teal', '700');
-    background-image: radial-gradient(ellipse at top, mc('teal', '500'), mc('teal', '700')),
-                      radial-gradient(ellipse at bottom, mc('teal', '800'), mc('teal', '700'));
+    background-color: #0f766e;
+    background-image: radial-gradient(ellipse at top, #14b8a6, #0f766e),
+                      radial-gradient(ellipse at bottom, #134e4a, #0f766e);
   }
 }
 
 .v-dialog--fullscreen {
   @include until($tablet) {
     padding-top: 56px;
+  }
+}
+
+// =============================================================================
+// DETRAN-MG DESIGN SYSTEM — Vuetify Dialog / Card Overrides
+// =============================================================================
+
+.v-application {
+
+  // Cards de dialog
+  .v-dialog > .v-card {
+    border-radius: $radius-xl !important;
+    overflow: hidden;
+
+    .v-card__title {
+      font-family: $font-family-base !important;
+      font-weight: 700 !important;
+      color: $slate-800 !important;
+      font-size: 1.125rem !important;
+      letter-spacing: -0.02em !important;
+      line-height: 1.3 !important;
+    }
+
+    .v-card__subtitle {
+      font-family: $font-family-base !important;
+      color: $slate-500 !important;
+      font-size: 0.875rem !important;
+    }
+
+    .v-card__text {
+      font-family: $font-family-base !important;
+      color: $slate-600 !important;
+      font-size: 0.9375rem !important;
+      line-height: 1.6 !important;
+    }
+
+    .v-card__actions {
+      padding: 12px 16px 16px !important;
+      gap: 8px;
+    }
+  }
+
+  // Cards standalone (não dialog)
+  .v-card:not(.v-dialog .v-card):not(.admin-sidebar .v-card) {
+    border-radius: $radius-xl !important;
+    box-shadow: $shadow-soft !important;
+    transition: box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+                transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+
+    &.interactive-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 12px 24px -8px rgba($detran-500, 0.15) !important;
+    }
+  }
+
+  // Chips / badges
+  .v-chip.primary {
+    background-color: $detran-500 !important;
+    color: #ffffff !important;
+  }
+
+  .v-chip.success {
+    background-color: $detran-500 !important;
+    color: #ffffff !important;
   }
 }

@@ -7,6 +7,7 @@ import { make } from 'vuex-pathify' // eslint-disable-line import/no-duplicates
 import page from './page'
 import site from './site'
 import user from './user'
+import detranWorkflow from './detran-workflow'
 
 /* global WIKI */
 
@@ -56,12 +57,33 @@ export default new Vuex.Store({
         message: _.get(err, 'graphQLErrors[0].message', err.message),
         icon: 'alert'
       })
+    },
+    pushNotification (st, opts) {
+      const typeStyleMap = {
+        error: 'red',
+        success: 'green',
+        warning: 'amber darken-2',
+        info: 'primary'
+      }
+      const typeIconMap = {
+        error: 'alert',
+        success: 'check',
+        warning: 'alert-circle',
+        info: 'information'
+      }
+      st.notification = {
+        message: opts.message || '',
+        style: typeStyleMap[opts.type] || opts.style || 'primary',
+        icon: typeIconMap[opts.type] || opts.icon || 'cached',
+        isActive: true
+      }
     }
   },
   actions: { },
   modules: {
     page,
     site,
-    user
+    user,
+    detranWorkflow
   }
 })

@@ -1,0 +1,245 @@
+# ===============================================
+# DETRAN-MG WORKFLOW GRAPHQL SCHEMA
+# ===============================================
+
+extend type Query {
+  workflow: DetranWorkflowQuery
+}
+
+extend type Mutation {
+  workflow: DetranWorkflowMutation
+  workflowSubmit(id: Int!, approvalMode: String, comment: String): DetranWorkflowDraftResponse @auth(requires: ["write:drafts", "write:pages", "manage:pages", "manage:system"])
+  workflowSaveDraft(
+    id: Int
+    pageId: Int
+    path: String!
+    locale: String
+    title: String!
+    description: String
+    content: String!
+    contentType: String
+    editorKey: String
+    tags: [String]
+    approvalMode: String
+    baseHash: String
+  ): DetranWorkflowDraftResponse @auth(requires: ["write:drafts", "write:pages", "manage:pages", "manage:system"])
+}
+
+# -----------------------------------------------
+# QUERIES
+# -----------------------------------------------
+
+type DetranWorkflowQuery {
+  # Get single draft by ID with its events and comments
+  draft(id: Int!): DetranWorkflowDraft @auth(requires: ["read:pages", "manage:system"])
+
+  # Get the active draft for a specific path & locale
+  draftByPath(path: String!, locale: String): DetranWorkflowDraft @auth(requires: ["read:pages", "manage:system"])
+
+  # List drafts with optional filters
+  drafts(
+    state: String
+    authorId: Int
+    locale: String
+    limit: Int
+    offset: Int
+  ): [DetranWorkflowDraft]! @auth(requires: ["read:pages", "manage:system"])
+
+  # List pending tasks for the currently authenticated user
+  pendingTasks(limit: Int, offset: Int): [DetranWorkflowDraft]! @auth(requires: ["read:pages", "manage:system"])
+
+  # List configured workflow policies
+  policies: [DetranWorkflowPolicy]! @auth(requires: ["read:pages", "manage:system"])
+
+  # Get effective policy for a given document path
+  policy(path: String!): DetranWorkflowPolicy @auth(requires: ["read:pages", "manage:system"])
+
+  # Get workflow configuration and feature flag
+  config: DetranWorkflowConfig! @auth(requires: ["read:pages", "manage:system"])
+}
+
+# -----------------------------------------------
+# MUTATIONS
+# -----------------------------------------------
+
+type DetranWorkflowMutation {
+  # Save draft (creates new draft or updates existing one)
+  saveDraft(
+    id: Int
+    pageId: Int
+    path: String!
+    locale: String
+    title: String!
+    description: String
+    content: String!
+    contentType: String
+    editorKey: String
+    tags: [String]
+    approvalMode: String
+    baseHash: String
+  ): DetranWorkflowDraftResponse @auth(requires: ["write:drafts", "write:pages", "manage:pages", "manage:system"])
+
+  # Submit draft for review (draft / changes_requested -> in_review)
+  submit(
+    id: Int!
+    approvalMode: String
+    comment: String
+  ): DetranWorkflowDraftResponse @auth(requires: ["write:drafts", "write:pages", "manage:pages", "manage:system"])
+
+  # Request adjustments (in_review / awaiting_approval -> changes_requested)
+  requestChanges(
+    id: Int!
+    comment: String!
+  ): DetranWorkflowDraftResponse @auth(requires: ["review:pages", "approve:pages", "manage:pages", "manage:system"])
+
+  # Approve step 1 in a 2-level workflow (in_review -> awaiting_approval)
+  approveStep(
+    id: Int!
+    comment: String
+  ): DetranWorkflowDraftResponse @auth(requires: ["review:pages", "approve:pages", "manage:pages", "manage:system"])
+
+  # Publish document officially (homologates and updates pages core model)
+  publish(
+    id: Int!
+    comment: String
+  ): DetranWorkflowPublishResponse @auth(requires: ["approve:pages", "manage:pages", "manage:system"])
+
+  # Add line-anchored review comment
+  addComment(
+    draftId: Int!
+    lineNumber: Int
+    anchorText: String
+    body: String!
+  ): DetranWorkflowCommentResponse @auth(requires: ["read:pages", "manage:system"])
+
+  # Toggle comment resolution status
+  resolveComment(
+    id: Int!
+    resolved: Boolean!
+  ): DefaultResponse @auth(requires: ["write:pages", "write:drafts", "manage:pages", "manage:system"])
+
+  # Revalidate normativo validity for +12 months
+  revalidate(
+    id: Int!
+    comment: String
+  ): DetranWorkflowDraftResponse @auth(requires: ["approve:pages", "manage:pages", "manage:system"])
+
+  # Archive document
+  archive(
+    id: Int!
+    comment: String
+  ): DetranWorkflowDraftResponse @auth(requires: ["manage:pages", "manage:system"])
+
+  # Set workflow configuration / feature flag
+  setConfig(
+    enabled: Boolean!
+    teamsWebhookUrl: String
+  ): DetranWorkflowConfigResponse @auth(requires: ["manage:system"])
+
+  # Create or update a workflow policy for a path prefix
+  setPolicy(
+    id: Int
+    pathPrefix: String!
+    approvalLevels: Int!
+    reviewIntervalDays: Int
+    autoArchiveOnExpire: Boolean
+  ): DetranWorkflowPolicyResponse @auth(requires: ["manage:system"])
+
+  # Delete a workflow policy
+  deletePolicy(
+    id: Int!
+  ): DefaultResponse @auth(requires: ["manage:system"])
+}
+
+# -----------------------------------------------
+# TYPES
+# -----------------------------------------------
+
+type DetranWorkflowDraft {
+  id: Int!
+  pageId: Int
+  path: String!
+  locale: String!
+  title: String!
+  description: String
+  content: String!
+  contentType: String!
+  editorKey: String!
+  tags: [String]
+  state: String!
+  approvalMode: String!
+  currentLevel: Int!
+  authorId: Int!
+  authorName: String
+  authorEmail: String
+  baseHash: String
+  reviewDueDate: Date
+  createdAt: Date!
+  updatedAt: Date!
+  events: [DetranWorkflowEvent]
+  comments: [DetranWorkflowComment]
+}
+
+type DetranWorkflowEvent {
+  id: Int!
+  draftId: Int!
+  action: String!
+  fromState: String!
+  toState: String!
+  userId: Int!
+  userName: String
+  comment: String
+  createdAt: Date!
+}
+
+type DetranWorkflowComment {
+  id: Int!
+  draftId: Int!
+  userId: Int!
+  userName: String
+  lineNumber: Int
+  anchorText: String
+  body: String!
+  resolved: Boolean!
+  createdAt: Date!
+  updatedAt: Date!
+}
+
+type DetranWorkflowPolicy {
+  id: Int
+  pathPrefix: String!
+  approvalLevels: Int!
+  reviewIntervalDays: Int!
+  autoArchiveOnExpire: Boolean!
+}
+
+type DetranWorkflowDraftResponse {
+  responseResult: ResponseStatus
+  draft: DetranWorkflowDraft
+}
+
+type DetranWorkflowPublishResponse {
+  responseResult: ResponseStatus
+  draft: DetranWorkflowDraft
+  pageId: Int
+}
+
+type DetranWorkflowCommentResponse {
+  responseResult: ResponseStatus
+  comment: DetranWorkflowComment
+}
+
+type DetranWorkflowConfig {
+  enabled: Boolean!
+  teamsWebhookUrl: String
+}
+
+type DetranWorkflowConfigResponse {
+  responseResult: ResponseStatus
+  config: DetranWorkflowConfig
+}
+
+type DetranWorkflowPolicyResponse {
+  responseResult: ResponseStatus
+  policy: DetranWorkflowPolicy
+}

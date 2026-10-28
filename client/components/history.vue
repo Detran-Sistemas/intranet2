@@ -558,20 +558,89 @@ export default {
 </script>
 
 <style lang='scss'>
+@import '../themes/detran/scss/variables';
+
+// =============================================================================
+// DETRAN-MG — History Page
+// Overrides sobre a estrutura Vuetify existente. Template PUG não alterado.
+// =============================================================================
 
 .history {
-  &-promptmenu {
-    border-top: 5px solid mc('blue', '700');
+
+  // Toolbar primária no topo
+  .v-toolbar.primary {
+    background-color: $detran-700 !important;
+    background-image: linear-gradient(135deg, $detran-600 0%, $detran-800 100%) !important;
   }
 
+  // Barra de diff acima
+  .v-toolbar[color="primary"] {
+    background: $detran-700 !important;
+  }
+
+  // Menu de ações nos items da timeline
+  &-promptmenu {
+    border-top: 4px solid $detran-500 !important;
+    border-radius: 0 0 $radius-md $radius-md !important;
+    overflow: hidden;
+  }
+
+  // Cards da timeline
+  .v-card.radius-7 {
+    border-radius: $radius-md !important;
+    box-shadow: $shadow-soft !important;
+    overflow: hidden;
+  }
+
+  // Timeline — pontos coloridos
+  .v-timeline-item__dot--small .v-timeline-item__inner-dot {
+    background-color: $detran-500 !important;
+  }
+
+  // Chip "Live"
+  .v-chip {
+    border-radius: $radius-full !important;
+  }
+
+  // Botão "Return to Live Version"
+  .v-btn.blue.darken-1 {
+    background-color: rgba(255, 255, 255, 0.15) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    color: #ffffff !important;
+    transition: background-color 0.2s ease;
+
+    &:hover {
+      background-color: rgba(255, 255, 255, 0.25) !important;
+    }
+  }
+
+  // Diff2HTML container
   .d2h-file-wrapper {
-    border: 1px solid #EEE;
+    border: 1px solid $slate-200 !important;
     border-left: none;
+    border-radius: 0 $radius-md $radius-md 0;
+    overflow: hidden;
+    box-shadow: $shadow-soft;
   }
 
   .d2h-file-header {
     display: none;
   }
-}
 
+  .d2h-code-line {
+    font-family: 'Roboto Mono', 'Fira Code', monospace;
+    font-size: 0.8125rem;
+  }
+
+  // Botão "Load More"
+  .v-btn.primary.mt-4 {
+    background-color: $detran-500 !important;
+    box-shadow: 0 2px 8px rgba($detran-500, 0.30) !important;
+    border-radius: $radius-md !important;
+
+    &:hover {
+      background-color: $detran-600 !important;
+    }
+  }
+}
 </style>

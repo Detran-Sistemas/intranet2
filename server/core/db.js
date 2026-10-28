@@ -204,13 +204,23 @@ module.exports = {
       // -> Migrate DB Schemas from beta
       async migrateFromBeta () {
         return migrateFromBeta.migrate(self.knex)
+      },
+      // -> Migrate Detran Workflow Schemas
+      async syncDetranWorkflow () {
+        try {
+          const detranMigrator = require('../detran/workflow/migrator')
+          return await detranMigrator.up(self.knex)
+        } catch (err) {
+          WIKI.logger.warn(`Detran Workflow Migration skipped or failed: ${err.message}`)
+        }
       }
     }
 
     let initTasksQueue = (WIKI.IS_MASTER) ? [
       initTasks.connect,
       initTasks.migrateFromBeta,
-      initTasks.syncSchemas
+      initTasks.syncSchemas,
+      initTasks.syncDetranWorkflow
     ] : [
       () => { return Promise.resolve() }
     ]

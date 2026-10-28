@@ -3,3 +3,80 @@
     cursor: pointer;
   }
 }
+
+// =============================================================================
+// DETRAN-MG DESIGN SYSTEM — Vuetify Data Table Overrides
+// =============================================================================
+
+.v-application {
+
+  .v-data-table {
+    border-radius: $radius-xl !important;
+    box-shadow: $shadow-soft !important;
+    font-family: $font-family-base;
+    overflow: hidden;
+
+    // Cabeçalho das colunas
+    thead > tr > th {
+      background-color: $detran-50 !important;
+      color: $detran-700 !important;
+      font-weight: 700 !important;
+      font-size: 0.75rem !important;
+      text-transform: uppercase !important;
+      letter-spacing: 0.07em !important;
+      border-bottom: 2px solid $detran-100 !important;
+      padding: 14px 16px !important;
+      white-space: nowrap;
+
+      &.sortable:hover {
+        background-color: $detran-100 !important;
+        color: $detran-800 !important;
+      }
+
+      // Ícone de ordenação
+      .v-data-table-header__icon {
+        color: $detran-400 !important;
+      }
+
+      &.active .v-data-table-header__icon {
+        color: $detran-600 !important;
+      }
+    }
+
+    // Linhas do corpo
+    tbody > tr {
+      transition: background-color 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+
+      td {
+        font-size: 0.875rem !important;
+        color: $slate-700 !important;
+        border-bottom: 1px solid $slate-100 !important;
+        padding: 12px 16px !important;
+      }
+
+      &:hover td {
+        background-color: rgba($detran-500, 0.04) !important;
+      }
+
+      &:last-child td {
+        border-bottom: none !important;
+      }
+    }
+
+    // Footer de paginação
+    .v-data-footer {
+      border-top: 1px solid $slate-100 !important;
+      color: $slate-500 !important;
+      font-size: 0.8125rem !important;
+
+      .v-data-footer__pagination {
+        color: $slate-700 !important;
+        font-weight: 500;
+      }
+
+      .v-btn {
+        color: $detran-600 !important;
+      }
+    }
+  }
+}

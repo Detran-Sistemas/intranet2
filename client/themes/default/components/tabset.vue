@@ -104,12 +104,17 @@ export default {
 </script>
 
 <style lang="scss">
+@import '../../detran/scss/variables';
+
 .tabset {
-  border-radius: 5px;
+  border-radius: $radius-lg;
   margin-top: 10px;
+  border: 1px solid $slate-200;
+  overflow: hidden;
 
   @at-root .theme--dark & {
     background-color: #292929;
+    border-color: #444;
   }
 
   > .tabset-tabs {
@@ -132,7 +137,7 @@ export default {
       padding: 16px;
       margin-top: 0;
       cursor: pointer;
-      transition: color 1s ease;
+      transition: color 0.3s ease;
       border-right: 1px solid #FFF;
       font-size: 14px;
       font-weight: 500;
@@ -148,12 +153,12 @@ export default {
         margin-bottom: 0;
         padding-bottom: 17px;
         padding-top: 13px;
-        color: mc('blue', '700');
-        border-top: 3px solid mc('blue', '700');
+        color: $detran-700;
+        border-top: 3px solid $detran-600;
 
         @at-root .theme--dark & {
           background-color: #292929;
-          color: mc('blue', '300');
+          color: $detran-300;
         }
       }
 

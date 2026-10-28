@@ -173,6 +173,7 @@ Vue.component('Unauthorized', () => import(/* webpackChunkName: "unauthorized" *
 Vue.component('VCardChin', () => import(/* webpackPrefetch: true, webpackChunkName: "ui-extra" */ './components/common/v-card-chin.vue'))
 Vue.component('VCardInfo', () => import(/* webpackPrefetch: true, webpackChunkName: "ui-extra" */ './components/common/v-card-info.vue'))
 Vue.component('Welcome', () => import(/* webpackChunkName: "welcome" */ './components/welcome.vue'))
+Vue.component('Workflow', () => import(/* webpackChunkName: "workflow" */ './components/workflow.vue'))
 
 Vue.component('NavFooter', () => import(/* webpackChunkName: "theme" */ './themes/' + siteConfig.theme + '/components/nav-footer.vue'))
 Vue.component('Page', () => import(/* webpackChunkName: "theme" */ './themes/' + siteConfig.theme + '/components/page.vue'))
@@ -211,7 +212,21 @@ let bootstrap = () => {
     vuetify: new Vuetify({
       rtl: siteConfig.rtl,
       theme: {
-        dark: darkModeEnabled
+        dark: darkModeEnabled,
+        themes: {
+          light: {
+            primary: '#33a65b',
+            secondary: '#206e3b',
+            accent: '#5fc381',
+            success: '#288b4a'
+          },
+          dark: {
+            primary: '#33a65b',
+            secondary: '#206e3b',
+            accent: '#5fc381',
+            success: '#288b4a'
+          }
+        }
       }
     }),
     mounted () {

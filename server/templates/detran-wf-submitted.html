@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Novo Documento Submetido para Revisão - Detran-MG</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f4f6f8;
+      color: #263238;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrapper {
+      width: 100%;
+      background-color: #f4f6f8;
+      padding: 30px 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background-color: #ffffff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+      border: 1px solid #e2e8f0;
+    }
+    .header {
+      background-color: #288b4a;
+      padding: 24px 30px;
+      text-align: left;
+    }
+    .header-title {
+      color: #ffffff;
+      margin: 0;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .header-sub {
+      color: #e8f5e9;
+      font-size: 12px;
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .content {
+      padding: 30px;
+    }
+    .greeting {
+      font-size: 16px;
+      font-weight: 600;
+      color: #1a472a;
+      margin-bottom: 16px;
+    }
+    .card-info {
+      background-color: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-left: 4px solid #288b4a;
+      border-radius: 4px;
+      padding: 16px;
+      margin: 20px 0;
+    }
+    .info-row {
+      margin-bottom: 8px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .info-label {
+      font-weight: 600;
+      color: #475569;
+    }
+    .info-value {
+      color: #1e293b;
+    }
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      border-radius: 3px;
+      background-color: #dbeafe;
+      color: #1e40af;
+    }
+    .message-box {
+      background-color: #fffbeb;
+      border: 1px solid #fef3c7;
+      border-left: 4px solid #f59e0b;
+      padding: 12px 16px;
+      border-radius: 4px;
+      font-size: 13px;
+      color: #78350f;
+      margin-top: 16px;
+      font-style: italic;
+    }
+    .btn-container {
+      text-align: center;
+      margin: 30px 0 10px;
+    }
+    .btn {
+      display: inline-block;
+      background-color: #288b4a;
+      color: #ffffff !important;
+      padding: 12px 28px;
+      font-size: 14px;
+      font-weight: 700;
+      text-decoration: none;
+      border-radius: 6px;
+      letter-spacing: 0.5px;
+    }
+    .footer {
+      background-color: #f8fafc;
+      border-top: 1px solid #e2e8f0;
+      padding: 20px 30px;
+      text-align: center;
+      font-size: 12px;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="container">
+      <div class="header">
+        <div class="header-sub">Intranet Detran-MG • Governança & Workflow</div>
+        <h1 class="header-title">Documento Pendente de Revisão</h1>
+      </div>
+      <div class="content">
+        <div class="greeting">Olá, Prezado(a) Revisor(a),</div>
+        <p>Um novo documento foi submetido para sua apreciação técnica e revisão no fluxo de governança da intranet:</p>
+
+        <div class="card-info">
+          <div class="info-row">
+            <span class="info-label">Título:</span>
+            <span class="info-value"><strong><%= draft.title %></strong></span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Caminho:</span>
+            <span class="info-value">/<%= draft.locale %>/<%= draft.path %></span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Autor(a):</span>
+            <span class="info-value"><%= author.name %> &lt;<%= author.email %>&gt;</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Nível de Aprovação:</span>
+            <span class="badge"><%= draft.approvalMode === '2_levels' ? 'Fluxo em 2 Níveis' : 'Nível Único' %></span>
+          </div>
+        </div>
+
+        <% if (comment) { %>
+        <div class="message-box">
+          <strong>Mensagem do Autor:</strong> "<%= comment %>"
+        </div>
+        <% } %>
+
+        <div class="btn-container">
+          <a href="<%= reviewUrl %>" class="btn" target="_blank">Acessar Tela de Revisão com Diff</a>
+        </div>
+      </div>
+      <div class="footer">
+        Este é um e-mail automático gerado pelo Sistema de Workflow Institucional do Detran-MG.<br>
+        <%= copyright %>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
