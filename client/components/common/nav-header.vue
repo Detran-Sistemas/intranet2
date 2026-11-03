@@ -179,28 +179,68 @@
           //- DETRAN WORKFLOW NOTIFIER (Central de Tarefas)
 
           template(v-if='isAuthenticated')
-            v-tooltip(bottom)
-              template(v-slot:activator='{ on }')
-                v-btn(
-                  icon
-                  tile
-                  height='64'
-                  v-on='on'
-                  href='/w'
-                  :aria-label='workflowTooltip'
-                  class='detran-nav-workflow-btn'
-                )
-                  v-badge(
-                    v-if='workflowPendingCount > 0'
-                    color='amber darken-3'
-                    :content='workflowPendingCount'
-                    overlap
-                    offset-x='10'
-                    offset-y='10'
-                  )
-                    v-icon(color='grey lighten-1') mdi-bell-outline
-                  v-icon(v-else, color='grey') mdi-clipboard-flow-outline
-              span {{ workflowTooltip }}
+            v-menu(offset-y, bottom, transition='slide-y-transition', min-width='380', max-width='420', left, :close-on-content-click='false')
+              template(v-slot:activator='{ on: menu, attrs }')
+                v-tooltip(bottom)
+                  template(v-slot:activator='{ on: tooltip }')
+                    v-btn(
+                      icon
+                      tile
+                      height='64'
+                      v-bind='attrs'
+                      v-on='{ ...menu, ...tooltip }'
+                      :aria-label='workflowTooltip'
+                      class='detran-nav-workflow-btn'
+                    )
+                      v-badge(
+                        v-if='workflowPendingCount > 0'
+                        color='#e11d48'
+                        :content='workflowPendingCount'
+                        overlap
+                        offset-x='10'
+                        offset-y='10'
+                      )
+                        v-icon(color='#fcd34d') mdi-bell-ring
+                      v-icon(v-else, color='grey lighten-1') mdi-bell-outline
+                  span {{ workflowTooltip }}
+              v-card.rounded-xl.overflow-hidden.elevation-12
+                .pa-4.white--text.d-flex.align-center.justify-space-between(style='background: linear-gradient(135deg, #185a30 0%, #103d20 100%);')
+                  .d-flex.align-center
+                    v-icon.mr-2(color='#fcd34d', size='20') mdi-sparkles
+                    div
+                      .text-subtitle-2.font-weight-bold Novidades da Intranet
+                      .caption(style='color: #a7f3d0;') Atualizações e tramitações de validação
+                  v-btn(x-small, text, dark, class='caption text-none', @click='markAllNotificationsRead') Marcar lidas
+                v-tabs(v-model='notifTab', grow, height='36', color='#1b6535')
+                  v-tab.caption Todas ({{ workflowPendingCount }})
+                  v-tab.caption Validações
+                  v-tab.caption Publicações
+                v-card-text.pa-0(style='max-height: 320px; overflow-y: auto;')
+                  template(v-if='workflowPendingTasks.length > 0')
+                    v-list.py-0.dense
+                      v-list-item(
+                        v-for='task in filteredNotificationTasks'
+                        :key='task.id'
+                        :href='"/w/review/" + task.id'
+                        class='py-2 px-3 border-b'
+                      )
+                        v-list-item-avatar.mr-3(size='32', color='#eff6ff')
+                          v-icon(size='18', color='#2563eb') mdi-shield-check
+                        v-list-item-content
+                          .d-flex.align-center.justify-space-between
+                            span.text-caption.font-weight-bold.blue--text.text--darken-3.text-uppercase Validação Pendente
+                            span.text-caption.grey--text Pendente
+                          .caption.font-weight-bold.text-truncate {{ task.title || task.path }}
+                          .text-caption.grey--text.text--darken-1.text-truncate Autor: {{ task.authorName || "Servidor" }}
+                  template(v-else)
+                    .pa-6.text-center.grey--text
+                      v-icon.mb-2(size='36', color='grey lighten-2') mdi-bell-check-outline
+                      .caption Nenhuma validação pendente no momento
+                v-divider
+                v-card-actions.pa-2.grey.lighten-4.d-flex.justify-center
+                  v-btn(text, small, color='#1b6535', href='/w', class='caption font-weight-bold text-none')
+                    span Ver painel completo de governança
+                    v-icon(x-small, right) mdi-arrow-right
             v-divider(vertical)
 
           //- ACCOUNT
@@ -270,6 +310,7 @@ import _ from 'lodash'
 import gql from 'graphql-tag'
 
 import movePageMutation from 'gql/common/common-pages-mutation-move.gql'
+import { filterNotificationTasks } from '../../themes/default/components/transparent-editor/utils/editor-controller'
 
 /* global siteConfig, siteLangs */
 
@@ -304,6 +345,8 @@ export default {
       locales: siteLangs,
       isDevMode: false,
       workflowPendingCount: 0,
+      workflowPendingTasks: [],
+      notifTab: 0,
       duplicateOpts: {
         locale: 'en',
         path: 'new-page',
@@ -371,7 +414,13 @@ export default {
       if (this.workflowPendingCount > 0) {
         return `Central de Tarefas (${this.workflowPendingCount} pendência${this.workflowPendingCount > 1 ? 's' : ''})`
       }
-      return 'Central de Governança & Workflow'
+      return 'Central de Novidades & Validações'
+    },
+    filteredNotificationTasks () {
+      if (this.notifTab === 2) {
+        return []
+      }
+      return filterNotificationTasks(this.workflowPendingTasks, this.notifTab)
     }
   },
   created () {
@@ -428,6 +477,7 @@ export default {
         }, 200)
       }
     },
+    /* eslint-disable vue/custom-event-name-casing */
     searchEnter () {
       this.$root.$emit('searchEnter', true)
     },
@@ -444,8 +494,13 @@ export default {
       window.location.assign(`/${this.locale}/${this.path}`)
     },
     pageEdit () {
+      if (this.mode === 'view') {
+        this.$root.$emit('triggerTransparentEdit')
+        return
+      }
       window.location.assign(`/e/${this.locale}/${this.path}`)
     },
+    /* eslint-enable vue/custom-event-name-casing */
     pageHistory () {
       window.location.assign(`/h/${this.locale}/${this.path}`)
     },
@@ -520,6 +575,9 @@ export default {
         window.location.assign('/')
       }
     },
+    markAllNotificationsRead () {
+      this.workflowPendingCount = 0
+    },
     async fetchWorkflowPendingCount () {
       try {
         const result = await this.$apollo.query({
@@ -528,14 +586,19 @@ export default {
               workflow {
                 pendingTasks {
                   id
+                  title
+                  path
+                  authorName
+                  createdAt
                 }
               }
             }
           `,
           fetchPolicy: 'network-only'
         })
-        const tasks = result?.data?.workflow?.pendingTasks || []
+        const tasks = _.get(result, 'data.workflow.pendingTasks', [])
         this.workflowPendingCount = tasks.length
+        this.workflowPendingTasks = tasks
       } catch {
         // Silently continue if query fails
       }

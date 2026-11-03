@@ -2,6 +2,9 @@ import { make } from 'vuex-pathify'
 import gql from 'graphql-tag'
 import _ from 'lodash'
 
+/* global WIKI */
+/* eslint-disable vue/custom-event-name-casing */
+
 export const QUERY_DRAFT_AND_POLICY = gql`
   query ($path: String!, $locale: String) {
     workflow {

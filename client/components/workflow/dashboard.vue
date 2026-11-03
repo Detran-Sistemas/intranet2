@@ -27,7 +27,7 @@
               depressed
               color='primary'
               class='white--text detran-btn-primary'
-              to='/e'
+              href='/'
             )
               v-icon(left, small) mdi-plus
               | Novo Documento
@@ -194,7 +194,7 @@
                           depressed
                           color='primary'
                           class='white--text detran-btn-primary'
-                          :to='`/w/review/${draft.id}`'
+                          :to='`/review/${draft.id}`'
                         )
                           v-icon(left, small) mdi-file-find-outline
                           | Analisar e Revisar
@@ -211,7 +211,7 @@
                   .body-2.grey--text.mt-1
                     | Você ainda não possui documentos em tramitação. Comece criando um novo rascunho institucional!
                   .mt-4
-                    v-btn(depressed, color='primary', to='/e', class='white--text detran-btn-primary')
+                    v-btn(depressed, color='primary', href='/', class='white--text detran-btn-primary')
                       v-icon(left, small) mdi-plus
                       | Iniciar Novo Documento
 
@@ -284,7 +284,7 @@
                           v-if='draft.state !== "draft"'
                           outlined
                           color='grey darken-2'
-                          :to='`/w/review/${draft.id}`'
+                          :to='`/review/${draft.id}`'
                         )
                           v-icon(left, small) mdi-eye-outline
                           | Acompanhar
@@ -346,7 +346,7 @@
                           depressed
                           color='primary'
                           class='white--text detran-btn-primary'
-                          :to='`/w/review/${norm.id}`'
+                          :to='`/review/${norm.id}`'
                         )
                           v-icon(left, small) mdi-file-find-outline
                           | Revisar
@@ -395,11 +395,12 @@
 
 <script>
 import gql from 'graphql-tag'
-import {
+import { getUrgencyLevel, calculateDashboardStats } from '../../store/detran-workflow-dashboard'
+/*
   getUrgencyLevel,
-  getDraftActionRoute,
   calculateDashboardStats
-} from '../../store/detran-workflow-dashboard'
+  calculateDashboardStats
+*/
 
 export default {
   name: 'WorkflowDashboard',
@@ -557,11 +558,13 @@ export default {
           this.expiringNorms = data.expiring || []
 
           // Notifica o nav-header para atualizar badge do sininho
+          /* eslint-disable-next-line vue/custom-event-name-casing */
           this.$root.$emit('workflowRefreshTasks')
         }
       } catch (err) {
-        this.$store.commit('pushNotification', {
-          type: 'error',
+        this.$store.commit('showNotification', {
+          style: 'red',
+          icon: 'alert',
           message: err.message || 'Erro ao carregar dados da Central de Tarefas.'
         })
       } finally {
@@ -606,21 +609,24 @@ export default {
 
         const res = result?.data?.workflow?.revalidate
         if (res?.responseResult?.succeeded) {
-          this.$store.commit('pushNotification', {
-            type: 'success',
+          this.$store.commit('showNotification', {
+            style: 'success',
+            icon: 'check',
             message: 'Vigência do normativo renovada por mais 12 meses com sucesso!'
           })
           this.revalidateDialog.visible = false
           await this.loadDashboardData()
         } else {
-          this.$store.commit('pushNotification', {
-            type: 'error',
+          this.$store.commit('showNotification', {
+            style: 'red',
+            icon: 'alert',
             message: res?.responseResult?.message || 'Falha ao revalidar normativo.'
           })
         }
       } catch (err) {
-        this.$store.commit('pushNotification', {
-          type: 'error',
+        this.$store.commit('showNotification', {
+          style: 'red',
+          icon: 'alert',
           message: err.message || 'Erro inesperado na revalidação.'
         })
       } finally {
@@ -633,12 +639,16 @@ export default {
 
 <style lang='scss' scoped>
 .detran-workflow-dashboard {
-  background-color: #f7f9fa;
+  background-color: transparent;
+  width: 100%;
   min-height: 100vh;
 }
 
 .detran-dashboard-hero {
-  border-bottom: 1px solid #e2e8f0;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+  margin-bottom: 12px;
 }
 
 .detran-green-text {
@@ -655,7 +665,9 @@ export default {
 }
 
 .detran-kpi-card {
-  border-radius: 8px;
+  border-radius: 16px !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05) !important;
   background-color: #ffffff;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -675,12 +687,15 @@ export default {
 }
 
 .detran-main-card {
-  border-radius: 8px;
+  border-radius: 16px !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05) !important;
   background-color: #ffffff;
 }
 
 .detran-task-item-card {
-  border-radius: 6px;
+  border-radius: 12px !important;
+  border-color: #e2e8f0 !important;
   background-color: #ffffff;
   transition: all 0.2s ease;
 

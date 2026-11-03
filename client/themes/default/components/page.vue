@@ -66,14 +66,46 @@
               v-if='editShortcutsObj.editMenuBar'
               :class='tocPosition === `right` ? `is-right` : ``'
               )
-              v-btn(
-                v-if='editShortcutsObj.editMenuBtn'
-                @click='pageEdit'
-                depressed
-                small
+              //- Pílula de status da Edição Transparente
+              template(v-if='isTransparentEditActive')
+                .detran-sync-pill.d-flex.align-center.mr-3.px-3.py-1.rounded-lg.white.elevation-1
+                  v-progress-circular.mr-2(indeterminate, size='12', width='2', color='#1b6535', v-if='isSavingDraft')
+                  span.rounded-circle.mr-2(
+                    v-else
+                    :style='{ width: "8px", height: "8px", backgroundColor: "#10b981", display: "inline-block" }'
+                  )
+                  span.caption.font-weight-medium.grey--text.text--darken-2 {{ isSavingDraft ? "Salvando em tempo real..." : (lastSavedTime ? "Rascunho salvo (" + lastSavedTime + ")" : "Edição contínua ativa") }}
+                  v-btn.ml-3(
+                    x-small
+                    depressed
+                    color='#d97706'
+                    dark
+                    v-if='transparentChangeCount > 0'
+                    @click='dialogValidation = true'
+                  )
+                    v-icon(x-small, left) mdi-send-check
+                    span Submeter Validação ({{ transparentChangeCount }})
+                v-btn(
+                  @click='toggleTransparentEdit'
+                  depressed
+                  small
+                  color='grey lighten-3'
+                  class='text-none'
                 )
-                v-icon.mr-2(small) mdi-pencil
-                span.text-none {{$t(`common:actions.edit`)}}
+                  v-icon.mr-1(small) mdi-eye-outline
+                  span Modo Leitura
+              template(v-else)
+                v-btn(
+                  v-if='editShortcutsObj.editMenuBtn && hasWritePagesPermission'
+                  @click='toggleTransparentEdit'
+                  depressed
+                  small
+                  color='#1b6535'
+                  dark
+                  class='text-none'
+                )
+                  v-icon.mr-2(small) mdi-pencil
+                  span.text-none {{$t(`common:actions.edit`)}}
               v-btn(
                 v-if='editShortcutsObj.editMenuExternalBtn'
                 :href='editMenuExternalUrl'
@@ -327,8 +359,23 @@
               span {{$t('common:page.editPage')}}
             v-alert.mb-5(v-if='!isPublished', color='red', outlined, icon='mdi-minus-circle', dense)
               .caption {{$t('common:page.unpublishedWarning')}}
-            .contents(ref='container')
+            .contents(ref='container', v-show='!isTransparentEditActive')
               slot(name='contents')
+            transparent-editor(
+              v-if='isTransparentEditActive'
+              :initial-markdown='pageRawMarkdown'
+              :page-id='pageId'
+              :page-path='path'
+              :page-title='title'
+              @change='onTransparentEditorChange'
+            )
+            validation-modal(
+              v-model='dialogValidation'
+              :change-count='transparentChangeCount'
+              :page-title='title'
+              :loading='isSubmittingValidation'
+              @submit='onSubmitValidation'
+            )
             .comments-container#discussion(v-if='commentsEnabled && commentsPerms.read && !printView')
               .comments-header
                 v-icon.mr-2(dark) mdi-comment-text-outline
@@ -368,6 +415,9 @@ import _ from 'lodash'
 import ClipboardJS from 'clipboard'
 import Vue from 'vue'
 import gql from 'graphql-tag'
+import TransparentEditor from './transparent-editor/transparent-editor.vue'
+import ValidationModal from './transparent-editor/validation-modal.vue'
+import { MUTATION_SAVE_DRAFT, MUTATION_WORKFLOW_SUBMIT, QUERY_DRAFT_AND_POLICY } from '../../../store/detran-workflow'
 
 /* global siteLangs */
 
@@ -411,7 +461,9 @@ Prism.plugins.toolbar.registerButton('copy-to-clipboard', (env) => {
 export default {
   components: {
     NavSidebar,
-    StatusIndicator
+    StatusIndicator,
+    TransparentEditor,
+    ValidationModal
   },
   props: {
     pageId: {
@@ -507,6 +559,15 @@ export default {
       navExpanded: false,
       upBtnShown: false,
       pageEditFab: false,
+      isTransparentEditActive: false,
+      pageRawMarkdown: '',
+      transparentToc: [],
+      transparentChangeCount: 0,
+      dialogValidation: false,
+      isSavingDraft: false,
+      isSubmittingValidation: false,
+      activeDraftId: null,
+      lastSavedTime: '',
       scrollOpts: {
         duration: 1500,
         offset: 0,
@@ -589,6 +650,9 @@ export default {
       return JSON.parse(Buffer.from(this.sidebar, 'base64').toString())
     },
     tocDecoded () {
+      if (this.isTransparentEditActive && this.transparentToc.length > 0) {
+        return this.transparentToc
+      }
       return JSON.parse(Buffer.from(this.toc, 'base64').toString())
     },
     tocPosition: get('site/tocPosition'),
@@ -676,7 +740,13 @@ export default {
         }
       })
 
+      this.$root.$on('triggerTransparentEdit', () => {
+        this.toggleTransparentEdit()
+      })
       this.verifyAncestors()
+      if (this.hasWritePagesPermission) {
+        this.loadPageSourceForTransparentEdit()
+      }
       window.boot.notify('page-ready')
     })
   },
@@ -734,7 +804,122 @@ export default {
     },
     /* eslint-disable vue/custom-event-name-casing */
     pageEdit () {
-      this.$root.$emit('pageEdit')
+      this.toggleTransparentEdit()
+    },
+    async toggleTransparentEdit () {
+      if (!this.hasWritePagesPermission) return
+      const shouldLoad = !this.isTransparentEditActive && !this.pageRawMarkdown
+
+      if (shouldLoad) {
+        await this.loadPageSourceForTransparentEdit()
+      }
+      if (this.hasWritePagesPermission) {
+        this.isTransparentEditActive = !this.isTransparentEditActive
+      }
+    },
+    async loadPageSourceForTransparentEdit () {
+      try {
+        const draftRes = await this.$apollo.query({
+          query: QUERY_DRAFT_AND_POLICY,
+          variables: {
+            path: this.path,
+            locale: this.locale
+          },
+          fetchPolicy: 'network-only'
+        })
+        const activeDraft = _.get(draftRes, 'data.workflow.draftByPath')
+        if (activeDraft && activeDraft.content) {
+          this.pageRawMarkdown = activeDraft.content
+          this.activeDraftId = activeDraft.id
+          return
+        }
+
+        const pageRes = await this.$apollo.query({
+          query: gql`
+            query ($id: Int!) {
+              pages {
+                single(id: $id) {
+                  content
+                }
+              }
+            }
+          `,
+          variables: {
+            id: this.pageId
+          },
+          fetchPolicy: 'network-only'
+        })
+        this.pageRawMarkdown = _.get(pageRes, 'data.pages.single.content', '')
+      } catch (err) {
+        console.error('Erro ao carregar conteúdo para edição transparente:', err)
+      }
+    },
+    async onTransparentEditorChange ({ markdown, blocks, toc }) {
+      this.transparentToc = toc
+      this.transparentChangeCount++
+      this.pageRawMarkdown = markdown
+      this.isSavingDraft = true
+
+      try {
+        const res = await this.$apollo.mutate({
+          mutation: MUTATION_SAVE_DRAFT,
+          variables: {
+            id: this.activeDraftId,
+            pageId: this.pageId,
+            path: this.path,
+            locale: this.locale,
+            title: this.title,
+            description: this.description,
+            content: markdown,
+            contentType: 'markdown',
+            editorKey: 'markdown',
+            tags: this.tags || []
+          }
+        })
+        const draft = _.get(res, 'data.workflow.saveDraft.draft')
+        if (draft && draft.id) {
+          this.activeDraftId = draft.id
+        }
+        this.lastSavedTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      } catch (err) {
+        console.error('Erro ao salvar rascunho transparente:', err)
+      } finally {
+        this.isSavingDraft = false
+      }
+    },
+    async onSubmitValidation ({ comment }) {
+      if (!this.activeDraftId) return
+      this.isSubmittingValidation = true
+      try {
+        const res = await this.$apollo.mutate({
+          mutation: MUTATION_WORKFLOW_SUBMIT,
+          variables: {
+            id: this.activeDraftId,
+            comment
+          }
+        })
+        const result = _.get(res, 'data.workflowSubmit.responseResult')
+        if (result && result.succeeded) {
+          this.dialogValidation = false
+          this.transparentChangeCount = 0
+          this.$root.$emit('workflowRefreshTasks')
+          this.$store.commit('showNotification', {
+            message: 'Alterações enviadas para o fluxo de validação! Acompanhe no ícone de Novidades.',
+            style: 'success',
+            icon: 'check'
+          })
+        } else {
+          this.$store.commit('showNotification', {
+            message: 'Erro ao enviar para validação: ' + ((result && result.message) || 'Erro desconhecido'),
+            style: 'error',
+            icon: 'alert'
+          })
+        }
+      } catch (err) {
+        alert('Erro na requisição de validação: ' + err.message)
+      } finally {
+        this.isSubmittingValidation = false
+      }
     },
     pageHistory () {
       this.$root.$emit('pageHistory')

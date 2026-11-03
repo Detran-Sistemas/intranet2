@@ -404,13 +404,26 @@ router.get(['/p', '/p/*'], (req, res, next) => {
 /**
  * Detran Workflow & Review
  */
-router.get(['/w', '/w/*'], (req, res, next) => {
+router.get(['/w', '/w/*'], async (req, res, next) => {
   if (!req.user || req.user.id < 1 || req.user.id === 2) {
     return res.status(403).render('unauthorized', { action: 'view' })
   }
 
   _.set(res.locals, 'pageMeta.title', 'Governança & Workflow')
-  res.render('workflow')
+  const wfLocale = _.get(WIKI, 'config.lang.code', 'pt-br')
+  let wfSidebar = []
+  try {
+    let sdi = 1
+    wfSidebar = (await WIKI.models.navigation.getTree({ cache: true, locale: wfLocale, groups: req.user.groups })).map(n => ({
+      i: `sdi-${sdi++}`,
+      k: n.kind,
+      l: n.label,
+      c: n.icon,
+      y: n.targetType,
+      t: n.target
+    }))
+  } catch (err) {}
+  res.render('workflow', { sidebar: wfSidebar, locale: wfLocale })
 })
 
 /**

@@ -1,0 +1,36 @@
+const fs = require('fs')
+const pug = require('pug')
+
+function unindent (str) {
+  const lines = str.replace(/^\r?\n/, '').split(/\r?\n/)
+  const firstNonEmpty = lines.find(l => l.trim().length > 0)
+  if (!firstNonEmpty) return str
+  const indentMatch = firstNonEmpty.match(/^(\s+)/)
+  if (!indentMatch) return lines.join('\n')
+  const indent = indentMatch[1]
+  return lines.map(l => l.startsWith(indent) ? l.slice(indent.length) : l).join('\n')
+}
+
+const files = [
+  'client/components/workflow.vue',
+  'client/components/workflow/review.vue',
+  'client/components/workflow/review-comments.vue',
+  'client/components/workflow/dashboard.vue'
+]
+
+for (const f of files) {
+  const content = fs.readFileSync(f, 'utf8')
+  const match = content.match(/<template\s+lang=['"]pug['"]>([\s\S]*?)<\/template>/)
+  if (!match) {
+    console.log(f, 'NO PUG TEMPLATE')
+    continue
+  }
+  try {
+    const unindented = unindent(match[1])
+    pug.compile(unindented)()
+    console.log(f, 'SUCCESS')
+  } catch (err) {
+    console.error(f, 'ERROR:', err.message)
+  }
+}
+

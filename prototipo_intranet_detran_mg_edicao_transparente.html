@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intranet Detran-MG | Edição Transparente Wiki.js</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        detran: {
+                            dark: '#144d29',
+                            DEFAULT: '#1b6535',
+                            light: '#248246',
+                            accent: '#2ea058',
+                            surface: '#f4f6f8'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f6f8;
+            overflow-x: hidden;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        /* Estilo de Edição Transparente (Notion-like) */
+        .notion-block {
+            position: relative;
+            transition: background-color 0.15s ease, box-shadow 0.15s ease;
+            border-radius: 0.5rem;
+        }
+        .notion-block:hover {
+            background-color: rgba(241, 245, 249, 0.7);
+        }
+        .notion-block:focus-within {
+            background-color: #ffffff;
+            box-shadow: 0 0 0 2px rgba(46, 160, 88, 0.25);
+        }
+        .block-handle {
+            opacity: 0;
+            transition: opacity 0.15s ease;
+            cursor: grab;
+        }
+        .notion-block:hover .block-handle,
+        .notion-block:focus-within .block-handle {
+            opacity: 1;
+        }
+
+        [contenteditable="true"] {
+            outline: none;
+        }
+        [contenteditable="true"]:empty:before {
+            content: attr(data-placeholder);
+            color: #94a3b8;
+            pointer-events: none;
+            display: block; /* For Firefox */
+        }
+
+        /* Animação suave do sino */
+        @keyframes bell-ring {
+            0%, 100% { transform: rotate(0); }
+            20%, 60% { transform: rotate(12deg); }
+            40%, 80% { transform: rotate(-12deg); }
+        }
+        .animate-bell:hover i {
+            animation: bell-ring 0.6s ease-in-out;
+        }
+    </style>
+</head>
+<body class="flex h-screen w-screen overflow-hidden text-slate-800 select-none md:select-auto">
+
+    <!-- BARRA LATERAL ESQUERDA (Sidebar Detran-MG) -->
+    <aside id="sidebar" class="w-64 bg-gradient-to-b from-[#185a30] to-[#103d20] text-white flex flex-col justify-between shrink-0 transition-all duration-300 relative z-20 shadow-xl">
+        <!-- Botão de Recolher Sidebar -->
+        <button onclick="toggleSidebar()" class="absolute -right-3 top-6 w-6 h-6 bg-[#2ea058] hover:bg-[#248246] text-white rounded-full flex items-center justify-center shadow-md transition-transform z-30" title="Recolher/Expandir Menu">
+            <i id="sidebar-toggle-icon" class="ph-bold ph-caret-left text-xs"></i>
+        </button>
+
+        <!-- Topo da Sidebar -->
+        <div class="p-5">
+            <!-- Logo Detran-MG -->
+            <div class="flex flex-col items-center mb-8 px-2">
+                <div class="flex items-center tracking-tighter font-extrabold text-2xl text-white">
+                    <span>Detran</span><span class="text-emerald-300 font-bold">MG</span>
+                </div>
+                <span class="text-[9px] text-emerald-100/70 tracking-widest uppercase text-center mt-0.5 leading-tight">
+                    Departamento Estadual de Trânsito de Minas Gerais
+                </span>
+            </div>
+
+            <!-- Navegação Principal -->
+            <div class="space-y-6 text-sm">
+                <div>
+                    <p class="text-[10px] font-bold tracking-wider uppercase text-emerald-200/60 px-3 mb-2">Principal</p>
+                    <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-white/15 font-medium text-white shadow-sm backdrop-blur-sm">
+                        <i class="ph-fill ph-house text-lg"></i>
+                        <span>Início</span>
+                    </a>
+                </div>
+
+                <div>
+                    <p class="text-[10px] font-bold tracking-wider uppercase text-emerald-200/60 px-3 mb-2">Acesso Rápido</p>
+                    
+                    <!-- Menu: Institucional -->
+                    <div class="space-y-1">
+                        <button onclick="toggleSubmenu('sub-inst')" class="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-white/10 transition-colors text-emerald-50">
+                            <div class="flex items-center gap-3">
+                                <i class="ph ph-bank text-lg"></i>
+                                <span class="font-medium">Institucional</span>
+                            </div>
+                            <i id="icon-sub-inst" class="ph ph-caret-down text-xs transition-transform rotate-180"></i>
+                        </button>
+                        <div id="sub-inst" class="pl-9 pr-2 py-1 space-y-1.5 text-xs text-emerald-100/80">
+                            <a href="#" class="block py-1 hover:text-white transition-colors">Hierarquia e Organograma</a>
+                            <a href="#" class="block py-1 hover:text-white transition-colors truncate">Solicitação de Acesso - I...</a>
+                        </div>
+                    </div>
+
+                    <!-- Menu: Tec. da Informação -->
+                    <div class="space-y-1 mt-1">
+                        <button onclick="toggleSubmenu('sub-ti')" class="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-white/10 transition-colors text-emerald-50">
+                            <div class="flex items-center gap-3">
+                                <i class="ph-fill ph-cloud text-lg"></i>
+                                <span class="font-medium">Tec. da Informação</span>
+                            </div>
+                            <i id="icon-sub-ti" class="ph ph-caret-down text-xs transition-transform rotate-180"></i>
+                        </button>
+                        <div id="sub-ti" class="pl-9 pr-2 py-1 space-y-1.5 text-xs text-emerald-100/80">
+                            <a href="#" class="block py-1 hover:text-white transition-colors">Portfólio</a>
+                            <a href="#" class="block py-1 hover:text-white transition-colors">Guias de Uso e Solicitação</a>
+                            <a href="#" class="block py-1 hover:text-white transition-colors">Boas Práticas de TI</a>
+                        </div>
+                    </div>
+
+                    <!-- Outros itens -->
+                    <a href="#" class="flex items-center gap-3 px-3 py-2 mt-1 rounded-lg hover:bg-white/10 transition-colors text-emerald-50">
+                        <i class="ph ph-person-arms-spread text-lg"></i>
+                        <span class="font-medium">Recursos Humanos</span>
+                    </a>
+                    <a href="#" class="flex items-center gap-3 px-3 py-2 mt-1 rounded-lg hover:bg-white/10 transition-colors text-emerald-50">
+                        <i class="ph-fill ph-seal-check text-lg"></i>
+                        <span class="font-medium">Qualidade</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rodapé da Sidebar (Perfil do Usuário) -->
+        <div class="p-4 border-t border-white/10 bg-black/10 flex items-center justify-between">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <div class="w-9 h-9 rounded-full bg-emerald-100 text-detran-dark flex items-center justify-center font-bold shrink-0 shadow-inner">
+                    <i class="ph-fill ph-user text-xl"></i>
+                </div>
+                <div class="min-w-0">
+                    <p class="text-xs font-semibold text-white truncate">Cézar Augusto de ...</p>
+                    <p class="text-[10px] text-emerald-200/70 truncate">cezar.azevedo@detra...</p>
+                </div>
+            </div>
+            <button class="text-emerald-200/70 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition-colors" title="Configurações da Conta">
+                <i class="ph-fill ph-gear text-base"></i>
+            </button>
+        </div>
+    </aside>
+
+    <!-- ÁREA PRINCIPAL -->
+    <div class="flex-1 flex flex-col h-full overflow-hidden relative bg-[#f4f6f8] rounded-l-3xl -ml-3 z-20 shadow-2xl">
+        
+        <!-- HEADER SUPERIOR -->
+        <header class="h-20 px-8 flex items-center justify-between shrink-0 z-30">
+            <!-- Barra de Pesquisa -->
+            <div class="relative w-full max-w-xl">
+                <i class="ph ph-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-lg"></i>
+                <input type="text" placeholder="Pesquisar procedimentos, manuais, sistemas..." 
+                    class="w-full pl-11 pr-16 py-2.5 bg-white rounded-2xl text-sm text-slate-700 placeholder-slate-400 shadow-sm border border-slate-200/70 focus:outline-none focus:ring-2 focus:ring-detran-accent/30 focus:border-detran-accent transition-all">
+                <kbd class="hidden sm:inline-block absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 text-[10px] font-semibold text-slate-400 bg-slate-100 border border-slate-200 rounded-md">Ctrl K</kbd>
+            </div>
+
+            <!-- Ações do Topo: Status de Edição + Notificações (Novidades) + Nova Página -->
+            <div class="flex items-center gap-3">
+                
+                <!-- Indicador Transparente de Edição & Validação (Substitui o antigo botão "Editar Página") -->
+                <div id="sync-status-pill" class="flex items-center gap-2.5 bg-white/90 backdrop-blur px-3.5 py-2 rounded-xl border border-slate-200/80 shadow-sm transition-all">
+                    <span id="status-dot" class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span id="status-text" class="text-xs font-medium text-slate-600">Edição contínua ativa</span>
+                    
+                    <!-- Botão de Enviar para Validação (Aparece dinamicamente ao editar ou fica acessível) -->
+                    <button id="btn-validate" onclick="openValidationModal()" class="hidden ml-2 px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-lg shadow-sm transition-all flex items-center gap-1.5">
+                        <i class="ph-bold ph-paper-plane-tilt"></i>
+                        <span>Submeter Validação</span>
+                        <span id="change-counter" class="bg-amber-700/60 px-1.5 py-0.2 rounded text-[10px]">1</span>
+                    </button>
+                </div>
+
+                <!-- BOTÃO DE NOTIFICAÇÕES / NOVIDADES (Requisito Principal) -->
+                <div class="relative">
+                    <button id="btn-notifications" onclick="toggleNotifications()" class="animate-bell relative p-2.5 bg-white hover:bg-slate-50 text-slate-700 rounded-xl border border-slate-200/80 shadow-sm transition-all flex items-center gap-2 group" title="Central de Novidades e Validações">
+                        <i class="ph-fill ph-bell-ringing text-xl text-detran"></i>
+                        <span class="hidden xl:inline text-xs font-semibold text-slate-700">Novidades</span>
+                        <!-- Badge de contagem -->
+                        <span id="notif-badge" class=" -top-1.5 -right-1.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white shadow-sm ring-2 ring-white">
+                            3
+                        </span>
+                    </button>
+
+                    <!-- DROPDOWN DE NOVIDADES & VALIDAÇÕES -->
+                    <div id="notif-dropdown" class="hidden absolute right-0 mt-3 w-96 bg-white rounded-2xl shadow-2xl border border-slate-200/90 overflow-hidden z-50 origin-top-right transition-all">
+                        <!-- Cabeçalho do Dropdown -->
+                        <div class="p-4 bg-gradient-to-r from-detran-dark to-detran text-white flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <i class="ph-fill ph-sparkle text-amber-300 text-lg"></i>
+                                <div>
+                                    <h3 class="text-sm font-bold leading-none">Novidades da Intranet</h3>
+                                    <p class="text-[11px] text-emerald-100/80 mt-1">Atualizações de manuais e suas validações</p>
+                                </div>
+                            </div>
+                            <button onclick="markAllRead()" class="text-[11px] bg-white/15 hover:bg-white/25 px-2.5 py-1 rounded-lg font-medium transition-colors">
+                                Marcar lidas
+                            </button>
+                        </div>
+
+                        <!-- Abas de Filtro Rápido -->
+                        <div class="flex border-b border-slate-100 bg-slate-50/70 px-3 pt-2 gap-2 text-xs font-medium">
+                            <button onclick="filterNotifs('all')" id="tab-all" class="pb-2 px-2 border-b-2 border-detran text-detran font-semibold">Todas (3)</button>
+                            <button onclick="filterNotifs('news')" id="tab-news" class="pb-2 px-2 border-b-2 border-transparent text-slate-500 hover:text-slate-700">Publicações</button>
+                            <button onclick="filterNotifs('validation')" id="tab-validation" class="pb-2 px-2 border-b-2 border-transparent text-slate-500 hover:text-slate-700">Validações</button>
+                        </div>
+
+                        <!-- Lista de Itens -->
+                        <div id="notif-list" class="max-h-96 overflow-y-auto divide-y divide-slate-100">
+                            <!-- Item 1: Novidade de Sistema (Edição Transparente) -->
+                            <div data-type="news" class="notif-item p-4 hover:bg-slate-50 transition-colors flex gap-3.5 bg-emerald-50/40 cursor-pointer" onclick="highlightFeature()">
+                                <div class="w-9 h-9 rounded-xl bg-emerald-100 text-detran flex items-center justify-center shrink-0 mt-0.5">
+                                    <i class="ph-fill ph-magic-wand text-lg"></i>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-detran uppercase">Novo Recurso</span>
+                                        <span class="text-[10px] text-slate-400">Agora mesmo</span>
+                                    </div>
+                                    <p class="text-xs font-semibold text-slate-800 mt-1">Edição em Tempo Real Ativada!</p>
+                                    <p class="text-xs text-slate-600 mt-0.5 leading-relaxed">Agora você pode clicar diretamente em qualquer parágrafo para editar como no Notion, sem sair da página.</p>
+                                </div>
+                                <span class="unread-dot w-2 h-2 rounded-full bg-detran self-center shrink-0"></span>
+                            </div>
+
+                            <!-- Item 2: Fluxo de Validação Aprovado -->
+                            <div data-type="validation" class="notif-item p-4 hover:bg-slate-50 transition-colors flex gap-3.5 bg-emerald-50/40 cursor-pointer">
+                                <div class="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 mt-0.5">
+                                    <i class="ph-fill ph-seal-check text-lg"></i>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 uppercase">Validação Concluída</span>
+                                        <span class="text-[10px] text-slate-400">Há 2 horas</span>
+                                    </div>
+                                    <p class="text-xs font-semibold text-slate-800 mt-1">Sua edição em "Solicitação de Acesso" foi validada</p>
+                                    <p class="text-xs text-slate-600 mt-0.5 leading-relaxed">Aprovado por <strong>Danilo Luiz (TI)</strong> e já publicado oficialmente para os servidores.</p>
+                                </div>
+                                <span class="unread-dot w-2 h-2 rounded-full bg-detran self-center shrink-0"></span>
+                            </div>
+
+                            <!-- Item 3: Novo Manual Publicado -->
+                            <div data-type="news" class="notif-item p-4 hover:bg-slate-50 transition-colors flex gap-3.5 bg-emerald-50/40 cursor-pointer">
+                                <div class="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
+                                    <i class="ph-fill ph-book-open-text text-lg"></i>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 uppercase">Normativo Atualizado</span>
+                                        <span class="text-[10px] text-slate-400">Ontem, 16:40</span>
+                                    </div>
+                                    <p class="text-xs font-semibold text-slate-800 mt-1">Portaria nº 1.402/2026 - Vistoria Eletrônica</p>
+                                    <p class="text-xs text-slate-600 mt-0.5 leading-relaxed">A Coordenação de Qualidade atualizou os procedimentos operacionais padrão.</p>
+                                </div>
+                                <span class="unread-dot w-2 h-2 rounded-full bg-detran self-center shrink-0"></span>
+                            </div>
+                        </div>
+
+                        <!-- Rodapé do Dropdown -->
+                        <div class="p-3 bg-slate-50 border-t border-slate-100 text-center">
+                            <button onclick="openChangelogModal()" class="text-xs font-semibold text-detran hover:text-detran-dark flex items-center justify-center gap-1.5 w-full py-1">
+                                <span>Ver histórico completo de novidades</span>
+                                <i class="ph-bold ph-arrow-right"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Botão Nova Página -->
+                <button onclick="showToast('Criando nova página em branco com edição direta...')" class="px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-800 font-semibold text-xs rounded-xl border border-slate-200/80 shadow-sm flex items-center gap-2 transition-all">
+                    <i class="ph-bold ph-plus text-detran"></i>
+                    <span>Nova Página</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- CONTEÚDO ROLÁVEL DA PÁGINA -->
+        <main class="flex-1 overflow-y-auto px-8 pb-16">
+            <div class="max-w-6xl mx-auto">
+                
+                <!-- Cabeçalho da Página + Dica de Edição Transparente -->
+                <div class="flex flex-wrap items-center justify-between gap-4 mb-5">
+                    <div class="flex items-center gap-3">
+                        <h1 id="page-main-title" contenteditable="true" class="text-2xl font-extrabold text-slate-800 px-2 py-1 -ml-2 rounded-lg hover:bg-white/60 focus:bg-white focus:ring-2 focus:ring-detran-accent/30 transition-all">Home</h1>
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-emerald-100/80 text-detran border border-emerald-200">
+                            <i class="ph-fill ph-sparkle"></i>
+                            Modo Notion Ativo: Clique em qualquer texto para editar
+                        </span>
+                    </div>
+
+                    <!-- Controles sutis de Revisão / Modo de Validação -->
+                    <div class="flex items-center gap-2 text-xs">
+                        <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-200/70 text-slate-600 font-medium">
+                            <i class="ph-fill ph-shield-check text-detran text-sm"></i>
+                            <span>Fluxo de Validação: <strong>Ativo</strong></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GRID PRINCIPAL: Artigo Central + Índice Lateral -->
+                <div class="flex flex-col lg:flex-row gap-6 items-start">
+                    
+                    <!-- CARD DO DOCUMENTO (Onde ocorre a Edição em Tempo Real) -->
+                    <article class="flex-1 bg-white rounded-2xl shadow-sm border border-slate-200/70 p-8 relative w-full">
+                        
+                        <!-- BARRA FLUTUANTE DE FORMATAÇÃO RÁPIDA (Aparece ao selecionar texto) -->
+                        <div id="floating-toolbar" class="hidden fixed z-50 bg-slate-900 text-white rounded-xl shadow-xl px-2 py-1.5 flex items-center gap-1 text-xs border border-slate-700">
+                            <button onmousedown="formatDoc('bold'); return false;" class="p-1.5 hover:bg-slate-700 rounded-lg font-bold" title="Negrito"><i class="ph-bold ph-text-b"></i></button>
+                            <button onmousedown="formatDoc('italic'); return false;" class="p-1.5 hover:bg-slate-700 rounded-lg italic" title="Itálico"><i class="ph-bold ph-text-italic"></i></button>
+                            <button onmousedown="formatDoc('underline'); return false;" class="p-1.5 hover:bg-slate-700 rounded-lg underline" title="Sublinhado"><i class="ph-bold ph-text-underline"></i></button>
+                            <span class="h-4 w-px bg-slate-700 mx-1"></span>
+                            <button onmousedown="transformBlock('H2'); return false;" class="px-2 py-1 hover:bg-slate-700 rounded-lg font-semibold">H2</button>
+                            <button onmousedown="transformBlock('callout-info'); return false;" class="px-2 py-1 hover:bg-slate-700 rounded-lg text-blue-300 flex items-center gap-1"><i class="ph-fill ph-info"></i> Nota</button>
+                            <button onmousedown="transformBlock('callout-success'); return false;" class="px-2 py-1 hover:bg-slate-700 rounded-lg text-emerald-300 flex items-center gap-1"><i class="ph-fill ph-check-circle"></i> Aviso</button>
+                        </div>
+
+                        <!-- Metadados do Topo do Card -->
+                        <div class="flex flex-wrap items-start justify-between gap-4 pb-6 border-b border-slate-100">
+                            <div class="flex items-start gap-4">
+                                <div class="w-11 h-11 rounded-xl bg-emerald-50 border border-emerald-100 text-detran flex items-center justify-center shrink-0 mt-1">
+                                    <i class="ph-fill ph-house text-xl"></i>
+                                </div>
+                                <div>
+                                    <h2 contenteditable="true" class="editable-field text-sm font-semibold text-slate-700 px-1.5 py-0.5 -ml-1.5 rounded hover:bg-slate-100 focus:bg-white">Home da intranet do Detran - MG</h2>
+                                    <div class="flex flex-wrap items-center gap-3 text-xs text-slate-400 mt-1">
+                                        <span class="flex items-center gap-1"><i class="ph ph-clock"></i> 3 min de leitura</span>
+                                        <span>•</span>
+                                        <span id="last-edited-meta" class="flex items-center gap-1"><i class="ph ph-calendar-blank"></i> Editado por último em 06/08/2026</span>
+                                        <span>•</span>
+                                        <span class="flex items-center gap-1 text-slate-500 font-medium"><i class="ph-fill ph-user"></i> Danilo Luiz Alves Santana (DETRAN)</span>
+                                    </div>
+                                    <!-- Tags -->
+                                    <div class="flex items-center gap-2 mt-2.5">
+                                        <span class="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-bold tracking-wide">#DETRAN</span>
+                                        <span class="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-bold tracking-wide">#HOME</span>
+                                        <button onclick="addTagPrompt()" class="px-1.5 py-0.5 text-slate-400 hover:text-detran hover:bg-emerald-50 rounded text-[10px] font-medium transition-colors" title="Adicionar Tag">+ tag</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button class="px-3.5 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50 text-detran text-xs font-semibold flex items-center gap-1.5 transition-colors">
+                                <i class="ph-bold ph-arrow-left"></i>
+                                <span>Voltar</span>
+                            </button>
+                        </div>
+
+                        <!-- ÁREA DE BLOCOS EDITÁVEIS (TRANSPARENTE AO USUÁRIO) -->
+                        <div id="editor-blocks" class="mt-6 space-y-3">
+                            
+                            <!-- Bloco 1: Callout Verde de Boas-vindas -->
+                            <div class="notion-block group flex items-start gap-2 p-1 -ml-3">
+                                <div class="block-handle flex items-center gap-0.5 pt-3 text-slate-300 hover:text-slate-500 select-none">
+                                    <button onclick="insertNewBlockAfter(this.closest('.notion-block'))" class="p-0.5 hover:bg-slate-200 rounded" title="Adicionar bloco abaixo"><i class="ph-bold ph-plus text-xs"></i></button>
+                                    <i class="ph-bold ph-dots-six-vertical text-sm"></i>
+                                </div>
+                                <div class="flex-1 flex items-center gap-3 px-4 py-3.5 rounded-xl bg-emerald-50/70 border-l-4 border-detran text-slate-700 text-sm">
+                                    <i class="ph-fill ph-check-circle text-detran text-lg shrink-0"></i>
+                                    <div contenteditable="true" class="editable-field flex-1 font-medium text-slate-700" data-placeholder="Digite um destaque...">Bem-vindo(a) à Intranet do Detran-MG</div>
+                                </div>
+                            </div>
+
+                            <!-- Bloco 2: Parágrafo -->
+                            <div class="notion-block group flex items-start gap-2 p-1.5 -ml-3">
+                                <div class="block-handle flex items-center gap-0.5 pt-1 text-slate-300 hover:text-slate-500 select-none">
+                                    <button onclick="insertNewBlockAfter(this.closest('.notion-block'))" class="p-0.5 hover:bg-slate-200 rounded" title="Adicionar bloco abaixo"><i class="ph-bold ph-plus text-xs"></i></button>
+                                    <i class="ph-bold ph-dots-six-vertical text-sm"></i>
+                                </div>
+                                <div contenteditable="true" class="editable-field flex-1 text-sm text-slate-600 leading-relaxed" data-placeholder="Digite '/' para comandos ou apenas escreva...">
+                                    A <strong>Intranet do Detran-MG</strong> é o ambiente oficial de gestão do conhecimento da instituição.
+                                </div>
+                            </div>
+
+                            <!-- Bloco 3: Parágrafo -->
+                            <div class="notion-block group flex items-start gap-2 p-1.5 -ml-3">
+                                <div class="block-handle flex items-center gap-0.5 pt-1 text-slate-300 hover:text-slate-500 select-none">
+                                    <button onclick="insertNewBlockAfter(this.closest('.notion-block'))" class="p-0.5 hover:bg-slate-200 rounded" title="Adicionar bloco abaixo"><i class="ph-bold ph-plus text-xs"></i></button>
+                                    <i class="ph-bold ph-dots-six-vertical text-sm"></i>
+                                </div>
+                                <div contenteditable="true" class="editable-field flex-1 text-sm text-slate-600 leading-relaxed" data-placeholder="Digite '/' para comandos ou apenas escreva...">
+                                    Seu objetivo é reunir, organizar e disponibilizar informações institucionais de forma padronizada, facilitando o acesso aos procedimentos, normas, manuais e demais conteúdos necessários ao trabalho diário dos servidores.
+                                </div>
+                            </div>
+
+                            <!-- Bloco 4: Callout Azul Informativo -->
+                            <div class="notion-block group flex items-start gap-2 p-1 -ml-3">
+                                <div class="block-handle flex items-center gap-0.5 pt-3 text-slate-300 hover:text-slate-500 select-none">
+                                    <button onclick="insertNewBlockAfter(this.closest('.notion-block'))" class="p-0.5 hover:bg-slate-200 rounded" title="Adicionar bloco abaixo"><i class="ph-bold ph-plus text-xs"></i></button>
+                                    <i class="ph-bold ph-dots-six-vertical text-sm"></i>
+                                </div>
+                                <div class="flex-1 flex items-start gap-3 px-4 py-3.5 rounded-xl bg-blue-50/70 border-l-4 border-blue-500 text-slate-700 text-sm">
+                                    <i class="ph-fill ph-info text-blue-500 text-lg shrink-0 mt-0.5"></i>
+                                    <div contenteditable="true" class="editable-field flex-1 text-slate-600 leading-relaxed" data-placeholder="Digite uma nota informativa...">A Intranet é construída de forma colaborativa. Cada diretoria é responsável pela atualização dos conteúdos sob sua competência.</div>
+                                </div>
+                            </div>
+
+                            <!-- Bloco 5: Título de Seção H2 -->
+                            <div class="notion-block group flex items-start gap-2 pt-4 pb-1 px-1.5 -ml-3">
+                                <div class="block-handle flex items-center gap-0.5 pt-1.5 text-slate-300 hover:text-slate-500 select-none">
+                                    <button onclick="insertNewBlockAfter(this.closest('.notion-block'))" class="p-0.5 hover:bg-slate-200 rounded" title="Adicionar bloco abaixo"><i class="ph-bold ph-plus text-xs"></i></button>
+                                    <i class="ph-bold ph-dots-six-vertical text-sm"></i>
+                                </div>
+                                <h2 id="sec-encontrara" contenteditable="true" class="editable-field flex-1 text-lg font-bold text-slate-800" data-placeholder="Título da seção...">O que você encontrará aqui?</h2>
+                            </div>
+
+                            <!-- Bloco 6: Cards Interativos Editáveis -->
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                                <!-- Card 1 -->
+                                <div class="notion-block p-4 rounded-xl border border-slate-200/80 bg-white shadow-sm flex items-center gap-3.5 hover:border-emerald-300 transition-all">
+                                    <div class="w-9 h-9 rounded-lg bg-emerald-50 text-detran flex items-center justify-center shrink-0">
+                                        <i class="ph-bold ph-link text-base"></i>
+                                    </div>
+                                    <div contenteditable="true" class="editable-field text-xs font-medium text-slate-700 leading-snug flex-1">
+                                        📖 Procedimentos operacionais
+                                    </div>
+                                </div>
+
+                                <!-- Card 2 -->
+                                <div class="notion-block p-4 rounded-xl border border-slate-200/80 bg-white shadow-sm flex items-center gap-3.5 hover:border-emerald-300 transition-all">
+                                    <div class="w-9 h-9 rounded-lg bg-emerald-50 text-detran flex items-center justify-center shrink-0">
+                                        <i class="ph-bold ph-link text-base"></i>
+                                    </div>
+                                    <div contenteditable="true" class="editable-field text-xs font-medium text-slate-700 leading-snug flex-1">
+                                        🗂️ Manuais e guias
+                                    </div>
+                                </div>
+
+                                <!-- Card 3 -->
+                                <div class="notion-block p-4 rounded-xl border border-slate-200/80 bg-white shadow-sm flex items-center gap-3.5 hover:border-emerald-300 transition-all">
+                                    <div class="w-9 h-9 rounded-lg bg-emerald-50 text-detran flex items-center justify-center shrink-0">
+                                        <i class="ph-bold ph-link text-base"></i>
+                                    </div>
+                                    <div contenteditable="true" class="editable-field text-xs font-medium text-slate-700 leading-snug flex-1">
+                                        ⚖️ Normativos internos
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <!-- Linha para Adicionar Novo Bloco Rapidamente (Estilo Notion) -->
+                        <div onclick="insertNewBlockEnd()" class="mt-6 py-2.5 px-3 rounded-xl border border-dashed border-slate-200 hover:border-detran/40 hover:bg-emerald-50/30 text-slate-400 hover:text-detran text-xs flex items-center gap-2 cursor-text transition-all">
+                            <i class="ph-bold ph-plus"></i>
+                            <span>Clique aqui para continuar escrevendo ou digite <kbd class="px-1.5 py-0.5 bg-slate-100 rounded text-[10px] font-semibold text-slate-600">/</kbd> para inserir um bloco (aviso, título, lista)...</span>
+                        </div>
+
+                    </article>
+
+                    <!-- ÍNDICE DO GUIA (Direita) -->
+                    <aside class="w-full lg:w-64 bg-white rounded-2xl shadow-sm border border-slate-200/70 p-5 shrink-0 sticky top-4">
+                        <p class="text-[10px] font-bold tracking-wider uppercase text-slate-400 mb-3">Índice do Guia</p>
+                        <ul class="space-y-2.5 text-xs text-slate-600">
+                            <li>
+                                <a href="#sec-encontrara" class="flex items-center gap-2 text-detran font-semibold">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-detran"></span>
+                                    <span>O que você encontrará aqui?</span>
+                                </a>
+                            </li>
+                            <li>
+                                <a href="#" class="flex items-center gap-2 hover:text-detran transition-colors">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                                    <span>Princípios da Intranet</span>
+                                </a>
+                            </li>
+                            <li>
+                                <a href="#" class="flex items-center gap-2 hover:text-detran transition-colors">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                                    <span>Como utilizar?</span>
+                                </a>
+                            </li>
+                            <li class="pl-3">
+                                <a href="#" class="flex items-center gap-2 hover:text-detran transition-colors text-slate-500">
+                                    <span>🔎 Consulte</span>
+                                </a>
+                            </li>
+                            <li class="pl-3">
+                                <a href="#" class="flex items-center gap-2 hover:text-detran transition-colors text-slate-500">
+                                    <span>📖 Navegue</span>
+                                </a>
+                            </li>
+                            <li class="pl-3">
+                                <a href="#" class="flex items-center gap-2 hover:text-detran transition-colors text-slate-500">
+                                    <span>✍️ Colabore</span>
+                                </a>
+                            </li>
+                            <li>
+                                <a href="#" class="flex items-center gap-2 hover:text-detran transition-colors">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                                    <span>Organização dos Conteúdos</span>
+                                </a>
+                            </li>
+                            <li>
+                                <a href="#" class="flex items-center gap-2 hover:text-detran transition-colors">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                                    <span>Benefícios</span>
+                                </a>
+                            </li>
+                            <li>
+                                <a href="#" class="flex items-center gap-2 hover:text-detran transition-colors">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                                    <span>Responsabilidade</span>
+                                </a>
+                            </li>
+                            <li>
+                                <a href="#" class="flex items-center gap-2 hover:text-detran transition-colors">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                                    <span>Precisa de ajuda?</span>
+                                </a>
+                            </li>
+                            <li>
+                                <a href="#" class="flex items-center gap-2 hover:text-detran transition-colors">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                                    <span>Autoria e Versão</span>
+                                </a>
+                            </li>
+                        </ul>
+
+                        <!-- Card Explicativo sobre Edição Transparente -->
+                        <div class="mt-6 p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 text-[11px] text-slate-600 space-y-2">
+                            <div class="flex items-center gap-1.5 font-bold text-slate-700">
+                                <i class="ph-fill ph-lightning text-amber-500 text-sm"></i>
+                                <span>Edição Transparente</span>
+                            </div>
+                            <p class="leading-relaxed">
+                                Não há mais botão de "Modo de Edição". Basta clicar em qualquer texto para alterar. Suas alterações ficam salvas em rascunho automático até o envio para validação.
+                            </p>
+                        </div>
+                    </aside>
+
+                </div>
+            </div>
+        </main>
+
+        <!-- MENU SLASH COMMAND (Estilo Notion ao digitar "/") -->
+        <div id="slash-menu" class="hidden fixed z-50 w-64 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden text-xs">
+            <div class="px-3 py-2 bg-slate-50 border-b border-slate-100 font-semibold text-slate-500 text-[10px] uppercase tracking-wider">
+                Inserir Bloco Wiki.js
+            </div>
+            <div class="p-1.5 space-y-0.5">
+                <button onclick="applySlashCommand('p')" class="w-full flex items-center gap-2.5 px-2.5 py-2 hover:bg-emerald-50 rounded-lg text-left transition-colors">
+                    <i class="ph-bold ph-text-t text-base text-slate-500"></i>
+                    <div>
+                        <p class="font-semibold text-slate-700">Texto Simples</p>
+                        <p class="text-[10px] text-slate-400">Parágrafo padrão</p>
+                    </div>
+                </button>
+                <button onclick="applySlashCommand('h2')" class="w-full flex items-center gap-2.5 px-2.5 py-2 hover:bg-emerald-50 rounded-lg text-left transition-colors">
+                    <i class="ph-bold ph-text-h-two text-base text-slate-500"></i>
+                    <div>
+                        <p class="font-semibold text-slate-700">Título de Seção</p>
+                        <p class="text-[10px] text-slate-400">Cabeçalho grande (H2)</p>
+                    </div>
+                </button>
+                <button onclick="applySlashCommand('info')" class="w-full flex items-center gap-2.5 px-2.5 py-2 hover:bg-emerald-50 rounded-lg text-left transition-colors">
+                    <i class="ph-fill ph-info text-base text-blue-500"></i>
+                    <div>
+                        <p class="font-semibold text-slate-700">Bloco Informativo</p>
+                        <p class="text-[10px] text-slate-400">Destaque azul para notas</p>
+                    </div>
+                </button>
+                <button onclick="applySlashCommand('success')" class="w-full flex items-center gap-2.5 px-2.5 py-2 hover:bg-emerald-50 rounded-lg text-left transition-colors">
+                    <i class="ph-fill ph-check-circle text-base text-detran"></i>
+                    <div>
+                        <p class="font-semibold text-slate-700">Bloco de Validação / Sucesso</p>
+                        <p class="text-[10px] text-slate-400">Destaque institucional verde</p>
+                    </div>
+                </button>
+            </div>
+        </div>
+
+        <!-- RODAPÉ -->
+        <footer class="h-10 bg-white border-t border-slate-200/80 px-8 flex items-center justify-center text-[11px] text-slate-400 shrink-0">
+            <span>Intranet do Detran - MG &nbsp;|&nbsp; Distribuído por Wiki.js (Modo de Edição Transparente)</span>
+        </footer>
+
+        <!-- INDICADOR FLUTUANTE DE SINCRONIZAÇÃO (Substitui o antigo FAB de Lápis por Status Inteligente) -->
+        <div class="fixed bottom-6 right-6 z-40 flex items-center gap-2">
+            <button onclick="openValidationModal()" id="fab-status" class="group h-12 px-4 rounded-full bg-detran hover:bg-detran-dark text-white shadow-lg hover:shadow-xl flex items-center gap-2.5 transition-all">
+                <i id="fab-icon" class="ph-fill ph-check-circle text-xl"></i>
+                <span id="fab-label" class="text-xs font-semibold pr-1">Edição Automática Ativa</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- MODAL DO MODO DE VALIDAÇÃO (Já implementado na intranet, integrado às edições transparentes) -->
+    <div id="validation-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden animate- fadeIn">
+            <div class="p-5 bg-gradient-to-r from-detran-dark to-detran text-white flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                    <i class="ph-fill ph-shield-check text-2xl text-emerald-300"></i>
+                    <div>
+                        <h3 class="text-base font-bold">Submeter Alterações para Validação</h3>
+                        <p class="text-xs text-emerald-100/80">Suas edições em tempo real foram salvas como rascunho</p>
+                    </div>
+                </div>
+                <button onclick="closeValidationModal()" class="p-1 rounded-lg hover:bg-white/10"><i class="ph-bold ph-x"></i></button>
+            </div>
+
+            <div class="p-6 space-y-4 text-xs text-slate-600">
+                <div class="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 flex items-start gap-3">
+                    <i class="ph-fill ph-git-diff text-lg text-amber-600 shrink-0 mt-0.5"></i>
+                    <div>
+                        <p class="font-semibold">Edição Transparente Detectada</p>
+                        <p class="mt-0.5 leading-relaxed">Você realizou <strong id="modal-edit-count">1 alteração</strong> diretamente no texto da página <strong>Home</strong>. Para que todos os servidores visualizem, confirme o envio para o validador do setor.</p>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1.5">Resumo rápido da atualização (Opcional):</label>
+                    <input id="validation-comment" type="text" placeholder="Ex: Atualização de texto institucional na Home..." class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-detran/30 text-slate-700">
+                </div>
+
+                <div class="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px] text-slate-400">
+                    <span>Responsável pela aprovação: <strong>Comitê Gestor / TI</strong></span>
+                    <span>Versão #24 → #25</span>
+                </div>
+            </div>
+
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                <button onclick="closeValidationModal()" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-semibold">Continuar Editando</button>
+                <button onclick="submitForValidation()" class="px-4 py-2 rounded-xl bg-detran hover:bg-detran-dark text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm">
+                    <i class="ph-bold ph-paper-plane-tilt"></i>
+                    <span>Confirmar e Enviar para Validação</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- TOAST DE FEEDBACK -->
+    <div id="toast" class="hidden fixed bottom-20 right-6 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-xl text-xs font-medium flex items-center gap-2.5 border border-slate-700">
+        <i class="ph-fill ph-check-circle text-emerald-400 text-base"></i>
+        <span id="toast-msg">Alteração salva automaticamente</span>
+    </div>
+
+    <script>
+        let editCount = 0;
+        let saveTimeout = null;
+        let currentSlashBlock = null;
+
+        // Alternar Sidebar
+        function toggleSidebar() {
+            const sb = document.getElementById('sidebar');
+            const icon = document.getElementById('sidebar-toggle-icon');
+            if (sb.classList.contains('w-64')) {
+                sb.classList.remove('w-64');
+                sb.classList.add('w-20');
+                icon.classList.replace('ph-caret-left', 'ph-caret-right');
+                sb.querySelectorAll('span, p, #sub-inst, #sub-ti').forEach(el => el.classList.add('hidden'));
+            } else {
+                sb.classList.remove('w-20');
+                sb.classList.add('w-64');
+                icon.classList.replace('ph-caret-right', 'ph-caret-left');
+                sb.querySelectorAll('span, p, #sub-inst, #sub-ti').forEach(el => el.classList.remove('hidden'));
+            }
+        }
+
+        // Alternar Submenus da Sidebar
+        function toggleSubmenu(id) {
+            const el = document.getElementById(id);
+            const icon = document.getElementById('icon-' + id);
+            el.classList.toggle('hidden');
+            icon.classList.toggle('rotate-180');
+        }
+
+        // Alternar Dropdown de Notificações ("Novidades")
+        function toggleNotifications() {
+            const dropdown = document.getElementById('notif-dropdown');
+            dropdown.classList.toggle('hidden');
+        }
+
+        // Fechar menus ao clicar fora
+        document.addEventListener('click', (e) => {
+            const notifBtn = document.getElementById('btn-notifications');
+            const notifDropdown = document.getElementById('notif-dropdown');
+            if (!notifBtn.contains(e.target) && !notifDropdown.contains(e.target)) {
+                notifDropdown.classList.add('hidden');
+            }
+
+            const slashMenu = document.getElementById('slash-menu');
+            if (!slashMenu.contains(e.target)) {
+                slashMenu.classList.add('hidden');
+            }
+        });
+
+        // Filtrar abas das Notificações
+        function filterNotifs(type) {
+            const items = document.querySelectorAll('.notif-item');
+            const tabs = {
+                all: document.getElementById('tab-all'),
+                news: document.getElementById('tab-news'),
+                validation: document.getElementById('tab-validation')
+            };
+
+            Object.values(tabs).forEach(t => {
+                t.className = 'pb-2 px-2 border-b-2 border-transparent text-slate-500 hover:text-slate-700';
+            });
+            tabs[type].className = 'pb-2 px-2 border-b-2 border-detran text-detran font-semibold';
+
+            items.forEach(item => {
+                if (type === 'all' || item.dataset.type === type) {
+                    item.classList.remove('hidden');
+                } else {
+                    item.classList.add('hidden');
+                }
+            });
+        }
+
+        // Marcar todas as novidades como lidas
+        function markAllRead() {
+            const badge = document.getElementById('notif-badge');
+            badge.classList.add('hidden');
+            document.querySelectorAll('.unread-dot').forEach(dot => dot.classList.add('hidden'));
+            document.querySelectorAll('.notif-item').forEach(item => item.classList.remove('bg-emerald-50/40'));
+            showToast('Todas as novidades foram marcadas como lidas.');
+        }
+
+        // Monitorar Edição em Tempo Real nos Blocos (Transparente ao Usuário)
+        function bindEditableEvents(root = document) {
+            const editables = root.querySelectorAll('[contenteditable="true"]');
+            editables.forEach(el => {
+                if (el.dataset.bound) return;
+                el.dataset.bound = "true";
+
+                el.addEventListener('input', (e) => {
+                    triggerRealtimeSaving();
+
+                    // Detectar comando "/" estilo Notion
+                    const text = el.innerText.trim();
+                    if (text.endsWith('/')) {
+                        const rect = el.getBoundingClientRect();
+                        const slashMenu = document.getElementById('slash-menu');
+                        currentSlashBlock = el;
+                        slashMenu.style.top = `${Math.min(rect.bottom + 8, window.innerHeight - 240)}px`;
+                        slashMenu.style.left = `${Math.min(rect.left + 16, window.innerWidth - 280)}px`;
+                        slashMenu.classList.remove('hidden');
+                    } else {
+                        document.getElementById('slash-menu').classList.add('hidden');
+                    }
+                });
+
+                // Enter cria novo parágrafo em blocos de texto comum
+                el.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey && el.closest('#editor-blocks')) {
+                        e.preventDefault();
+                        const parentBlock = el.closest('.notion-block');
+                        if (parentBlock) {
+                            insertNewBlockAfter(parentBlock);
+                        }
+                    }
+                });
+            });
+        }
+
+        // Simular salvamento em tempo real + Ativar botão de Validação
+        function triggerRealtimeSaving() {
+            editCount++;
+            const dot = document.getElementById('status-dot');
+            const text = document.getElementById('status-text');
+            const btnValidate = document.getElementById('btn-validate');
+            const counter = document.getElementById('change-counter');
+            const fabIcon = document.getElementById('fab-icon');
+            const fabLabel = document.getElementById('fab-label');
+
+            // Estado "Salvando..."
+            dot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-ping';
+            text.textContent = 'Salvando em tempo real...';
+
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(() => {
+                dot.className = 'w-2 h-2 rounded-full bg-amber-500';
+                text.textContent = 'Rascunho salvo';
+                btnValidate.classList.remove('hidden');
+                counter.textContent = editCount;
+
+                // Atualizar FAB
+                fabIcon.className = 'ph-fill ph-paper-plane-tilt text-xl';
+                fabLabel.textContent = `Enviar p/ Validação (${editCount})`;
+
+                // Atualizar metadado de hora
+                const now = new Date();
+                const hora = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                document.getElementById('last-edited-meta').innerHTML = `<i class="ph ph-calendar-blank"></i> Editado agora às ${hora} (Rascunho em validação)`;
+            }, 600);
+        }
+
+        // Inserir Novo Bloco Abaixo de um existente
+        function insertNewBlockAfter(referenceBlock) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'notion-block group flex items-start gap-2 p-1.5 -ml-3';
+            wrapper.innerHTML = `
+                <div class="block-handle flex items-center gap-0.5 pt-1 text-slate-300 hover:text-slate-500 select-none">
+                    <button onclick="insertNewBlockAfter(this.closest('.notion-block'))" class="p-0.5 hover:bg-slate-200 rounded" title="Adicionar bloco abaixo"><i class="ph-bold ph-plus text-xs"></i></button>
+                    <i class="ph-bold ph-dots-six-vertical text-sm"></i>
+                </div>
+                <div contenteditable="true" class="editable-field flex-1 text-sm text-slate-600 leading-relaxed" data-placeholder="Digite '/' para comandos ou apenas escreva..."></div>
+            `;
+            referenceBlock.insertAdjacentElement('afterend', wrapper);
+            bindEditableEvents(wrapper);
+            const editable = wrapper.querySelector('[contenteditable="true"]');
+            editable.focus();
+        }
+
+        function insertNewBlockEnd() {
+            const container = document.getElementById('editor-blocks');
+            const blocks = container.querySelectorAll('.notion-block');
+            insertNewBlockAfter(blocks[blocks.length - 1]);
+        }
+
+        // Aplicar Comando "/" (Slash Menu)
+        function applySlashCommand(type) {
+            if (!currentSlashBlock) return;
+            const cleanText = currentSlashBlock.innerText.replace(/\/$/, '');
+            const notionWrapper = currentSlashBlock.closest('.notion-block');
+
+            if (type === 'h2') {
+                notionWrapper.innerHTML = `
+                    <div class="block-handle flex items-center gap-0.5 pt-1.5 text-slate-300 hover:text-slate-500 select-none">
+                        <button onclick="insertNewBlockAfter(this.closest('.notion-block'))" class="p-0.5 hover:bg-slate-200 rounded"><i class="ph-bold ph-plus text-xs"></i></button>
+                        <i class="ph-bold ph-dots-six-vertical text-sm"></i>
+                    </div>
+                    <h2 contenteditable="true" class="editable-field flex-1 text-lg font-bold text-slate-800" data-placeholder="Novo título de seção...">${cleanText}</h2>
+                `;
+            } else if (type === 'info') {
+                notionWrapper.innerHTML = `
+                    <div class="block-handle flex items-center gap-0.5 pt-3 text-slate-300 hover:text-slate-500 select-none">
+                        <button onclick="insertNewBlockAfter(this.closest('.notion-block'))" class="p-0.5 hover:bg-slate-200 rounded"><i class="ph-bold ph-plus text-xs"></i></button>
+                        <i class="ph-bold ph-dots-six-vertical text-sm"></i>
+                    </div>
+                    <div class="flex-1 flex items-start gap-3 px-4 py-3.5 rounded-xl bg-blue-50/70 border-l-4 border-blue-500 text-slate-700 text-sm">
+                        <i class="ph-fill ph-info text-blue-500 text-lg shrink-0 mt-0.5"></i>
+                        <div contenteditable="true" class="editable-field flex-1 text-slate-600 leading-relaxed" data-placeholder="Digite uma informação importante...">${cleanText}</div>
+                    </div>
+                `;
+            } else if (type === 'success') {
+                notionWrapper.innerHTML = `
+                    <div class="block-handle flex items-center gap-0.5 pt-3 text-slate-300 hover:text-slate-500 select-none">
+                        <button onclick="insertNewBlockAfter(this.closest('.notion-block'))" class="p-0.5 hover:bg-slate-200 rounded"><i class="ph-bold ph-plus text-xs"></i></button>
+                        <i class="ph-bold ph-dots-six-vertical text-sm"></i>
+                    </div>
+                    <div class="flex-1 flex items-center gap-3 px-4 py-3.5 rounded-xl bg-emerald-50/70 border-l-4 border-detran text-slate-700 text-sm">
+                        <i class="ph-fill ph-check-circle text-detran text-lg shrink-0"></i>
+                        <div contenteditable="true" class="editable-field flex-1 font-medium text-slate-700" data-placeholder="Digite um aviso institucional...">${cleanText}</div>
+                    </div>
+                `;
+            } else {
+                currentSlashBlock.innerText = cleanText;
+            }
+
+            document.getElementById('slash-menu').classList.add('hidden');
+            bindEditableEvents(notionWrapper);
+            const target = notionWrapper.querySelector('[contenteditable="true"]');
+            if (target) target.focus();
+            triggerRealtimeSaving();
+        }
+
+        // Barra Flutuante ao Selecionar Texto (Estilo Notion)
+        document.addEventListener('selectionchange', () => {
+            const sel = window.getSelection();
+            const toolbar = document.getElementById('floating-toolbar');
+            if (!sel || sel.isCollapsed || !sel.toString().trim()) {
+                toolbar.classList.add('hidden');
+                return;
+            }
+            const anchor = sel.anchorNode?.parentElement;
+            if (!anchor || !anchor.closest('[contenteditable="true"]')) {
+                toolbar.classList.add('hidden');
+                return;
+            }
+            const range = sel.getRangeAt(0);
+            const rect = range.getBoundingClientRect();
+            toolbar.style.top = `${Math.max(rect.top - 44, 12)}px`;
+            toolbar.style.left = `${Math.max(rect.left, 16)}px`;
+            toolbar.classList.remove('hidden');
+        });
+
+        function formatDoc(cmd) {
+            document.execCommand(cmd, false, null);
+            triggerRealtimeSaving();
+        }
+
+        function transformBlock(kind) {
+            const sel = window.getSelection();
+            if (!sel.anchorNode) return;
+            currentSlashBlock = sel.anchorNode.parentElement.closest('[contenteditable="true"]');
+            if (kind === 'H2') applySlashCommand('h2');
+            if (kind === 'callout-info') applySlashCommand('info');
+            if (kind === 'callout-success') applySlashCommand('success');
+        }
+
+        // Modal de Validação
+        function openValidationModal() {
+            document.getElementById('modal-edit-count').textContent = `${Math.max(editCount, 1)} ${editCount > 1 ? 'alterações' : 'alteração'}`;
+            document.getElementById('validation-modal').classList.remove('hidden');
+        }
+
+        function closeValidationModal() {
+            document.getElementById('validation-modal').classList.add('hidden');
+        }
+
+        function submitForValidation() {
+            closeValidationModal();
+            const comment = document.getElementById('validation-comment').value.trim() || 'Atualização editorial na página Home';
+
+            // Resetar contadores de edição
+            editCount = 0;
+            document.getElementById('btn-validate').classList.add('hidden');
+            document.getElementById('status-dot').className = 'w-2 h-2 rounded-full bg-emerald-500';
+            document.getElementById('status-text').textContent = 'Aguardando validação';
+            document.getElementById('fab-icon').className = 'ph-fill ph-clock-countdown text-xl';
+            document.getElementById('fab-label').textContent = 'Em Validação';
+
+            // Inserir nova notificação em "Novidades"
+            const list = document.getElementById('notif-list');
+            const newItem = document.createElement('div');
+            newItem.dataset.type = 'validation';
+            newItem.className = 'notif-item p-4 hover:bg-slate-50 transition-colors flex gap-3.5 bg-amber-50/50 cursor-pointer';
+            newItem.innerHTML = `
+                <div class="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 mt-0.5">
+                    <i class="ph-fill ph-hourglass-high text-lg"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 uppercase">Enviado p/ Validação</span>
+                        <span class="text-[10px] text-slate-400">Agora</span>
+                    </div>
+                    <p class="text-xs font-semibold text-slate-800 mt-1">Página "Home" aguardando aprovação</p>
+                    <p class="text-xs text-slate-600 mt-0.5 leading-relaxed">Nota: "${comment}"</p>
+                </div>
+                <span class="unread-dot w-2 h-2 rounded-full bg-amber-500 self-center shrink-0"></span>
+            `;
+            list.prepend(newItem);
+
+            // Atualizar badge de notificações
+            const badge = document.getElementById('notif-badge');
+            badge.classList.remove('hidden');
+            badge.textContent = parseInt(badge.textContent || '0') + 1;
+
+            showToast('Alterações enviadas para o fluxo de validação! Acompanhe no ícone de Novidades.');
+        }
+
+        function highlightFeature() {
+            document.getElementById('notif-dropdown').classList.add('hidden');
+            const firstBlock = document.querySelector('#editor-blocks [contenteditable="true"]');
+            if (firstBlock) {
+                firstBlock.focus();
+                showToast('Experimente digitar diretamente no texto ou usar "/" para novos blocos!');
+            }
+        }
+
+        function openChangelogModal() {
+            document.getElementById('notif-dropdown').classList.add('hidden');
+            showToast('Exibindo todas as novidades recentes no painel de notificações.');
+        }
+
+        function addTagPrompt() {
+            showToast('Tag #PROCEDIMENTOS adicionada ao rascunho atual.');
+            triggerRealtimeSaving();
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-msg').textContent = msg;
+            toast.classList.remove('hidden');
+            setTimeout(() => toast.classList.add('hidden'), 3800);
+        }
+
+        // Inicializar eventos ao carregar a janela
+        window.onload = function () {
+            bindEditableEvents();
+        };
+    </script>
+</body>
+</html>
