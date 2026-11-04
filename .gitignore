@@ -9,6 +9,7 @@ dist
 # Dependency directories
 node_modules
 npm/node_modules
+/packages/
 
 # NPM / Yarn
 .npm
@@ -36,6 +37,7 @@ server/views/setup.pug
 /content
 /temp
 *.sqlite
+/.trash/
 
 # IDE exclude
 .idea
