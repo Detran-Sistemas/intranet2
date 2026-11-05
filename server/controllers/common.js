@@ -425,6 +425,37 @@ router.get(['/p', '/p/*'], (req, res, next) => {
 })
 
 /**
+ * Detran Workflow & Review (Painel de Governança)
+ */
+router.get(['/w', '/w/*'], async (req, res, next) => {
+  if (!req.user || req.user.id < 1 || req.user.id === 2) {
+    return res.redirect('/login')
+  }
+
+  const locale = req.cookies.locale || WIKI.config.lang.code || 'pt-br'
+  let sdi = 1
+  let sidebar = []
+  try {
+    sidebar = (await WIKI.models.navigation.getTree({ cache: true, locale, groups: req.user.groups })).map(n => ({
+      i: `sdi-${sdi++}`,
+      k: n.kind,
+      l: n.label,
+      t: n.target,
+      h: n.hint,
+      icon: n.icon || ''
+    }))
+  } catch (err) {
+    sidebar = []
+  }
+
+  _.set(res.locals, 'pageMeta.title', 'Governança & Workflow')
+  res.render('workflow', {
+    sidebar,
+    locale
+  })
+})
+
+/**
  * Source
  */
 router.get(['/s', '/s/*'], async (req, res, next) => {
