@@ -87,6 +87,90 @@
 
             //- Ações do header
             .detran-header__actions
+              //- Pílula de status da Edição Transparente (Fiel ao Protótipo: linhas 209-219)
+              template(v-if='isTransparentEditActive')
+                .detran-sync-pill
+                  v-progress-circular(indeterminate, size='11', width='2', color='#f59e0b', v-if='isSavingDraft')
+                  span.detran-sync-pill__dot(
+                    v-else
+                    :class='transparentChangeCount > 0 ? "is-amber" : "is-emerald"'
+                  )
+                  span.detran-sync-pill__text {{ isSavingDraft ? "Salvando em tempo real..." : (isAwaitingValidation ? "Aguardando validação" : (lastSavedTime ? "Rascunho salvo" : "Edição contínua ativa")) }}
+                  button.detran-sync-pill__btn(
+                    v-if='transparentChangeCount > 0'
+                    type='button'
+                    @click='dialogValidation = true'
+                  )
+                    v-icon(size='13' color='#ffffff') mdi-send
+                    span Submeter Validação
+                    span.detran-sync-pill__counter {{ transparentChangeCount }}
+
+              //- Central de Notificações ("Novidades da Intranet")
+              v-menu(
+                v-if='isAuthenticated'
+                offset-y
+                bottom
+                left
+                transition='slide-y-transition'
+                min-width='380'
+                max-width='420'
+                :close-on-content-click='false'
+              )
+                template(v-slot:activator='{ on }')
+                  button.detran-header__action-btn(
+                    v-on='on'
+                    title='Novidades da Intranet e Validações'
+                    type='button'
+                    aria-label='Novidades da Intranet'
+                  )
+                    v-badge(
+                      v-if='workflowPendingCount > 0'
+                      color='#e11d48'
+                      :content='workflowPendingCount'
+                      overlap
+                      offset-x='8'
+                      offset-y='8'
+                    )
+                      v-icon(size='20' color='#d97706') mdi-bell-ring
+                    v-icon(v-else size='20' color='#64748b') mdi-bell-outline
+                v-card.rounded-xl.overflow-hidden.elevation-12
+                  .pa-4.white--text.d-flex.align-center.justify-space-between(style='background: linear-gradient(135deg, #185a30 0%, #103d20 100%);')
+                    .d-flex.align-center
+                      v-icon.mr-2(color='#fcd34d', size='20') mdi-sparkles
+                      div
+                        .text-subtitle-2.font-weight-bold Novidades da Intranet
+                        .caption(style='color: #a7f3d0;') Atualizações e tramitações de validação
+                    v-btn(x-small, text, dark, class='caption text-none', @click='markAllNotificationsRead') Marcar lidas
+                  v-tabs(v-model='notifTab', grow, height='36', color='#1b6535')
+                    v-tab.caption Todas ({{ workflowPendingCount }})
+                    v-tab.caption Validações
+                    v-tab.caption Publicações
+                  v-card-text.pa-0(style='max-height: 320px; overflow-y: auto;')
+                    template(v-if='filteredNotificationTasks.length > 0')
+                      v-list.py-0.dense
+                        v-list-item(
+                          v-for='task in filteredNotificationTasks'
+                          :key='task.id'
+                          :href='"/w/review/" + task.id'
+                          class='py-2 px-3'
+                        )
+                          v-list-item-avatar.mr-3(size='32', color='#eff6ff')
+                            v-icon(size='18', color='#2563eb') mdi-shield-check
+                          v-list-item-content
+                            .d-flex.align-center.justify-space-between
+                              span.text-caption.font-weight-bold.blue--text.text--darken-3.text-uppercase Validação Pendente
+                              span.text-caption.grey--text Pendente
+                            .caption.font-weight-bold.text-truncate {{ task.title || task.path }}
+                            .text-caption.grey--text.text--darken-1.text-truncate Autor: {{ task.authorName || "Servidor" }}
+                    template(v-else)
+                      .pa-6.text-center.grey--text
+                        v-icon.mb-2(size='36', color='grey lighten-2') mdi-bell-check-outline
+                        .caption Nenhuma validação pendente no momento
+                  v-divider
+                  v-card-actions.pa-2.grey.lighten-4.d-flex.justify-center
+                    v-btn(text, small, color='#1b6535', href='/w', class='caption font-weight-bold text-none')
+                      span Ver painel completo de governança
+                      v-icon(x-small, right) mdi-arrow-right
               //- App Launcher / Sistemas Satélites Integrados (Entra ID Hub)
               v-menu(
                 offset-y
@@ -219,7 +303,11 @@
                     ) {{ crumb.name }}
 
               .detran-page-header__row
-                h2.detran-page-title {{ title }}
+                .detran-page-header__title-group
+                  h2.detran-page-title {{ title }}
+                  span.detran-notion-mode-badge(v-if='isTransparentEditActive')
+                    v-icon(size='13' color='#1b6535') mdi-auto-fix
+                    span Modo Notion Ativo: Clique em qualquer texto para editar
 
                 //- Botão Editar (inline — aparece também no header, antes do FAB)
                 button.detran-edit-inline-btn(
@@ -227,8 +315,8 @@
                   @click='editPage'
                   :title='$t("common:header.editPage", "Editar Página")'
                 )
-                  v-icon(size='14') mdi-pencil
-                  span {{ $t('common:header.editPage', 'Editar Página') }}
+                  v-icon(size='14') {{ isTransparentEditActive ? 'mdi-eye-outline' : 'mdi-pencil' }}
+                  span {{ isTransparentEditActive ? 'Modo Leitura' : $t('common:header.editPage', 'Editar Página') }}
 
             //- ----------------------------------------------------------------
             //- Wrapper flex: artigo + TOC
@@ -288,8 +376,26 @@
                       span {{ $t('common:page.back', 'Voltar') }}
 
                 //- Conteúdo renderizado (page.render — HTML do Wiki.js)
-                .detran-contents(ref='container')
+                .detran-contents(ref='container' v-show='!isTransparentEditActive')
                   slot(name='contents')
+
+                //- Editor Transparente Notion-like (Detran-MG)
+                transparent-editor(
+                  v-if='isTransparentEditActive'
+                  :initial-markdown='pageRawMarkdown'
+                  :page-id='pageId'
+                  :page-path='path'
+                  :page-title='title'
+                  @change='onTransparentEditorChange'
+                )
+
+                validation-modal(
+                  v-model='dialogValidation'
+                  :change-count='transparentChangeCount'
+                  :page-title='title'
+                  :loading='isSubmittingValidation'
+                  @submit='onSubmitValidation'
+                )
 
                 //- Rodapé do artigo com navegação de retorno
                 .detran-article__footer
@@ -424,6 +530,9 @@
     )
     page-convert(v-model='convertPageModal' v-if='path && path.length')
     page-delete(v-model='deletePageModal' v-if='path && path.length')
+    .detran-toast-feedback(v-if='detranToastVisible')
+      v-icon(size='18' :color='detranToastType === "error" ? "#f87171" : "#34d399"') {{ detranToastType === 'error' ? 'mdi-alert-circle' : 'mdi-check-circle' }}
+      span {{ detranToastMessage }}
     notify
 </template>
 
@@ -439,6 +548,15 @@ import _ from 'lodash'
 import { get, sync } from 'vuex-pathify'
 import movePageMutation from 'gql/common/common-pages-mutation-move.gql'
 import gql from 'graphql-tag'
+import TransparentEditor from '../../default/components/transparent-editor/transparent-editor.vue'
+import ValidationModal from '../../default/components/transparent-editor/validation-modal.vue'
+import { MUTATION_SAVE_DRAFT, MUTATION_WORKFLOW_SUBMIT, QUERY_DRAFT_AND_POLICY } from '../../../store/detran-workflow'
+import {
+  filterNotificationTasks,
+  loadTransparentPageSource,
+  saveTransparentDraft,
+  submitTransparentValidation
+} from '../../default/components/transparent-editor/utils/editor-controller'
 
 /* global siteLangs */
 
@@ -485,7 +603,9 @@ export default {
     NavSidebar,
     NavFooter,
     PageDelete: () => import('@/components/common/page-delete.vue'),
-    PageConvert: () => import('@/components/common/page-convert.vue')
+    PageConvert: () => import('@/components/common/page-convert.vue'),
+    TransparentEditor,
+    ValidationModal
   },
 
   // ---------------------------------------------------------------------------
@@ -529,6 +649,23 @@ export default {
       avatarFailed: false,
       verifiedAncestors: [],
       internalApps: [],
+      isTransparentEditActive: false,
+      pageRawMarkdown: '',
+      transparentToc: [],
+      transparentChangeCount: 0,
+      dialogValidation: false,
+      isSavingDraft: false,
+      isSubmittingValidation: false,
+      activeDraftId: null,
+      lastSavedTime: '',
+      workflowPendingCount: 0,
+      workflowPendingTasks: [],
+      notifTab: 0,
+      isAwaitingValidation: false,
+      detranToastVisible: false,
+      detranToastMessage: '',
+      detranToastType: 'success',
+      detranToastTimer: null,
       duplicateOpts: {
         locale: 'pt',
         path: 'new-page',
@@ -589,7 +726,13 @@ export default {
         try { return JSON.parse(decodeURIComponent(escape(atob(this.sidebar)))) } catch (err) { return [] }
       }
     },
+    filteredNotificationTasks () {
+      return filterNotificationTasks(this.workflowPendingTasks, this.notifTab)
+    },
     tocDecoded () {
+      if (this.isTransparentEditActive && this.transparentToc && this.transparentToc.length > 0) {
+        return this.transparentToc
+      }
       let raw = []
       try {
         raw = JSON.parse(Buffer.from(this.toc, 'base64').toString('utf8'))
@@ -892,6 +1035,17 @@ export default {
       this.initTocObserver()
       this.updateReadingTime()
       this.verifyAncestors()
+      if (this.isAuthenticated) {
+        this.fetchWorkflowPendingCount()
+      }
+      if (this.canEdit) {
+        this.loadPageSourceForTransparentEdit()
+      }
+      this.$root.$on('workflowRefreshTasks', () => {
+        if (this.isAuthenticated) {
+          this.fetchWorkflowPendingCount()
+        }
+      })
     })
 
     // Atalho de teclado ⌘K / Ctrl+K para focar na busca
@@ -1035,7 +1189,156 @@ export default {
     // Ações de página (reutilizam as rotas e modais do Wiki.js)
     // -------------------------------------------------------------------------
     editPage () {
-      window.location.href = `/e/${this.locale}/${this.path}`
+      this.toggleTransparentEdit()
+    },
+
+    /* eslint-disable vue/custom-event-name-casing */
+    async toggleTransparentEdit () {
+      if (!this.canEdit) return
+      if (!this.isTransparentEditActive && !this.pageRawMarkdown) {
+        await this.loadPageSourceForTransparentEdit()
+      }
+      this.isTransparentEditActive = !this.isTransparentEditActive
+    },
+
+    async loadPageSourceForTransparentEdit () {
+      try {
+        const res = await loadTransparentPageSource({
+          apollo: this.$apollo,
+          queryDraftAndPolicy: QUERY_DRAFT_AND_POLICY,
+          pageSingleQuery: gql`
+            query ($id: Int!) {
+              pages {
+                single(id: $id) {
+                  content
+                }
+              }
+            }
+          `,
+          path: this.path,
+          locale: this.locale,
+          pageId: this.pageId
+        })
+        this.pageRawMarkdown = res.markdown
+        if (res.draftId) {
+          this.activeDraftId = res.draftId
+        }
+      } catch (err) {
+        console.error('Erro ao carregar conteúdo para edição transparente:', err)
+      }
+    },
+
+    async onTransparentEditorChange ({ markdown, toc }) {
+      this.transparentToc = toc
+      this.transparentChangeCount++
+      this.isAwaitingValidation = false
+      this.pageRawMarkdown = markdown
+      this.isSavingDraft = true
+
+      try {
+        const res = await saveTransparentDraft({
+          apollo: this.$apollo,
+          mutationSaveDraft: MUTATION_SAVE_DRAFT,
+          activeDraftId: this.activeDraftId,
+          pageId: this.pageId,
+          path: this.path,
+          locale: this.locale,
+          title: this.title,
+          description: this.description,
+          markdown,
+          tags: this.tagsArray || []
+        })
+        if (res.draftId) {
+          this.activeDraftId = res.draftId
+        }
+        this.lastSavedTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      } catch (err) {
+        console.error('Erro ao salvar rascunho transparente:', err)
+      } finally {
+        this.isSavingDraft = false
+      }
+    },
+
+    showDetranToast (msg, type = 'success') {
+      this.detranToastMessage = msg
+      this.detranToastType = type
+      this.detranToastVisible = true
+      if (this.detranToastTimer) clearTimeout(this.detranToastTimer)
+      this.detranToastTimer = setTimeout(() => {
+        this.detranToastVisible = false
+      }, 3800)
+    },
+
+    async onSubmitValidation ({ comment }) {
+      this.isSubmittingValidation = true
+      try {
+        if (this.pageRawMarkdown || !this.activeDraftId || this.isSavingDraft) {
+          const saved = await saveTransparentDraft({
+            apollo: this.$apollo,
+            mutationSaveDraft: MUTATION_SAVE_DRAFT,
+            activeDraftId: this.activeDraftId,
+            pageId: this.pageId,
+            path: this.path,
+            locale: this.locale,
+            title: this.title,
+            description: this.description,
+            markdown: this.pageRawMarkdown,
+            tags: this.tagsArray || []
+          })
+          if (saved && saved.draftId) {
+            this.activeDraftId = saved.draftId
+          }
+        }
+        const result = await submitTransparentValidation({
+          apollo: this.$apollo,
+          mutationWorkflowSubmit: MUTATION_WORKFLOW_SUBMIT,
+          activeDraftId: this.activeDraftId,
+          comment
+        })
+        if (result.succeeded) {
+          this.dialogValidation = false
+          this.transparentChangeCount = 0
+          this.isAwaitingValidation = true
+          this.$root.$emit('workflowRefreshTasks')
+          this.fetchWorkflowPendingCount()
+          this.showDetranToast('Alterações enviadas para o fluxo de validação! Acompanhe no ícone de Novidades.')
+        } else {
+          this.showDetranToast('Erro ao enviar para validação: ' + (result.message || 'Erro desconhecido'), 'error')
+        }
+      } catch (err) {
+        this.showDetranToast('Erro na requisição de validação: ' + err.message, 'error')
+      } finally {
+        this.isSubmittingValidation = false
+      }
+    },
+    /* eslint-enable vue/custom-event-name-casing */
+
+    markAllNotificationsRead () {
+      this.workflowPendingCount = 0
+    },
+
+    async fetchWorkflowPendingCount () {
+      try {
+        const result = await this.$apollo.query({
+          query: gql`
+            query {
+              workflow {
+                pendingTasks {
+                  id
+                  title
+                  path
+                  authorName
+                  createdAt
+                }
+              }
+            }
+          `,
+          fetchPolicy: 'network-only'
+        })
+        const tasks = _.get(result, 'data.workflow.pendingTasks', [])
+        this.workflowPendingCount = tasks.length
+        this.workflowPendingTasks = tasks
+      } catch (e) {}
     },
 
     newPage () {
@@ -1872,6 +2175,111 @@ export default {
 
     @include mobile { flex-direction: column; align-items: flex-start; }
   }
+}
+
+.detran-page-header__title-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.detran-notion-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  background-color: rgba(209, 250, 229, 0.85);
+  color: #1b6535;
+  border: 1px solid #a7f3d0;
+  line-height: 1.2;
+}
+
+.detran-sync-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.45rem 0.875rem;
+  background-color: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  border-radius: 0.75rem;
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  margin-right: 0.25rem;
+
+  &__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 9999px;
+    flex-shrink: 0;
+
+    &.is-emerald {
+      background-color: #10b981;
+    }
+
+    &.is-amber {
+      background-color: #f59e0b;
+    }
+  }
+
+  &__text {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #475569;
+    white-space: nowrap;
+  }
+
+  &__btn {
+    margin-left: 0.25rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 0.5rem;
+    border: none;
+    background-color: #f59e0b;
+    color: #ffffff;
+    font-size: 0.75rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+    transition: background-color 0.15s ease;
+    white-space: nowrap;
+
+    &:hover {
+      background-color: #d97706;
+    }
+  }
+
+  &__counter {
+    background-color: rgba(180, 83, 9, 0.6);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+}
+
+.detran-toast-feedback {
+  position: fixed;
+  bottom: 5rem;
+  right: 1.5rem;
+  z-index: 9999;
+  background-color: #0f172a;
+  color: #ffffff;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.25);
+  border: 1px solid #334155;
+  font-size: 0.75rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
 }
 
 .detran-page-title {

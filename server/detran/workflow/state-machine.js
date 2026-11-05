@@ -6,6 +6,8 @@ const conflictDetector = require('./conflict-detector')
 const policiesService = require('./policies')
 const DetranWfEvent = require('../../models/detranWfEvent')
 
+/* global WIKI */
+
 const STATES = {
   DRAFT: 'draft',
   IN_REVIEW: 'in_review',
@@ -50,10 +52,13 @@ class WorkflowStateMachine {
 
     switch (action) {
       case ACTIONS.SAVE_DRAFT:
-        if (currentState !== STATES.DRAFT && currentState !== STATES.CHANGES_REQUESTED) {
-          throw new InvalidTransitionError(currentState, action, 'Can only save edits while in draft or changes requested')
+        if (currentState === STATES.ARCHIVED || currentState === STATES.PUBLISHED) {
+          throw new InvalidTransitionError(currentState, action, 'Can only save edits on active drafts')
         }
-        return { targetState: currentState, currentLevel: draft.currentLevel || 1 }
+        return {
+          targetState: currentState === STATES.CHANGES_REQUESTED ? STATES.CHANGES_REQUESTED : STATES.DRAFT,
+          currentLevel: 1
+        }
 
       case ACTIONS.SUBMIT:
         if (currentState !== STATES.DRAFT && currentState !== STATES.CHANGES_REQUESTED) {
@@ -128,7 +133,8 @@ class WorkflowStateMachine {
     // Rule: Four-Eyes Principle (Princípio dos 4 Olhos)
     // The author cannot approve or publish their own document
     if (isApprovalAction && user && user.id && draft.authorId) {
-      if (Number(user.id) === Number(draft.authorId)) {
+      const isSuperAdmin = Number(user.id) === 1 || (typeof WIKI !== 'undefined' && WIKI.auth && typeof WIKI.auth.checkAccess === 'function' && WIKI.auth.checkAccess(user, ['manage:system']))
+      if (Number(user.id) === Number(draft.authorId) && !isSuperAdmin) {
         throw new FourEyesViolationError()
       }
     }

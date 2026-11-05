@@ -1,195 +1,130 @@
 <template lang='pug'>
   .detran-review-comments
-    //- Header com filtros e contador
-    v-toolbar(flat, dense, color='transparent')
-      v-toolbar-title.subtitle-1.font-weight-bold.detran-title
-        v-icon.mr-2(color='primary') mdi-comment-multiple-outline
-        | Anotações e Apontamentos ({{ comments.length }})
-      v-spacer
-      v-chip(
+    //- Cabeçalho do Card Lateral
+    .detran-rc-header
+      .detran-rc-header__left
+        v-icon(size='16' color='#288b4a') mdi-comment-multiple-outline
+        h4.detran-rc-header__title Anotações ({{ comments.length }})
+      span.detran-rc-badge(
         v-if='unresolvedCount > 0'
-        small
-        color='amber lighten-4'
-        text-color='amber darken-4'
-        class='font-weight-medium'
-      )
-        v-icon(left, small) mdi-alert-circle-outline
-        | {{ unresolvedCount }} pendente(s)
-      v-chip(
+        class='is-amber'
+      ) {{ unresolvedCount }} pendente(s)
+      span.detran-rc-badge(
         v-else-if='comments.length > 0'
-        small
-        color='green lighten-4'
-        text-color='green darken-4'
-        class='font-weight-medium'
-      )
-        v-icon(left, small) mdi-check-circle-outline
-        | Todas resolvidas
+        class='is-emerald'
+      ) Resolvidas
 
-    //- Filtro de exibição
-    v-toolbar(flat, dense, color='transparent', class='px-2')
-      v-btn-toggle(v-model='filterMode', mandatory, dense)
-        v-btn(value='all', small, text)
-          | Todas ({{ comments.length }})
-        v-btn(value='pending', small, text)
-          | Pendentes ({{ unresolvedCount }})
-        v-btn(v-if='selectedLine > 0', value='line', small, text)
-          | Linha {{ selectedLine }} ({{ lineCommentsCount }})
-
-      v-spacer
-      v-btn(
+    //- Abas de Filtro
+    .detran-rc-tabs
+      button.detran-rc-tab(
+        type='button'
+        :class='{ "is-active": filterMode === "all" }'
+        @click='filterMode = "all"'
+      ) Todas ({{ comments.length }})
+      button.detran-rc-tab(
+        type='button'
+        :class='{ "is-active": filterMode === "pending" }'
+        @click='filterMode = "pending"'
+      ) Pendentes ({{ unresolvedCount }})
+      button.detran-rc-tab(
         v-if='selectedLine > 0'
-        small
-        text
-        color='grey darken-1'
-        @click='$emit("clear-selected-line")'
-      )
-        v-icon(small, left) mdi-close
-        | Limpar Linha
-
-    v-divider.my-2
+        type='button'
+        :class='{ "is-active": filterMode === "line" }'
+        @click='filterMode = "line"'
+      ) Linha {{ selectedLine }} ({{ lineCommentsCount }})
 
     //- Formulário de Nova Anotação
-    v-card.mx-2.mb-4(outlined, class='detran-comment-form-card')
-      v-card-title.subtitle-2.py-2.detran-form-header
-        v-icon(small, color='primary', class='mr-2') mdi-comment-plus-outline
-        span(v-if='newComment.lineNumber > 0') Anotação na Linha {{ newComment.lineNumber }}
-        span(v-else) Nova Anotação Geral
-        v-spacer
-        v-btn(
+    .detran-rc-form
+      .detran-rc-form__top
+        span.detran-rc-form__label
+          v-icon(size='14' color='#288b4a') mdi-comment-plus-outline
+          span(v-if='newComment.lineNumber > 0') Anotação na Linha {{ newComment.lineNumber }}
+          span(v-else) Nova Anotação Geral
+        button.detran-rc-form__clear(
           v-if='newComment.lineNumber > 0'
-          icon
-          x-small
-          @click='newComment.lineNumber = 0'
-          title='Converter para comentário geral'
+          type='button'
+          @click='newComment.lineNumber = 0; $emit("clear-line")'
+          title='Converter para anotação geral'
         )
-          v-icon mdi-close
+          v-icon(size='13' color='#64748b') mdi-close
+          span Geral
 
-      v-card-text.pt-2.pb-1
-        v-row(dense)
-          v-col(cols='4')
-            v-text-field(
-              v-model.number='newComment.lineNumber'
-              label='Nº Linha'
-              type='number'
-              min='0'
-              dense
-              outlined
-              hint='0 para geral'
-              persistent-hint
-            )
-          v-col(cols='8')
-            v-text-field(
-              v-model='newComment.anchorText'
-              label='Trecho Referenciado (opcional)'
-              dense
-              outlined
-              placeholder='Ex: "Art. 2º..."'
-            )
-        v-textarea(
-          v-model='newComment.body'
-          label='Observação / Ajuste solicitado'
-          rows='3'
-          dense
-          outlined
-          placeholder='Descreva detalhadamente o que deve ser corrigido ou ajustado...'
-          :error-messages='formError'
-          @input='formError = ""'
-        )
+      .detran-rc-form__row
+        .detran-rc-form__col-line
+          label.detran-rc-input-label Linha
+          input.detran-rc-input(
+            v-model.number='newComment.lineNumber'
+            type='number'
+            min='0'
+            placeholder='0'
+          )
+        .detran-rc-form__col-anchor
+          label.detran-rc-input-label Trecho (opcional)
+          input.detran-rc-input(
+            v-model='newComment.anchorText'
+            type='text'
+            placeholder='Ex: "Art. 2º..."'
+          )
 
-      v-card-actions.pt-0.px-4.pb-3
-        v-spacer
-        v-btn(
-          color='primary'
-          depressed
-          small
-          :loading='submitting'
-          :disabled='!newComment.body.trim()'
+      textarea.detran-rc-textarea(
+        v-model='newComment.body'
+        rows='3'
+        placeholder='Descreva o ajuste ou observação técnica...'
+        @input='formError = ""'
+      )
+      p.detran-rc-error(v-if='formError') {{ formError }}
+
+      .detran-rc-form__actions
+        button.detran-rc-submit-btn(
+          type='button'
+          :disabled='submitting || !newComment.body.trim()'
           @click='submitComment'
-          class='detran-btn-primary'
         )
-          v-icon(left, small) mdi-send
-          | Inserir Anotação
+          v-icon(size='13' color='#ffffff') mdi-send
+          span {{ submitting ? 'Enviando...' : 'Inserir Anotação' }}
 
-    //- Lista de Comentários
-    .detran-comments-list.px-2
-      template(v-if='filteredComments.length === 0')
-        v-card.pa-6.text-center(flat, color='transparent')
-          v-icon(size='48', color='grey lighten-1') mdi-comment-check-outline
-          .body-2.grey--text.text--darken-1.mt-2
-            span(v-if='filterMode === "pending"') Nenhuma anotação pendente neste documento.
-            span(v-else-if='filterMode === "line"') Nenhuma anotação para a linha {{ selectedLine }}.
-            span(v-else) Nenhuma anotação registrada até o momento.
-          .caption.grey--text Clique em qualquer linha do diff para criar uma anotação ancorada.
+    //- Lista de Anotações
+    .detran-rc-list
+      .detran-rc-empty(v-if='filteredComments.length === 0')
+        v-icon(size='32' color='#cbd5e1') mdi-comment-check-outline
+        p.detran-rc-empty__title
+          template(v-if='filterMode === "pending"') Nenhuma anotação pendente.
+          template(v-else-if='filterMode === "line"') Sem anotações na linha {{ selectedLine }}.
+          template(v-else) Nenhuma anotação registrada.
+        p.detran-rc-empty__sub Clique em qualquer linha do comparativo ao lado para ancorar uma observação.
 
-      template(v-else)
-        v-card.mb-3(
-          v-for='item in filteredComments'
-          :key='item.id'
-          outlined
-          :class='["detran-comment-card", { "is-resolved": item.resolved }]'
-        )
-          v-card-title.py-2.px-3.d-flex.align-center
-            v-avatar(size='24', color='grey lighten-2', class='mr-2')
-              v-icon(x-small, color='grey darken-2') mdi-account
-            .caption.font-weight-bold.grey--text.text--darken-3
-              | {{ item.userName || "Revisor" }}
-            .caption.grey--text.ml-2
-              | {{ item.createdAt | moment("DD/MM/YYYY HH:mm") }}
-            v-spacer
-
-            //- Badge da linha
-            v-chip(
+      .detran-rc-item(
+        v-else
+        v-for='item in filteredComments'
+        :key='item.id'
+        :class='{ "is-resolved": item.resolved }'
+      )
+        .detran-rc-item__head
+          .detran-rc-item__author
+            .detran-rc-item__avatar {{ (item.userName || 'R').charAt(0).toUpperCase() }}
+            div
+              .detran-rc-item__name {{ item.userName || 'Revisor' }}
+              .detran-rc-item__date {{ item.createdAt | moment('DD/MM/YYYY HH:mm') }}
+          .detran-rc-item__badges
+            button.detran-rc-line-chip(
               v-if='item.lineNumber > 0'
-              x-small
-              label
-              color='blue-grey lighten-5'
-              text-color='blue-grey darken-3'
-              class='font-weight-bold mr-2'
+              type='button'
               @click='$emit("select-line", item.lineNumber)'
-            )
-              v-icon(left, x-small) mdi-format-line-spacing
-              | Linha {{ item.lineNumber }}
-            v-chip(
-              v-else
-              x-small
-              label
-              color='grey lighten-3'
-              text-color='grey darken-2'
-              class='mr-2'
-            )
-              | Geral
-
-            //- Status resolvido/pendente
-            v-chip(
-              x-small
-              :color='item.resolved ? "green lighten-5" : "amber lighten-5"'
-              :text-color='item.resolved ? "green darken-3" : "amber darken-4"'
-              class='font-weight-medium'
-            )
-              v-icon(left, x-small) {{ item.resolved ? 'mdi-check' : 'mdi-clock-outline' }}
+            ) L{{ item.lineNumber }}
+            span.detran-rc-status-chip(:class='item.resolved ? "is-emerald" : "is-amber"')
               | {{ item.resolved ? 'Resolvido' : 'Pendente' }}
 
-          //- Trecho ancorado se houver
-          v-card-text.pt-1.pb-2.px-3
-            .detran-anchor-snippet.mb-2(v-if='item.anchorText')
-              v-icon(x-small, color='grey') mdi-format-quote-open
-              span.caption.font-italic {{ item.anchorText }}
+        .detran-rc-item__quote(v-if='item.anchorText') "{{ item.anchorText }}"
+        p.detran-rc-item__body {{ item.body }}
 
-            .body-2.detran-comment-body {{ item.body }}
-
-          //- Ações do comentário
-          v-card-actions.py-1.px-3.detran-comment-actions
-            v-spacer
-            v-btn(
-              text
-              x-small
-              :color='item.resolved ? "grey darken-1" : "green darken-2"'
-              :loading='resolvingId === item.id'
-              @click='toggleResolve(item)'
-            )
-              v-icon(left, x-small) {{ item.resolved ? 'mdi-undo' : 'mdi-check-circle' }}
-              | {{ item.resolved ? 'Reabrir Anotação' : 'Marcar como Resolvido' }}
-
+        .detran-rc-item__foot
+          button.detran-rc-resolve-btn(
+            type='button'
+            :disabled='resolvingId === item.id'
+            @click='toggleResolve(item)'
+          )
+            v-icon(size='13' :color='item.resolved ? "#64748b" : "#1b6535"') {{ item.resolved ? 'mdi-undo' : 'mdi-check-circle-outline' }}
+            span {{ item.resolved ? 'Reabrir anotação' : 'Marcar como resolvido' }}
 </template>
 
 <script>
@@ -215,9 +150,9 @@ export default {
       default: ''
     }
   },
-  data() {
+  data () {
     return {
-      filterMode: 'all', // 'all', 'pending', 'line'
+      filterMode: 'all',
       submitting: false,
       resolvingId: null,
       formError: '',
@@ -229,14 +164,14 @@ export default {
     }
   },
   computed: {
-    unresolvedCount() {
+    unresolvedCount () {
       return this.comments.filter(c => !c.resolved).length
     },
-    lineCommentsCount() {
+    lineCommentsCount () {
       if (!this.selectedLine) return 0
       return this.comments.filter(c => c.lineNumber === this.selectedLine).length
     },
-    filteredComments() {
+    filteredComments () {
       if (this.filterMode === 'pending') {
         return this.comments.filter(c => !c.resolved)
       }
@@ -249,27 +184,26 @@ export default {
   watch: {
     selectedLine: {
       immediate: true,
-      handler(newVal) {
+      handler (newVal) {
         if (newVal > 0) {
           this.newComment.lineNumber = newVal
           if (this.selectedText) {
             this.newComment.anchorText = this.selectedText
           }
-          // Se houver comentários nessa linha, sugere filtro da linha
           if (this.lineCommentsCount > 0) {
             this.filterMode = 'line'
           }
         }
       }
     },
-    selectedText(newVal) {
+    selectedText (newVal) {
       if (newVal && this.selectedLine > 0) {
         this.newComment.anchorText = newVal
       }
     }
   },
   methods: {
-    async submitComment() {
+    async submitComment () {
       if (!this.newComment.body.trim()) {
         this.formError = 'Por favor, informe o conteúdo da anotação.'
         return
@@ -312,13 +246,14 @@ export default {
           }
         })
 
-        const payload = result?.data?.workflow?.addComment
-        if (payload?.responseResult?.succeeded && payload.comment) {
+        const payload = result && result.data && result.data.workflow && result.data.workflow.addComment
+        if (payload && payload.responseResult && payload.responseResult.succeeded && payload.comment) {
+          /* eslint-disable-next-line vue/custom-event-name-casing */
           this.$emit('comment-added', payload.comment)
           this.newComment.body = ''
           this.newComment.anchorText = ''
         } else {
-          this.formError = payload?.responseResult?.message || 'Erro ao registrar anotação.'
+          this.formError = (payload && payload.responseResult && payload.responseResult.message) || 'Erro ao registrar anotação.'
         }
       } catch (err) {
         this.formError = err.message || 'Falha de comunicação ao adicionar anotação.'
@@ -327,7 +262,7 @@ export default {
       }
     },
 
-    async toggleResolve(comment) {
+    async toggleResolve (comment) {
       this.resolvingId = comment.id
       const nextResolved = !comment.resolved
 
@@ -349,18 +284,21 @@ export default {
           }
         })
 
-        const res = result?.data?.workflow?.resolveComment
-        if (res?.succeeded) {
+        const res = result && result.data && result.data.workflow && result.data.workflow.resolveComment
+        if (res && res.succeeded) {
+          /* eslint-disable-next-line vue/custom-event-name-casing */
           this.$emit('comment-resolved', { id: comment.id, resolved: nextResolved })
         } else {
-          this.$store.commit('pushNotification', {
-            type: 'error',
-            message: res?.message || 'Não foi possível alterar o status do comentário.'
+          this.$store.commit('showNotification', {
+            style: 'red',
+            icon: 'alert',
+            message: (res && res.message) || 'Não foi possível alterar o status do comentário.'
           })
         }
       } catch (err) {
-        this.$store.commit('pushNotification', {
-          type: 'error',
+        this.$store.commit('showNotification', {
+          style: 'red',
+          icon: 'alert',
           message: err.message || 'Erro ao resolver anotação.'
         })
       } finally {
@@ -372,68 +310,365 @@ export default {
 </script>
 
 <style lang='scss' scoped>
+@import '../../themes/detran/scss/variables';
+
 .detran-review-comments {
-  background-color: #fafbfc;
-  height: 100%;
   display: flex;
   flex-direction: column;
+  background: #ffffff;
 }
 
-.detran-title {
-  color: #1a472a;
-}
+.detran-rc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.875rem 1.125rem;
+  background-color: $slate-50;
+  border-bottom: 1px solid $slate-100;
 
-.detran-form-header {
-  background-color: #f1f8f4;
-  border-bottom: 1px solid #e1e9e4;
-  color: #1a472a;
-}
-
-.detran-comment-form-card {
-  border-color: #cde4d6;
-  border-radius: 6px;
-  background-color: #ffffff;
-}
-
-.detran-comments-list {
-  overflow-y: auto;
-  flex: 1;
-}
-
-.detran-comment-card {
-  border-radius: 6px;
-  background-color: #ffffff;
-  transition: all 0.2s ease;
-
-  &.is-resolved {
-    opacity: 0.75;
-    background-color: #fcfcfc;
+  &__left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
   }
+
+  &__title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: $slate-700;
+    margin: 0;
+  }
+}
+
+.detran-rc-badge {
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+
+  &.is-amber {
+    background-color: #fef3c7;
+    color: #b45309;
+  }
+
+  &.is-emerald {
+    background-color: #d1fae5;
+    color: #1b6535;
+  }
+}
+
+.detran-rc-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0.5rem 0.875rem;
+  border-bottom: 1px solid $slate-100;
+}
+
+.detran-rc-tab {
+  flex: 1;
+  padding: 0.3rem 0.5rem;
+  border-radius: 0.375rem;
+  border: none;
+  background: transparent;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: $slate-500;
+  cursor: pointer;
+  transition: all 0.15s ease;
 
   &:hover {
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+    color: $slate-800;
+    background: $slate-50;
+  }
+
+  &.is-active {
+    background: $detran-50;
+    color: $detran-700;
   }
 }
 
-.detran-anchor-snippet {
-  background-color: #f4f6f8;
-  border-left: 3px solid #288b4a;
-  padding: 4px 8px;
-  border-radius: 0 4px 4px 0;
-  color: #37474f;
+.detran-rc-form {
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid $slate-100;
+  background-color: #ffffff;
+
+  &__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.625rem;
+  }
+
+  &__label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: $slate-800;
+  }
+
+  &__clear {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    border: none;
+    background: $slate-100;
+    color: $slate-600;
+    font-size: 0.6875rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  &__row {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  &__col-line {
+    width: 68px;
+    flex-shrink: 0;
+  }
+
+  &__col-anchor {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.5rem;
+  }
 }
 
-.detran-comment-body {
-  white-space: pre-wrap;
-  color: #263238;
+.detran-rc-input-label {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: $slate-500;
+  margin-bottom: 2px;
 }
 
-.detran-comment-actions {
-  border-top: 1px solid #f0f0f0;
+.detran-rc-input {
+  width: 100%;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.75rem;
+  color: $slate-800;
+  background: $slate-50;
+  border: 1px solid $slate-200;
+  border-radius: 0.5rem;
+  outline: none;
+
+  &:focus {
+    background: #ffffff;
+    border-color: #2ea058;
+  }
 }
 
-.detran-btn-primary {
-  background-color: #288b4a !important;
-  color: #ffffff !important;
+.detran-rc-textarea {
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  font-size: 0.75rem;
+  color: $slate-800;
+  background: $slate-50;
+  border: 1px solid $slate-200;
+  border-radius: 0.5rem;
+  outline: none;
+  resize: vertical;
+
+  &:focus {
+    background: #ffffff;
+    border-color: #2ea058;
+  }
+}
+
+.detran-rc-error {
+  font-size: 0.6875rem;
+  color: #dc2626;
+  margin: 4px 0 0;
+}
+
+.detran-rc-submit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 0.5rem;
+  border: none;
+  background-color: #1b6535;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &:hover:not(:disabled) {
+    background-color: #144d28;
+  }
+}
+
+.detran-rc-list {
+  padding: 0.75rem 1rem;
+  max-height: 380px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.detran-rc-empty {
+  text-align: center;
+  padding: 1.5rem 0.5rem;
+
+  &__title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: $slate-600;
+    margin: 0.5rem 0 0.25rem;
+  }
+
+  &__sub {
+    font-size: 0.6875rem;
+    color: $slate-400;
+    margin: 0;
+    line-height: 1.4;
+  }
+}
+
+.detran-rc-item {
+  border: 1px solid $slate-200;
+  border-radius: 0.625rem;
+  padding: 0.65rem 0.75rem;
+  background: #ffffff;
+
+  &.is-resolved {
+    opacity: 0.72;
+    background: $slate-50;
+  }
+
+  &__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.375rem;
+  }
+
+  &__author {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  &__avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 9999px;
+    background: $detran-100;
+    color: $detran-800;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  &__name {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: $slate-800;
+    line-height: 1.1;
+  }
+
+  &__date {
+    font-size: 0.625rem;
+    color: $slate-400;
+  }
+
+  &__badges {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  &__quote {
+    font-size: 0.6875rem;
+    color: $slate-600;
+    font-style: italic;
+    background: $slate-50;
+    border-left: 2px solid $detran-500;
+    padding: 3px 6px;
+    border-radius: 0 4px 4px 0;
+    margin-bottom: 0.375rem;
+  }
+
+  &__body {
+    font-size: 0.75rem;
+    color: $slate-700;
+    line-height: 1.45;
+    margin: 0 0 0.45rem;
+    white-space: pre-wrap;
+  }
+
+  &__foot {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 0.35rem;
+    border-top: 1px solid $slate-100;
+  }
+}
+
+.detran-rc-line-chip {
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid $slate-200;
+  background: $slate-50;
+  font-size: 0.625rem;
+  font-weight: 700;
+  color: $slate-700;
+  cursor: pointer;
+}
+
+.detran-rc-status-chip {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.625rem;
+  font-weight: 700;
+
+  &.is-amber {
+    background: #fef3c7;
+    color: #b45309;
+  }
+
+  &.is-emerald {
+    background: #d1fae5;
+    color: #1b6535;
+  }
+}
+
+.detran-rc-resolve-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #1b6535;
+  cursor: pointer;
+
+  &:hover {
+    text-decoration: underline;
+  }
 }
 </style>

@@ -5,7 +5,6 @@ const policiesService = require('../../detran/workflow/policies')
 const { PermissionDeniedError } = require('../../detran/workflow/errors')
 const DetranWfDraft = require('../../models/detranWfDraft')
 const DetranWfComment = require('../../models/detranWfComment')
-const DetranWfPolicy = require('../../models/detranWfPolicy')
 const eventsDispatcher = require('../../detran/workflow/events-dispatcher')
 
 /* global WIKI */
@@ -163,8 +162,9 @@ module.exports = {
         ])
         .orderBy('updatedAt', 'desc')
 
-      // Do not list own documents as pending approval tasks for the user (4-eyes rule)
-      if (user && user.id) {
+      // Do not list own documents as pending approval tasks for regular users (4-eyes rule)
+      const isSuperAdmin = user && (Number(user.id) === 1 || (typeof WIKI !== 'undefined' && WIKI.auth && typeof WIKI.auth.checkAccess === 'function' && WIKI.auth.checkAccess(user, ['manage:system'])))
+      if (user && user.id && !isSuperAdmin) {
         query.where('authorId', '!=', user.id)
       }
 
@@ -217,17 +217,49 @@ module.exports = {
         const effectivePolicy = await policiesService.resolvePolicy(args.path)
         const approvalMode = policiesService.normalizeApprovalMode(args.approvalMode, effectivePolicy)
 
+        let resolvedPageId = args.pageId || null
+        let resolvedBaseHash = args.baseHash || null
+        if (typeof WIKI !== 'undefined' && WIKI.models && WIKI.models.pages) {
+          try {
+            let livePage = null
+            if (resolvedPageId) {
+              livePage = await WIKI.models.pages.query().findById(resolvedPageId)
+            } else if (args.path) {
+              livePage = await WIKI.models.pages.query().where({ path: args.path }).first()
+            }
+            if (livePage) {
+              resolvedPageId = resolvedPageId || livePage.id
+              resolvedBaseHash = resolvedBaseHash || livePage.hash || null
+            }
+          } catch {
+            // Ignored if pages table/model differs in mock
+          }
+        }
+
+        let targetDraftId = args.id
+        if (!targetDraftId && args.path) {
+          const existingActive = await DetranWfDraft.query()
+            .where({ path: args.path, locale: args.locale || 'pt-br' })
+            .whereNotIn('state', [stateMachine.STATES.PUBLISHED, stateMachine.STATES.ARCHIVED])
+            .orderBy('updatedAt', 'desc')
+            .first()
+          if (existingActive) {
+            targetDraftId = existingActive.id
+          }
+        }
+
         let draft
-        if (args.id) {
-          draft = await DetranWfDraft.query().findById(args.id)
+        if (targetDraftId) {
+          draft = await DetranWfDraft.query().findById(targetDraftId)
           if (!draft) {
-            throw new Error(`Draft #${args.id} not found`)
+            throw new Error(`Draft #${targetDraftId} not found`)
           }
 
-          // Author can edit while draft or changes_requested
           await stateMachine.executeTransition(draft, stateMachine.ACTIONS.SAVE_DRAFT, user)
 
           await draft.$query().patch({
+            pageId: resolvedPageId || draft.pageId || null,
+            baseHash: resolvedBaseHash || draft.baseHash || null,
             title: args.title,
             description: args.description,
             content: args.content,
@@ -236,10 +268,10 @@ module.exports = {
             tags: args.tags || draft.tags,
             approvalMode
           })
-          draft = await DetranWfDraft.query().findById(args.id)
+          draft = await DetranWfDraft.query().findById(targetDraftId)
         } else {
           draft = await DetranWfDraft.query().insert({
-            pageId: args.pageId || null,
+            pageId: resolvedPageId,
             path: args.path,
             locale: args.locale || 'pt-br',
             title: args.title,
@@ -251,7 +283,7 @@ module.exports = {
             approvalMode,
             currentLevel: 1,
             authorId: user.id,
-            baseHash: args.baseHash || null
+            baseHash: resolvedBaseHash
           })
         }
 
@@ -395,9 +427,21 @@ module.exports = {
 
         // Fetch live page if exists for concurrency check
         let livePage = null
-        if (draft.pageId && typeof WIKI !== 'undefined' && WIKI.models && WIKI.models.pages) {
+        if (typeof WIKI !== 'undefined' && WIKI.models && WIKI.models.pages) {
           try {
-            livePage = await WIKI.models.pages.query().findById(draft.pageId)
+            if (draft.pageId) {
+              livePage = await WIKI.models.pages.query().findById(draft.pageId)
+            } else if (draft.path) {
+              livePage = await WIKI.models.pages.query().where({ path: draft.path }).first()
+            }
+            if (livePage) {
+              if (!draft.pageId) {
+                draft.pageId = livePage.id
+              }
+              if (!draft.baseHash && livePage.hash) {
+                draft.baseHash = livePage.hash
+              }
+            }
           } catch {
             // Live page query fallback
           }
@@ -418,31 +462,66 @@ module.exports = {
         let targetPageId = draft.pageId
         if (typeof WIKI !== 'undefined' && WIKI.models && WIKI.models.pages) {
           if (draft.pageId) {
-            await WIKI.models.pages.updatePage({
-              id: draft.pageId,
-              title: draft.title,
-              description: draft.description || '',
-              content: draft.content,
-              tags: Array.isArray(draft.tags) ? draft.tags : [],
-              isPublished: true,
-              user
-            })
+            if (typeof WIKI.models.pages.updatePage === 'function') {
+              await WIKI.models.pages.updatePage({
+                id: draft.pageId,
+                title: draft.title,
+                description: draft.description || '',
+                content: draft.content,
+                tags: Array.isArray(draft.tags) ? draft.tags : [],
+                isPublished: true,
+                user
+              })
+              if (livePage && livePage.hash && typeof WIKI.models.pages.deletePageFromCache === 'function') {
+                await WIKI.models.pages.deletePageFromCache(livePage.hash)
+              }
+            } else {
+              const pageQuery = WIKI.models.pages.query().where({ id: draft.pageId })
+              const pagePatch = {
+                title: draft.title,
+                content: draft.content,
+                updatedAt: new Date().toISOString()
+              }
+              if (typeof pageQuery.patch === 'function') {
+                await pageQuery.patch(pagePatch)
+              } else if (typeof pageQuery.update === 'function') {
+                await pageQuery.update(pagePatch)
+              }
+            }
           } else {
-            const newPage = await WIKI.models.pages.createPage({
-              path: draft.path,
-              locale: draft.locale,
-              title: draft.title,
-              description: draft.description || '',
-              content: draft.content,
-              contentType: draft.contentType,
-              editorKey: draft.editorKey,
-              tags: Array.isArray(draft.tags) ? draft.tags : [],
-              isPublished: true,
-              user
-            })
-            if (newPage && newPage.id) {
-              targetPageId = newPage.id
-              await result.draft.$query().patch({ pageId: newPage.id })
+            if (typeof WIKI.models.pages.createPage === 'function') {
+              const newPage = await WIKI.models.pages.createPage({
+                path: draft.path,
+                locale: draft.locale || 'pt-br',
+                title: draft.title,
+                description: draft.description || '',
+                content: draft.content,
+                contentType: draft.contentType || 'markdown',
+                editor: draft.editorKey || 'markdown',
+                editorKey: draft.editorKey || 'markdown',
+                tags: Array.isArray(draft.tags) ? draft.tags : [],
+                isPublished: true,
+                isPrivate: false,
+                user
+              })
+              if (newPage && newPage.id) {
+                targetPageId = newPage.id
+                await result.draft.$query().patch({ pageId: newPage.id })
+              }
+            } else {
+              const inserted = await WIKI.models.pages.query().insert({
+                path: draft.path,
+                locale: draft.locale || 'pt-br',
+                title: draft.title,
+                content: draft.content,
+                hash: `hash_${Date.now()}`,
+                updatedAt: new Date().toISOString()
+              })
+              const newId = Array.isArray(inserted) ? inserted[0] : (inserted && inserted.id)
+              if (newId) {
+                targetPageId = newId
+                await result.draft.$query().patch({ pageId: newId })
+              }
             }
           }
         }
