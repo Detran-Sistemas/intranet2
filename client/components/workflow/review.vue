@@ -5,218 +5,190 @@
     v-progress-linear.mb-4.rounded(
       v-if='loading'
       indeterminate
-      color='#288b4a'
+      color='#15803d'
       height='3'
     )
 
     //- ========================================================================
-    //- CABEÇALHO DA PÁGINA (Breadcrumb + Título + Pill de Status + Ações)
-    //- Segue exatamente o padrão .detran-page-header de page.vue
+    //- 2.1 HEADER SUPERIOR + TOOLBAR ESTILO GOOGLE DOCS
     //- ========================================================================
-    .detran-page-header
-      nav.detran-breadcrumb(aria-label='Trilha de navegação')
-        a.detran-breadcrumb__home(href='/' title='Início')
-          v-icon(size='14' color='#94a3b8') mdi-home
-        span.detran-breadcrumb__sep(aria-hidden='true') /
-        router-link.detran-breadcrumb__item(to='/') Governança &amp; Workflow
-        span.detran-breadcrumb__sep(aria-hidden='true') /
-        span.detran-breadcrumb__item.is-current {{ 'Revisão #' + (draft.id || draftId) }}
+    header.detran-gdocs-header
+      .detran-gdocs-header__top
+        nav.detran-breadcrumb(aria-label='Trilha de navegação')
+          a.detran-breadcrumb__home(href='/' title='Início')
+            v-icon(size='14' color='#94a3b8') mdi-home
+          span.detran-breadcrumb__sep(aria-hidden='true') /
+          router-link.detran-breadcrumb__item(to='/') Governança &amp; Workflow
+          span.detran-breadcrumb__sep(aria-hidden='true') /
+          span.detran-breadcrumb__item.is-current {{ 'Revisão #' + (draft.id || draftId) }}
 
-      .detran-page-header__row
-        .detran-page-header__title-group
-          h2.detran-page-title {{ draft.title || 'Revisão de Documento' }}
-          span.detran-review-status-pill(:class='stateBadge.pillClass')
-            v-icon(size='13' :color='stateBadge.iconColor') {{ stateBadge.icon }}
-            span {{ stateBadge.label }}
+        .detran-gdocs-header__row
+          .detran-gdocs-header__title-group
+            h1.detran-page-title {{ draft.title || 'Revisão de Documento' }}
+            span.detran-review-status-pill(:class='stateBadge.pillClass')
+              v-icon(size='14' :color='stateBadge.iconColor') {{ stateBadge.icon }}
+              span {{ stateBadge.label }}
 
-        .detran-review-header-btns
-          button.detran-back-btn(
-            type='button'
-            @click='goBack'
-            title='Voltar para a Central de Tarefas'
-          )
-            v-icon(size='16') mdi-arrow-left
-            span Voltar
-          a.detran-edit-inline-btn(
-            v-if='draft.path'
-            :href='"/" + (draft.locale || "pt-br") + "/" + draft.path'
-            title='Abrir página no portal'
-          )
-            v-icon(size='14') mdi-open-in-new
-            span Ver Página no Portal
-
-    //- ========================================================================
-    //- CORPO EM 2 COLUNAS (.detran-page-body): Artigo Principal + Coluna Lateral
-    //- ========================================================================
-    .detran-page-body
-
-      //- COLUNA PRINCIPAL: Card .detran-article
-      article.detran-article.detran-review-article
-
-        //- Cabeçalho de Metadados do Artigo (padrão idêntico ao page.vue)
-        header.detran-article__header
-          .detran-article__meta-left
-            .detran-article__icon(aria-hidden='true')
-              v-icon(color='#288b4a' size='22') mdi-file-compare
-            .detran-article__meta
-              p.detran-article__category
-                | Homologação Editorial • {{ draft.approvalMode === '2_levels' ? 'Fluxo em 2 Níveis (Revisão Técnica + Homologação)' : 'Fluxo de Revisão Direta (1 Nível)' }}
-              .detran-article__meta-row
-                span.detran-article__meta-item
-                  v-icon(size='12' color='#94a3b8') mdi-folder-outline
-                  | /{{ draft.locale }}/{{ draft.path }}
-                span.detran-article__meta-sep(aria-hidden='true') •
-                span.detran-article__meta-item
-                  v-icon(size='12' color='#94a3b8') mdi-account-outline
-                  | Autor: {{ draft.authorName || 'Servidor' }}
-                span.detran-article__meta-sep(aria-hidden='true') •
-                span.detran-article__meta-item
-                  v-icon(size='12' color='#94a3b8') mdi-history
-                  | Submetido em {{ draft.updatedAt | moment('DD/MM/YYYY [às] HH:mm') }}
-              .detran-article__tags
-                span.detran-tag {{ draft.pageId ? '#DOCUMENTO-' + draft.pageId : '#NOVA-PÁGINA' }}
-                span.detran-tag(
-                  v-for='tag in (draft.tags || [])'
-                  :key='tag'
-                ) {{ '#' + tag }}
-
-          //- Seletor de Modo de Visualização (Lado a Lado / Linha a Linha)
-          .detran-article__actions
-            .detran-diff-switcher(role='group' aria-label='Modo de comparação')
-              button.detran-diff-switcher__btn(
-                type='button'
-                :class='{ "is-active": viewMode === "side-by-side" }'
-                @click='viewMode = "side-by-side"'
-              )
-                v-icon(size='14') mdi-view-column-outline
-                span Lado a Lado
-              button.detran-diff-switcher__btn(
-                type='button'
-                :class='{ "is-active": viewMode === "line-by-line" }'
-                @click='viewMode = "line-by-line"'
-              )
-                v-icon(size='14') mdi-view-sequential-outline
-                span Linha a Linha
-
-        //- Callout com o Resumo de Alterações enviado pelo Autor (se houver)
-        .detran-author-summary-callout(v-if='latestSubmitComment')
-          .detran-author-summary-callout__icon
-            v-icon(size='18' color='#d97706') mdi-file-document-edit-outline
-          .detran-author-summary-callout__body
-            .detran-author-summary-callout__title Resumo das alterações informado pelo autor
-            .detran-author-summary-callout__text "{{ latestSubmitComment }}"
-
-        //- Card do Comparativo de Alterações (Diff)
-        .detran-diff-box
-          .detran-diff-box__bar
-            .detran-diff-box__legend
-              span.detran-diff-box__pill.is-removed
-                v-icon(size='12' color='#dc2626') mdi-minus-circle-outline
-                span Versão no Ar
-              v-icon(size='14' color='#94a3b8') mdi-arrow-right
-              span.detran-diff-box__pill.is-added
-                v-icon(size='12' color='#16a34a') mdi-plus-circle-outline
-                span Rascunho Proposto
-            .detran-diff-box__hint
-              v-icon(size='13' color='#64748b') mdi-cursor-default-click-outline
-              span Clique no número de uma linha para registrar uma anotação
-
-          //- Sem diferenças
-          .detran-diff-empty(v-if='!loading && !hasDifferences')
-            .detran-diff-empty__icon
-              v-icon(size='32' color='#288b4a') mdi-check-decagram-outline
-            h4.detran-diff-empty__title Conteúdo idêntico à versão publicada
-            p.detran-diff-empty__subtitle Não foram detectadas diferenças textuais entre o rascunho atual e a página no ar.
-
-          //- Tabela Diff2Html
-          .detran-diff-html-wrapper(
-            v-else
-            v-html='diffHTML'
-            @click='handleDiffClick'
-          )
-
-        //- Barra Institucional de Decisão e Homologação (Rodapé do Card)
-        .detran-review-decision-bar
-          .detran-review-decision-bar__status
-            .detran-review-decision-bar__icon(:class='unresolvedCommentsCount > 0 ? "is-amber" : "is-emerald"')
-              v-icon(
-                size='18'
-                :color='unresolvedCommentsCount > 0 ? "#d97706" : "#1b6535"'
-              ) {{ unresolvedCommentsCount > 0 ? 'mdi-alert-circle-outline' : 'mdi-shield-check-outline' }}
-            .detran-review-decision-bar__info
-              .detran-review-decision-bar__headline
-                template(v-if='draft.state === "published"') Documento Homologado e Publicado Oficialmente
-                template(v-else-if='unresolvedCommentsCount > 0') {{ unresolvedCommentsCount }} anotação(ões) pendente(s) de resolução
-                template(v-else) Nenhuma pendência em aberto — Documento apto para homologação
-              .detran-review-decision-bar__sub {{ actionsHelper.statusDescription }}
-
-          .detran-review-decision-bar__actions
-            //- Solicitar Ajustes
-            button.detran-wf-btn.detran-wf-btn--warning(
-              v-if='actionsHelper.canRequestChanges'
+          .detran-review-header-btns
+            button.detran-back-btn(
               type='button'
-              :disabled='submittingAction'
-              @click='openActionDialog("requestChanges")'
+              title='Voltar para a Central de Tarefas'
+              @click='goBack'
             )
-              v-icon(size='15') mdi-undo-variant
-              span Solicitar Ajustes
-
-            //- Aprovar Nível 1 (Revisão Técnica)
-            button.detran-wf-btn.detran-wf-btn--primary(
-              v-if='actionsHelper.canApproveStep'
-              type='button'
-              :disabled='submittingAction'
-              @click='openActionDialog("approveStep")'
-            )
-              v-icon(size='15') mdi-check-all
-              span {{ actionsHelper.labelApproveStep }}
-
-            //- Homologar e Publicar
-            button.detran-wf-btn.detran-wf-btn--publish(
-              v-if='actionsHelper.canPublish'
-              type='button'
-              :disabled='submittingAction'
-              @click='openActionDialog("publish")'
-            )
-              v-icon(size='15') mdi-cloud-upload-outline
-              span {{ actionsHelper.labelPublish }}
-
-            //- Revalidar Vigência (+12m)
-            button.detran-wf-btn.detran-wf-btn--teal(
-              v-if='actionsHelper.canRevalidate'
-              type='button'
-              :disabled='submittingAction'
-              @click='openActionDialog("revalidate")'
-            )
-              v-icon(size='15') mdi-autorenew
-              span {{ actionsHelper.labelRevalidate || 'Revalidar Vigência (+12m)' }}
-
-            //- Ver Página Publicada (quando já publicado)
-            a.detran-wf-btn.detran-wf-btn--publish(
-              v-if='draft.state === "published" && draft.path'
+              v-icon(size='16') mdi-arrow-left
+              span Voltar
+            a.detran-portal-link-btn(
+              v-if='draft.path'
               :href='"/" + (draft.locale || "pt-br") + "/" + draft.path'
+              title='Abrir página no portal'
             )
-              v-icon(size='15') mdi-check-circle-outline
-              span Abrir Página Publicada
+              v-icon(size='15') mdi-open-in-new
+              span Ver Página no Portal
 
-      //- COLUNA LATERAL DIREITA (.detran-review-aside): Anotações + Histórico
-      aside.detran-review-aside(aria-label='Anotações e histórico da revisão')
-        .detran-review-side-card
-          review-comments(
-            :draft-id='draftId'
-            :comments='draft.comments || []'
-            :selected-line='selectedLine'
-            :selected-text='selectedText'
-            @select-line='onSelectLine'
-            @clear-line='selectedLine = 0; selectedText = ""'
-            @comment-added='onCommentAdded'
-            @comment-resolved='onCommentResolved'
+      //- Barra de Ferramentas e Metadados Compactos (Estilo Google Docs)
+      .detran-gdocs-toolbar
+        .detran-gdocs-toolbar__meta
+          .detran-gdocs-toolbar__author
+            .detran-gdocs-toolbar__avatar {{ authorInitials }}
+            span
+              | Enviado por #[strong {{ draft.authorName || 'Servidor' }}]
+              template(v-if='draft.updatedAt')  em {{ draft.updatedAt | moment('DD/MM/YYYY [às] HH:mm') }}
+          span.detran-gdocs-toolbar__divider |
+          span.detran-gdocs-toolbar__path
+            v-icon(size='13' color='#64748b') mdi-folder-outline
+            span /{{ draft.locale || 'pt-br' }}/{{ draft.path }}
+          template(v-if='latestSubmitComment')
+            span.detran-gdocs-toolbar__divider |
+            .detran-gdocs-toolbar__author-note
+              v-icon(size='14' color='#d97706') mdi-message-alert-outline
+              span Resumo das alterações informado pelo autor: #[em "{{ latestSubmitComment }}"]
+
+        .detran-gdocs-toolbar__controls
+          span.detran-gdocs-toolbar__hint
+            v-icon(size='14' color='#64748b') mdi-cursor-text
+            span Selecione qualquer trecho do texto com o mouse para adicionar um comentário ou sugerir alteração
+
+          .detran-mode-switcher(role='group' aria-label='Modo de visualização da folha')
+            button.detran-mode-switcher__btn(
+              type='button'
+              :class='{ "is-active": docMode === "suggest" }'
+              @click='setDocMode("suggest")'
+            )
+              v-icon(size='14' :color='docMode === "suggest" ? "#16a34a" : "#64748b"') mdi-pencil-outline
+              span Modo Sugestões (Diff Visual)
+            button.detran-mode-switcher__btn(
+              type='button'
+              :class='{ "is-active": docMode === "clean" }'
+              @click='setDocMode("clean")'
+            )
+              v-icon(size='14' :color='docMode === "clean" ? "#16a34a" : "#64748b"') mdi-eye-outline
+              span Prévia Final Limpa
+
+    //- ========================================================================
+    //- BANNER EXPLICATIVO RÁPIDO PARA REVISOR LEIGO (Descartável)
+    //- ========================================================================
+    .detran-onboarding-banner(v-if='showOnboarding')
+      .detran-onboarding-banner__left
+        span.detran-onboarding-banner__title
+          v-icon(size='16' color='#16a34a') mdi-sparkles
+          span Como revisar:
+        span.detran-onboarding-banner__legend
+          span.detran-onboarding-banner__swatch.is-add
+          span Texto novo sugerido
+        span.detran-onboarding-banner__legend
+          span.detran-onboarding-banner__swatch.is-del
+          span.is-strike Texto removido
+        span.detran-onboarding-banner__legend
+          span.detran-onboarding-banner__swatch.is-com
+          span Trecho com comentário
+        span.detran-onboarding-banner__tip — Use os cartões à direita para aceitar, recusar ou comentar!
+      button.detran-onboarding-banner__close(
+        type='button'
+        title='Fechar dica'
+        @click='showOnboarding = false'
+      )
+        v-icon(size='16' color='#94a3b8') mdi-close
+
+    //- Alerta de bloqueio de URLs blob: locais (Seção 2.2 e 3.3.4)
+    .detran-blob-banner(v-if='blobInspection.hasBlobUrls')
+      .detran-blob-banner__left
+        v-icon(size='18' color='#b91c1c') mdi-image-broken-variant
+        div
+          strong Atenção: Imagem com URL local temporária (blob:) detectada no rascunho!
+          p URLs iniciadas por "blob:http://..." expiram quando o navegador do autor é fechado. Remova ou substitua a imagem antes de homologar.
+      button.detran-blob-banner__btn(
+        type='button'
+        @click='sanitizeDraftBlobUrls'
+      ) Higienizar URLs blob:
+
+    //- ========================================================================
+    //- 2.1 LAYOUT GERAL EM 2 COLUNAS (70% Folha A4 Esquerda + 30% Lateral Sticky)
+    //- ========================================================================
+    .detran-gdocs-workspace
+
+      //- COLUNA PRINCIPAL (ESQUERDA - 70%): Canvas do Documento (Folha A4)
+      .detran-gdocs-main
+
+        //- 2.3 POPOVER FLUTUANTE DE SELEÇÃO COM O MOUSE (Comentar trecho / Sugerir redação)
+        .detran-selection-popover(
+          v-if='selectionPopover.visible'
+          :style='{ top: selectionPopover.top + "px", left: selectionPopover.left + "px" }'
+          @mousedown.stop
+        )
+          button.detran-selection-popover__btn(
+            type='button'
+            @click='triggerSelectionAction("comment")'
           )
+            span 💬 Comentar trecho
+          span.detran-selection-popover__sep |
+          button.detran-selection-popover__btn.is-suggest(
+            type='button'
+            @click='triggerSelectionAction("redaction")'
+          )
+            span ✏️ Sugerir redação
+
+        //- Folha de Papel A4 (Container de Leitura WYSIWYG — Zero Markdown cru!)
+        article#documentPaper.doc-paper(
+          :class='{ "clean-mode": docMode === "clean" }'
+        )
+          //- Tags de Categoria da Página no Topo da Folha
+          .detran-doc-tags.select-none
+            span.detran-doc-tag {{ draft.pageId ? '#DOCUMENTO-' + draft.pageId : '#NOVA-PÁGINA' }}
+            span.detran-doc-tag(
+              v-for='tag in (draft.tags || [])'
+              :key='tag'
+            ) {{ '#' + String(tag).toUpperCase() }}
+
+          //- Conteúdo Editorial Formatado (HTML rico + marcações visuais de diff)
+          #docContent.detran-doc-content(
+            ref='docContent'
+            v-html='visualDiff.html'
+            @mouseup='onDocMouseUp'
+            @click='onDocContentClick'
+          )
+
+      //- COLUNA LATERAL (DIREITA - 30%, STICKY): Painel de Anotações e Sugestões
+      aside.detran-gdocs-aside(aria-label='Painel de anotações e sugestões')
+        review-comments(
+          ref='reviewCommentsPanel'
+          :draft-id='draftId'
+          :comments='draft.comments || []'
+          :suggestions='visualDiff.suggestions || []'
+          :suggestion-decisions='suggestionDecisions'
+          :active-item-id='activeItemId'
+          :selection-payload='activeSelectionPayload'
+          @focus-item='onFocusItem'
+          @clear-selection='activeSelectionPayload = null'
+          @suggestion-decision='onSuggestionDecision'
+          @redaction-decision='onRedactionDecision'
+          @comment-added='onCommentAdded'
+          @comment-resolved='onCommentResolved'
+        )
 
         //- Card de Histórico de Tramitação
         .detran-review-side-card.mt-4(v-if='draft.events && draft.events.length > 0')
           .detran-side-history__header
-            v-icon(size='16' color='#288b4a') mdi-timeline-clock-outline
+            v-icon(size='16' color='#15803d') mdi-timeline-clock-outline
             h4.detran-side-history__title Histórico de Tramitação
           .detran-side-history__list
             .detran-side-history__item(
@@ -231,7 +203,65 @@
                 .detran-side-history__comment(v-if='evt.comment') "{{ evt.comment }}"
 
     //- ========================================================================
-    //- MODAL INSTITUCIONAL DE CONFIRMAÇÃO (Padrão idêntico ao validation-modal)
+    //- 2.4 BARRA DE DECISÃO FLUTUANTE INFERIOR (FLOATING ACTION BAR)
+    //- ========================================================================
+    .detran-floating-action-bar
+      .detran-floating-action-bar__card
+        //- Indicador de Progresso em Tempo Real
+        .detran-floating-action-bar__status
+          .detran-floating-action-bar__icon(:class='pendingReviewCount > 0 ? "is-amber" : "is-emerald"')
+            v-icon(
+              size='20'
+              :color='pendingReviewCount > 0 ? "#d97706" : "#15803d"'
+            ) {{ pendingReviewCount > 0 ? 'mdi-alert-circle-outline' : 'mdi-check-decagram' }}
+          .detran-floating-action-bar__text
+            .detran-floating-action-bar__title
+              template(v-if='draft.state === "published"') ✓ Documento Homologado e Publicado no Portal
+              template(v-else-if='pendingReviewCount > 0') Faltam {{ pendingReviewCount }} {{ pendingReviewCount === 1 ? 'revisão pendente' : 'revisões pendentes' }}
+              template(v-else) ✓ Todas as alterações revisadas
+            .detran-floating-action-bar__sub
+              template(v-if='draft.state === "published"') {{ actionsHelper.statusDescription }}
+              template(v-else-if='pendingReviewCount > 0') {{ pendingReviewCount }} {{ pendingReviewCount === 1 ? 'item aguardando' : 'itens aguardando' }} análise ou decisão nos cartões laterais
+              template(v-else) Nenhuma pendência restante — pronto para publicar no portal
+
+        //- Botões de Decisão (Devolver com Ajustes / Aprovar e Publicar)
+        .detran-floating-action-bar__actions
+          template(v-if='draft.state !== "published"')
+            button.detran-fab-btn.detran-fab-btn--secondary(
+              type='button'
+              :disabled='submittingAction'
+              @click='openActionDialog("requestChanges")'
+            )
+              v-icon(size='16' color='#92400e') mdi-undo-variant
+              span Devolver com Ajustes
+
+            button.detran-fab-btn.detran-fab-btn--primary(
+              v-if='actionsHelper.canApproveStep && !actionsHelper.canPublish'
+              type='button'
+              :disabled='submittingAction'
+              @click='openActionDialog("approveStep")'
+            )
+              v-icon(size='16' color='#ffffff') mdi-check-all
+              span Aprovar Revisão Técnica
+
+            button.detran-fab-btn.detran-fab-btn--primary(
+              v-else
+              type='button'
+              :disabled='submittingAction'
+              @click='openActionDialog("publish")'
+            )
+              v-icon(size='17' color='#ffffff') mdi-check-circle-outline
+              span Aprovar e Publicar
+
+          a.detran-fab-btn.detran-fab-btn--primary(
+            v-else-if='draft.path'
+            :href='"/" + (draft.locale || "pt-br") + "/" + draft.path'
+          )
+            v-icon(size='16' color='#ffffff') mdi-open-in-new
+            span Abrir Página Publicada
+
+    //- ========================================================================
+    //- MODAL INSTITUCIONAL DE CONFIRMAÇÃO DE DECISÃO
     //- ========================================================================
     v-dialog(
       v-model='actionDialog.visible'
@@ -258,13 +288,13 @@
           .detran-action-modal__callout(:class='actionDialog.type === "requestChanges" ? "is-amber" : "is-emerald"')
             v-icon.mt-0.mr-2(
               size='18'
-              :color='actionDialog.type === "requestChanges" ? "#d97706" : "#1b6535"'
+              :color='actionDialog.type === "requestChanges" ? "#d97706" : "#15803d"'
             ) {{ actionDialog.type === 'requestChanges' ? 'mdi-alert-circle-outline' : 'mdi-check-decagram-outline' }}
             div
               p.detran-action-modal__callout-text {{ actionDialog.description }}
               p.detran-action-modal__callout-warn(
-                v-if='actionDialog.type === "publish" && unresolvedCommentsCount > 0'
-              ) Atenção: existem {{ unresolvedCommentsCount }} anotação(ões) ainda pendente(s) neste documento.
+                v-if='actionDialog.type === "publish" && pendingReviewCount > 0'
+              ) Nota: {{ pendingReviewCount }} sugestão(ões)/anotação(ões) ainda não marcadas serão consolidadas automaticamente.
 
           div
             label.detran-action-modal__label {{ actionDialog.commentLabel }}
@@ -300,21 +330,20 @@
               color='#ffffff'
             )
             v-icon(v-else size='15' color='#ffffff') mdi-check
-            span Confirmar e Prosseguir
+            span {{ actionDialog.type === 'requestChanges' ? 'Enviar para Ajustes' : 'Confirmar e Publicar' }}
 </template>
 
 <script>
-/* unused diff2html */
-/* unused diff */
-/* unused lodash */
 import gql from 'graphql-tag'
+import moment from 'moment'
 import ReviewComments from './review-comments.vue'
 import {
-  generateDiffPatch,
-  renderDiffHtml,
   getAvailableReviewActions,
-  extractLineFromDiffElement
+  buildVisualDiffDocument,
+  createTextQuoteSelectorFromText,
+  applySuggestionDecisionToMarkdown
 } from '../../store/detran-workflow-review'
+import { inspectMarkdownForBlobUrls } from '../../themes/default/components/transparent-editor/utils/smart-paste'
 
 export default {
   name: 'DetranWorkflowReview',
@@ -331,10 +360,20 @@ export default {
     return {
       loading: true,
       submittingAction: false,
-      viewMode: 'side-by-side',
-      drawerComments: true,
-      selectedLine: 0,
-      selectedText: '',
+      docMode: 'suggest',
+      showOnboarding: true,
+      activeItemId: null,
+      suggestionDecisions: {},
+      draftModifiedByReview: false,
+      selectionPopover: {
+        visible: false,
+        top: 0,
+        left: 0,
+        exact: '',
+        prefix: '',
+        suffix: ''
+      },
+      activeSelectionPayload: null,
       draft: {
         id: 0,
         pageId: null,
@@ -343,6 +382,8 @@ export default {
         title: '',
         description: '',
         content: '',
+        contentType: 'markdown',
+        editorKey: 'markdown',
         tags: [],
         state: 'in_review',
         approvalMode: '1_level',
@@ -365,7 +406,7 @@ export default {
         commentPlaceholder: '',
         comment: '',
         icon: 'mdi-check',
-        headerClass: 'detran-header-success',
+        headerClass: 'is-emerald',
         confirmColor: 'success',
         error: ''
       }
@@ -377,8 +418,13 @@ export default {
       return parseInt(this.id || paramId, 10) || 0
     },
 
-    unresolvedCommentsCount () {
-      return (this.draft.comments || []).filter(c => !c.resolved).length
+    authorInitials () {
+      const name = String(this.draft.authorName || 'Autor').trim()
+      const parts = name.split(/\s+/).filter(Boolean)
+      if (parts.length >= 2) {
+        return (parts[0][0] + parts[1][0]).toUpperCase()
+      }
+      return name.slice(0, 2).toUpperCase()
     },
 
     latestSubmitComment () {
@@ -387,29 +433,45 @@ export default {
       return sub ? sub.comment : ''
     },
 
-    diffPatch () {
-      return generateDiffPatch({
-        path: this.draft.path || 'documento',
+    blobInspection () {
+      return inspectMarkdownForBlobUrls(this.draft.content || '')
+    },
+
+    visualDiff () {
+      const formattedTime = this.draft.updatedAt ?
+        moment(this.draft.updatedAt).format('DD/MM [às] HH:mm') :
+        'Recente'
+      return buildVisualDiffDocument({
         originalContent: this.livePage.content || '',
-        draftContent: this.draft.content || ''
+        draftContent: this.draft.content || '',
+        comments: this.draft.comments || [],
+        authorName: this.draft.authorName || 'Autor',
+        updatedAt: formattedTime,
+        decisions: this.suggestionDecisions
       })
     },
 
-    diffHTML () {
-      return renderDiffHtml({
-        patch: this.diffPatch,
-        viewMode: this.viewMode
-      })
+    pendingSuggestionsCount () {
+      return (this.visualDiff.suggestions || []).filter(s => {
+        const dec = this.suggestionDecisions[s.id] || s.status || 'pending'
+        return dec === 'pending'
+      }).length
     },
 
-    hasDifferences () {
-      const orig = (this.livePage.content || '').trim()
-      const draft = (this.draft.content || '').trim()
-      return orig !== draft
+    unresolvedCommentsCount () {
+      return (this.draft.comments || []).filter(c => !c.resolved).length
+    },
+
+    pendingReviewCount () {
+      return this.pendingSuggestionsCount + this.unresolvedCommentsCount
     },
 
     actionsHelper () {
-      return getAvailableReviewActions(this.draft)
+      const defaultPerms = {
+        'review:pages': true,
+        'approve:pages': true
+      }
+      return getAvailableReviewActions(this.draft, this.draft.permissions || defaultPerms)
     },
 
     stateBadge () {
@@ -426,7 +488,7 @@ export default {
           return {
             label: 'Aguardando Homologação Final',
             pillClass: 'is-emerald',
-            iconColor: '#1b6535',
+            iconColor: '#15803d',
             icon: 'mdi-stamper'
           }
         case 'changes_requested':
@@ -440,23 +502,15 @@ export default {
           return {
             label: 'Publicado Oficialmente',
             pillClass: 'is-emerald',
-            iconColor: '#1b6535',
+            iconColor: '#15803d',
             icon: 'mdi-check-decagram'
-          }
-        case 'periodic_review':
-        case 'revisao_periodica':
-          return {
-            label: 'Revisão Periódica Anual',
-            pillClass: 'is-amber',
-            iconColor: '#c2410c',
-            icon: 'mdi-calendar-clock'
           }
         default:
           return {
-            label: 'Rascunho',
-            pillClass: 'is-slate',
-            iconColor: '#475569',
-            icon: 'mdi-pencil-outline'
+            label: 'Em Revisão Editorial',
+            pillClass: 'is-blue',
+            iconColor: '#1d4ed8',
+            icon: 'mdi-file-find-outline'
           }
       }
     }
@@ -471,12 +525,159 @@ export default {
       }
     }
   },
+  mounted () {
+    document.addEventListener('mousedown', this.onGlobalMouseDown)
+  },
+  beforeDestroy () {
+    document.removeEventListener('mousedown', this.onGlobalMouseDown)
+  },
   methods: {
     goBack () {
       if (window.history.length > 1) {
         this.$router.go(-1)
       } else {
         this.$router.push('/')
+      }
+    },
+
+    setDocMode (mode) {
+      this.docMode = mode
+      if (mode === 'clean') {
+        this.$store.commit('showNotification', {
+          style: 'success',
+          icon: 'eye',
+          message: 'Exibindo prévia final limpa (como a página ficará publicada no portal).'
+        })
+      }
+    },
+
+    onGlobalMouseDown (e) {
+      if (this.selectionPopover.visible && !e.target.closest('.detran-selection-popover')) {
+        this.selectionPopover.visible = false
+      }
+    },
+
+    onDocMouseUp () {
+      if (typeof window === 'undefined' || !window.getSelection) return
+      const selection = window.getSelection()
+      const selectedText = selection ? selection.toString().trim() : ''
+      const docEl = this.$refs.docContent
+
+      if (selectedText.length > 2 && docEl && selection.anchorNode && docEl.contains(selection.anchorNode)) {
+        const range = selection.getRangeAt(0)
+        const rect = range.getBoundingClientRect()
+        const fullText = docEl.innerText || docEl.textContent || ''
+        const selector = createTextQuoteSelectorFromText(fullText, selectedText)
+
+        this.selectionPopover = {
+          visible: true,
+          top: Math.max(72, rect.top - 46),
+          left: Math.min(window.innerWidth - 280, Math.max(16, rect.left)),
+          exact: selector.exact,
+          prefix: selector.prefix,
+          suffix: selector.suffix
+        }
+      }
+    },
+
+    triggerSelectionAction (mode) {
+      const { exact, prefix, suffix } = this.selectionPopover
+      this.selectionPopover.visible = false
+      if (!exact) return
+      this.activeSelectionPayload = {
+        exact,
+        prefix,
+        suffix,
+        mode,
+        timestamp: Date.now()
+      }
+    },
+
+    onDocContentClick (event) {
+      const target = event.target && event.target.closest ? event.target.closest('[data-item-id]') : null
+      if (!target) return
+      const itemId = target.getAttribute('data-item-id')
+      if (itemId) {
+        this.activeItemId = itemId
+        this.highlightDocumentElement(itemId)
+        if (this.$refs.reviewCommentsPanel && typeof this.$refs.reviewCommentsPanel.scrollToCard === 'function') {
+          this.$refs.reviewCommentsPanel.scrollToCard(itemId)
+        }
+      }
+    },
+
+    onFocusItem (itemId) {
+      this.activeItemId = itemId
+      this.highlightDocumentElement(itemId)
+      const docEl = this.$el && (
+        this.$el.querySelector(`#item-${itemId}`) ||
+        this.$el.querySelector(`#item-${itemId}-add`) ||
+        this.$el.querySelector(`[data-item-id="${itemId}"]`)
+      )
+      if (docEl && typeof docEl.scrollIntoView === 'function') {
+        docEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    },
+
+    highlightDocumentElement (itemId) {
+      if (!this.$el) return
+      Array.from(this.$el.querySelectorAll('.active-item')).forEach(el => el.classList.remove('active-item'))
+      Array.from(this.$el.querySelectorAll(`[data-item-id="${itemId}"]`)).forEach(el => el.classList.add('active-item'))
+    },
+
+    onSuggestionDecision ({ item, decision }) {
+      this.$set(this.suggestionDecisions, item.id, decision)
+
+      if (decision === 'rejected') {
+        this.draft.content = applySuggestionDecisionToMarkdown({
+          draftContent: this.draft.content,
+          suggestion: item,
+          decision: 'reject'
+        })
+        this.draftModifiedByReview = true
+        this.$store.commit('showNotification', {
+          style: 'orange',
+          icon: 'undo',
+          message: 'Sugestão recusada e trecho revertido para a versão original.'
+        })
+      } else {
+        this.$store.commit('showNotification', {
+          style: 'success',
+          icon: 'check',
+          message: 'Sugestão aceita e incorporada ao documento!'
+        })
+      }
+    },
+
+    onRedactionDecision ({ item, decision }) {
+      if (decision === 'accepted' && item.newText && item.quote) {
+        this.draft.content = applySuggestionDecisionToMarkdown({
+          draftContent: this.draft.content,
+          suggestion: {
+            quote: item.quote,
+            suggestedReplacement: item.newText
+          },
+          decision: 'accept'
+        })
+        this.draftModifiedByReview = true
+        this.$store.commit('showNotification', {
+          style: 'success',
+          icon: 'check',
+          message: 'Nova redação sugerida foi aplicada ao texto do documento!'
+        })
+      }
+    },
+
+    sanitizeDraftBlobUrls () {
+      const res = inspectMarkdownForBlobUrls(this.draft.content || '')
+      if (res.hasBlobUrls) {
+        this.draft.content = res.sanitizedMarkdown
+        this.draftModifiedByReview = true
+        this.$store.commit('showNotification', {
+          style: 'success',
+          icon: 'check',
+          message: 'Links temporários (blob:) foram removidos do rascunho.'
+        })
       }
     },
 
@@ -572,17 +773,15 @@ export default {
         }
 
         this.draft = draftData
+        this.suggestionDecisions = {}
+        this.draftModifiedByReview = false
 
         if (draftData.pageId) {
           await this.loadLivePageContent(draftData.pageId)
         } else if (draftData.path) {
           await this.loadLivePageByPath(draftData.path, draftData.locale || 'pt-br')
         } else {
-          this.livePage = {
-            content: '',
-            title: '',
-            description: ''
-          }
+          this.livePage = { content: '', title: '', description: '' }
         }
       } catch (err) {
         this.$store.commit('showNotification', {
@@ -661,35 +860,18 @@ export default {
       }
     },
 
-    handleDiffClick (event) {
-      const line = extractLineFromDiffElement(event.target)
-      if (line && line > 0) {
-        this.selectedLine = line
-
-        const row = event.target.closest('tr') || event.target.closest('.d2h-code-line')
-        if (row) {
-          const textEl = row.querySelector('.d2h-code-line-ctn') || row
-          const text = (textEl.innerText || textEl.textContent || '').trim()
-          this.selectedText = text.substring(0, 80)
-        }
-      }
-    },
-
-    onSelectLine (line) {
-      this.selectedLine = line
-    },
-
     onCommentAdded (newComment) {
-      this.draft.comments = [...this.draft.comments, newComment]
+      this.draft.comments = [...(this.draft.comments || []), newComment]
+      this.activeItemId = `com-${newComment.id}`
       this.$store.commit('showNotification', {
         style: 'success',
         icon: 'check',
-        message: 'Anotação registrada com sucesso.'
+        message: 'Comentário adicionado ao documento!'
       })
     },
 
     onCommentResolved ({ id, resolved }) {
-      this.draft.comments = this.draft.comments.map(c => {
+      this.draft.comments = (this.draft.comments || []).map(c => {
         if (c.id === id) {
           return { ...c, resolved }
         }
@@ -698,7 +880,7 @@ export default {
       this.$store.commit('showNotification', {
         style: 'success',
         icon: 'check',
-        message: resolved ? 'Anotação marcada como resolvida.' : 'Anotação reaberta.'
+        message: resolved ? 'Item marcado como resolvido!' : 'Item reaberto.'
       })
     },
 
@@ -708,51 +890,89 @@ export default {
       this.actionDialog.error = ''
 
       if (type === 'requestChanges') {
-        this.actionDialog.title = 'Solicitar Ajustes ao Autor'
+        this.actionDialog.title = 'Devolver para o Autor com Ajustes'
         this.actionDialog.description =
-          'O documento retornará para a fila do autor com o status "Ajustes Solicitados". Informe os apontamentos necessários:'
-        this.actionDialog.commentLabel = 'Justificativa / Parecer de Ajustes (Obrigatório):'
-        this.actionDialog.commentPlaceholder = 'Descreva os motivos da devolução e os ajustes que devem ser realizados...'
+          'O autor receberá seus comentários e sugestões marcados no texto para realizar os ajustes necessários.'
+        this.actionDialog.commentLabel = 'Resumo para o autor (Obrigatório):'
+        this.actionDialog.commentPlaceholder = 'Ex: Favor revisar as observações marcadas nos parágrafos indicados...'
         this.actionDialog.icon = 'mdi-undo-variant'
         this.actionDialog.headerClass = 'is-warning'
-        this.actionDialog.confirmColor = 'orange darken-3'
       } else if (type === 'approveStep') {
         this.actionDialog.title = 'Aprovar Nível 1 (Revisão Técnica)'
         this.actionDialog.description =
-          'O parecer técnico será registrado e o documento avançará para o Nível 2 (Homologação Final).'
+          'O parecer técnico será registrado e o documento avançará para a Homologação Final.'
         this.actionDialog.commentLabel = 'Parecer Técnico (Opcional):'
         this.actionDialog.commentPlaceholder = 'Observações sobre a conformidade técnica do documento...'
         this.actionDialog.icon = 'mdi-check-all'
         this.actionDialog.headerClass = 'is-emerald'
-        this.actionDialog.confirmColor = 'primary'
       } else if (type === 'publish') {
-        this.actionDialog.title = 'Homologar e Publicar na Intranet'
+        this.actionDialog.title = 'Aprovar e Publicar no Portal da Intranet'
         this.actionDialog.description =
-          'Esta ação é a homologação final. O conteúdo revisado será publicado oficialmente na Intranet Detran-MG.'
+          'As sugestões aceitas serão consolidadas e a versão homologada será publicada oficialmente no Portal da Intranet.'
         this.actionDialog.commentLabel = 'Despacho de Homologação (Opcional):'
-        this.actionDialog.commentPlaceholder = 'Ex: Revisado e homologado conforme diretrizes da diretoria...'
+        this.actionDialog.commentPlaceholder = 'Ex: Revisado e homologado conforme diretrizes editoriais...'
         this.actionDialog.icon = 'mdi-shield-check'
         this.actionDialog.headerClass = 'is-emerald'
-        this.actionDialog.confirmColor = 'success'
-      } else if (type === 'revalidate') {
-        this.actionDialog.title = 'Revalidar Vigência (+12 Meses)'
-        this.actionDialog.description =
-          'Confirma a renovação da vigência deste ato normativo por mais 12 meses sem necessidade de alteração textual?'
-        this.actionDialog.commentLabel = 'Despacho de Revalidação (Opcional):'
-        this.actionDialog.commentPlaceholder = 'Ex: Normativo verificado e mantido em vigor conforme legislação atual...'
-        this.actionDialog.icon = 'mdi-autorenew'
-        this.actionDialog.headerClass = 'is-emerald'
-        this.actionDialog.confirmColor = 'teal darken-1'
       }
 
       this.actionDialog.visible = true
+    },
+
+    async persistReviewedDraftContentIfNeeded () {
+      if (!this.draftModifiedByReview) return
+      await this.$apollo.mutate({
+        mutation: gql`
+          mutation (
+            $pageId: Int
+            $path: String!
+            $locale: String!
+            $title: String!
+            $description: String
+            $content: String!
+            $contentType: String
+            $editorKey: String
+            $tags: [String]
+          ) {
+            workflow {
+              saveDraft(
+                pageId: $pageId
+                path: $path
+                locale: $locale
+                title: $title
+                description: $description
+                content: $content
+                contentType: $contentType
+                editorKey: $editorKey
+                tags: $tags
+              ) {
+                responseResult {
+                  succeeded
+                  message
+                }
+              }
+            }
+          }
+        `,
+        variables: {
+          pageId: this.draft.pageId || null,
+          path: this.draft.path,
+          locale: this.draft.locale || 'pt-br',
+          title: this.draft.title || 'Documento',
+          description: this.draft.description || '',
+          content: this.draft.content,
+          contentType: this.draft.contentType || 'markdown',
+          editorKey: this.draft.editorKey || 'markdown',
+          tags: this.draft.tags || []
+        }
+      })
+      this.draftModifiedByReview = false
     },
 
     async executeAction () {
       const { type, comment } = this.actionDialog
 
       if (type === 'requestChanges' && !comment.trim()) {
-        this.actionDialog.error = 'A justificativa é obrigatória para solicitar ajustes.'
+        this.actionDialog.error = 'Informe um resumo das alterações solicitadas ao autor.'
         return
       }
 
@@ -760,6 +980,13 @@ export default {
       this.actionDialog.error = ''
 
       try {
+        // Se havia URLs blob: quebradas, limpa antes de publicar
+        if (type === 'publish' && this.blobInspection.hasBlobUrls) {
+          this.sanitizeDraftBlobUrls()
+        }
+
+        await this.persistReviewedDraftContentIfNeeded()
+
         if (type === 'requestChanges') {
           const res = await this.$apollo.mutate({
             mutation: gql`
@@ -786,13 +1013,13 @@ export default {
             this.$store.commit('showNotification', {
               style: 'success',
               icon: 'check',
-              message: 'Ajustes solicitados ao autor com sucesso.'
+              message: 'Documento devolvido ao autor com suas anotações!'
             })
             /* eslint-disable-next-line vue/custom-event-name-casing */
             this.$root.$emit('workflowRefreshTasks')
             this.actionDialog.visible = false
           } else {
-            this.actionDialog.error = (data && data.responseResult && data.responseResult.message) || 'Falha ao solicitar ajustes.'
+            this.actionDialog.error = (data && data.responseResult && data.responseResult.message) || 'Falha ao devolver para ajustes.'
           }
         } else if (type === 'approveStep') {
           const res = await this.$apollo.mutate({
@@ -821,7 +1048,7 @@ export default {
             this.$store.commit('showNotification', {
               style: 'success',
               icon: 'check',
-              message: 'Revisão técnica aprovada. Documento encaminhado para Homologação Final.'
+              message: 'Revisão técnica aprovada. Encaminhado para homologação final!'
             })
             /* eslint-disable-next-line vue/custom-event-name-casing */
             this.$root.$emit('workflowRefreshTasks')
@@ -854,56 +1081,21 @@ export default {
           if (data && data.responseResult && data.responseResult.succeeded) {
             this.draft.state = 'published'
             this.draft.pageId = data.pageId || this.draft.pageId
+            this.docMode = 'clean'
             this.$store.commit('showNotification', {
               style: 'success',
               icon: 'check',
-              message: 'Documento homologado e publicado oficialmente na Intranet Detran-MG!'
+              message: 'Documento aprovado e publicado no Portal da Intranet!'
             })
             /* eslint-disable-next-line vue/custom-event-name-casing */
             this.$root.$emit('workflowRefreshTasks')
             this.actionDialog.visible = false
           } else {
-            this.actionDialog.error = (data && data.responseResult && data.responseResult.message) || 'Falha ao homologar e publicar.'
-          }
-        } else if (type === 'revalidate') {
-          const res = await this.$apollo.mutate({
-            mutation: gql`
-              mutation ($id: Int!, $comment: String) {
-                workflow {
-                  revalidate(id: $id, comment: $comment) {
-                    responseResult {
-                      succeeded
-                      message
-                    }
-                    draft {
-                      id
-                      state
-                      reviewDueDate
-                    }
-                  }
-                }
-              }
-            `,
-            variables: { id: this.draft.id, comment: comment.trim() || null }
-          })
-          const data = res && res.data && res.data.workflow && res.data.workflow.revalidate
-          if (data && data.responseResult && data.responseResult.succeeded) {
-            this.draft.state = (data.draft && data.draft.state) || 'published'
-            this.draft.reviewDueDate = data.draft && data.draft.reviewDueDate
-            this.$store.commit('showNotification', {
-              style: 'success',
-              icon: 'check',
-              message: 'Vigência revalidada por mais 12 meses com sucesso.'
-            })
-            /* eslint-disable-next-line vue/custom-event-name-casing */
-            this.$root.$emit('workflowRefreshTasks')
-            this.actionDialog.visible = false
-          } else {
-            this.actionDialog.error = (data && data.responseResult && data.responseResult.message) || 'Falha ao revalidar vigência.'
+            this.actionDialog.error = (data && data.responseResult && data.responseResult.message) || 'Falha ao aprovar e publicar.'
           }
         }
       } catch (err) {
-        this.actionDialog.error = err.message || 'Erro inesperado ao processar ação.'
+        this.actionDialog.error = err.message || 'Erro inesperado ao processar decisão.'
       } finally {
         this.submittingAction = false
       }
@@ -913,19 +1105,71 @@ export default {
 </script>
 
 <style lang='scss'>
-@import '~diff2html/bundles/css/diff2html.min.css';
 @import '../../themes/detran/scss/variables';
 
 .detran-workflow-review-page {
   width: 100%;
   font-family: $font-family-base;
+  padding-bottom: 6.5rem;
+}
+
+// =============================================================================
+// HEADER SUPERIOR + TOOLBAR ESTILO GOOGLE DOCS (Seção 2.1)
+// =============================================================================
+.detran-gdocs-header {
+  background: #ffffff;
+  border: 1px solid $slate-200;
+  border-radius: 0.875rem;
+  overflow: hidden;
+  margin-bottom: 1.25rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+
+  &__top {
+    padding: 1rem 1.5rem;
+  }
+
+  &__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-top: 0.375rem;
+  }
+
+  &__title-group {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
 }
 
 .detran-review-header-btns {
   display: flex;
   align-items: center;
   gap: 0.625rem;
-  flex-shrink: 0;
+}
+
+.detran-portal-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.45rem 0.875rem;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #15803d !important;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  text-decoration: none !important;
+  transition: all 0.15s ease;
+
+  .v-icon { color: #15803d !important; }
+
+  &:hover {
+    background: #dcfce7;
+  }
 }
 
 .detran-review-status-pill {
@@ -936,7 +1180,6 @@ export default {
   border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 600;
-  line-height: 1.25;
 
   &.is-blue {
     background-color: #eff6ff;
@@ -945,9 +1188,9 @@ export default {
   }
 
   &.is-emerald {
-    background-color: rgba(209, 250, 229, 0.85);
-    color: #1b6535;
-    border: 1px solid #a7f3d0;
+    background-color: #f0fdf4;
+    color: #15803d;
+    border: 1px solid #bbf7d0;
   }
 
   &.is-amber {
@@ -955,248 +1198,611 @@ export default {
     color: #b45309;
     border: 1px solid #fde68a;
   }
-
-  &.is-slate {
-    background-color: #f1f5f9;
-    color: #475569;
-    border: 1px solid #cbd5e1;
-  }
 }
 
-.detran-review-article {
-  border: 1px solid $slate-200;
-  padding: 2rem 2.25rem 2.25rem !important;
-}
-
-// Switcher Lado a Lado / Linha a Linha
-.detran-diff-switcher {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px;
-  background-color: $slate-100;
-  border: 1px solid $slate-200;
-  border-radius: 0.625rem;
-  gap: 2px;
-
-  &__btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.375rem;
-    padding: 0.375rem 0.75rem;
-    border-radius: 0.5rem;
-    border: none;
-    background: transparent;
-    color: $slate-600;
-    font-size: 0.75rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s ease;
-
-    .v-icon {
-      color: $slate-500 !important;
-    }
-
-    &:hover {
-      color: $slate-800;
-    }
-
-    &.is-active {
-      background: #ffffff;
-      color: $detran-700;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-
-      .v-icon {
-        color: $detran-600 !important;
-      }
-    }
-  }
-}
-
-// Callout com resumo do autor
-.detran-author-summary-callout {
+.detran-gdocs-toolbar {
+  background: $slate-50;
+  border-top: 1px solid $slate-200;
+  padding: 0.625rem 1.5rem;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 0.75rem;
-  padding: 0.875rem 1.125rem;
-  margin-bottom: 1.5rem;
-  background-color: #fffbeb;
-  border: 1px solid #fde68a;
-  border-radius: 0.75rem;
 
-  &__icon {
-    margin-top: 2px;
-    flex-shrink: 0;
-  }
-
-  &__title {
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: #92400e;
-    margin-bottom: 2px;
-  }
-
-  &__text {
-    font-size: 0.8125rem;
-    color: #78350f;
-    font-style: italic;
-    line-height: 1.45;
-  }
-}
-
-// Caixa do Diff
-.detran-diff-box {
-  border: 1px solid $slate-200;
-  border-radius: 0.875rem;
-  overflow: hidden;
-  background: #ffffff;
-
-  &__bar {
+  &__meta {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     flex-wrap: wrap;
-    gap: 0.75rem;
-    padding: 0.75rem 1.125rem;
-    background-color: $slate-50;
-    border-bottom: 1px solid $slate-200;
+    gap: 0.625rem;
+    font-size: 0.75rem;
+    color: $slate-600;
   }
 
-  &__legend {
+  &__author {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.45rem;
   }
 
-  &__pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    padding: 0.2rem 0.6rem;
+  &__avatar {
+    width: 24px;
+    height: 24px;
     border-radius: 9999px;
-    font-size: 0.75rem;
-    font-weight: 600;
-
-    &.is-removed {
-      background-color: #fef2f2;
-      color: #b91c1c;
-      border: 1px solid #fecaca;
-    }
-
-    &.is-added {
-      background-color: #ecfdf5;
-      color: #15803d;
-      border: 1px solid #bbf7d0;
-    }
-  }
-
-  &__hint {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    font-size: 0.75rem;
-    color: $slate-500;
-  }
-}
-
-.detran-diff-empty {
-  padding: 3.5rem 1.5rem;
-  text-align: center;
-
-  &__icon {
-    width: 56px;
-    height: 56px;
-    margin: 0 auto 0.875rem;
-    border-radius: 9999px;
-    background-color: $detran-50;
+    background: #dcfce7;
+    color: #166534;
+    font-size: 0.6875rem;
+    font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
   }
 
-  &__title {
-    font-size: 1rem;
-    font-weight: 700;
-    color: $slate-800;
-    margin: 0 0 0.25rem;
+  &__divider {
+    color: $slate-300;
   }
 
-  &__subtitle {
-    font-size: 0.8125rem;
+  &__path {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-family: monospace;
+    color: $slate-600;
+  }
+
+  &__author-note {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    background: #fffbeb;
+    color: #78350f;
+    border: 1px solid #fde68a;
+    padding: 0.2rem 0.625rem;
+    border-radius: 0.375rem;
+  }
+
+  &__controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-left: auto;
+  }
+
+  &__hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.75rem;
     color: $slate-500;
-    margin: 0;
-  }
-}
 
-// Customização do diff2html para o Design System Detran-MG
-.detran-diff-html-wrapper {
-  overflow-x: auto;
-
-  .d2h-file-header {
-    display: none;
-  }
-
-  .d2h-file-wrapper {
-    border: none;
-    border-radius: 0;
-    margin-bottom: 0;
-  }
-
-  .d2h-diff-table {
-    font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
-    font-size: 12.5px;
-  }
-
-  .d2h-code-linenumber,
-  .d2h-code-side-linenumber {
-    cursor: pointer !important;
-    user-select: none;
-    background-color: $slate-50;
-    border-color: $slate-200;
-    color: $slate-400;
-    transition: all 0.15s ease;
-
-    &:hover {
-      background-color: $detran-50 !important;
-      color: $detran-700 !important;
-      font-weight: 700;
+    @media (max-width: 960px) {
+      display: none;
     }
   }
+}
 
-  .d2h-ins {
-    background-color: #f0fdf4;
-    border-color: #bbf7d0;
-  }
+.detran-mode-switcher {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(226, 232, 240, 0.85);
+  padding: 3px;
+  border-radius: 0.5rem;
+  gap: 2px;
 
-  .d2h-del {
-    background-color: #fef2f2;
-    border-color: #fecaca;
-  }
+  &__btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 0.375rem;
+    border: none;
+    background: transparent;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: $slate-600;
+    cursor: pointer;
+    transition: all 0.15s ease;
 
-  .d2h-code-line del,
-  .d2h-code-side-line del {
-    background-color: #fecaca;
-    border-radius: 3px;
-  }
-
-  .d2h-code-line ins,
-  .d2h-code-side-line ins {
-    background-color: #bbf7d0;
-    border-radius: 3px;
+    &.is-active {
+      background: #ffffff;
+      color: $slate-900;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+    }
   }
 }
 
-// Barra Institucional de Decisão (Rodapé do Artigo)
-.detran-review-decision-bar {
-  margin-top: 1.75rem;
-  padding: 1.125rem 1.25rem;
-  background-color: $slate-50;
+// =============================================================================
+// BANNER EXPLICATIVO (COMO REVISAR) E ALERTA BLOB
+// =============================================================================
+.detran-onboarding-banner {
+  background: #ffffff;
   border: 1px solid $slate-200;
-  border-radius: 0.875rem;
+  border-radius: 0.75rem;
+  padding: 0.75rem 1.125rem;
+  margin-bottom: 1.25rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
   gap: 1rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+
+  &__left {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.875rem;
+    font-size: 0.75rem;
+    color: $slate-600;
+  }
+
+  &__title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-weight: 700;
+    color: $slate-800;
+  }
+
+  &__legend {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+
+    .is-strike {
+      text-decoration: line-through;
+      color: #b91c1c;
+    }
+  }
+
+  &__swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    display: inline-block;
+
+    &.is-add {
+      background: #dcfce7;
+      border-bottom: 2px solid #22c55e;
+    }
+
+    &.is-del {
+      background: #fee2e2;
+    }
+
+    &.is-com {
+      background: #fef08a;
+      border-bottom: 2px solid #eab308;
+    }
+  }
+
+  &__tip {
+    color: $slate-500;
+  }
+
+  &__close {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    padding: 4px;
+  }
+}
+
+.detran-blob-banner {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 0.75rem;
+  padding: 0.875rem 1.125rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: #991b1b;
+  font-size: 0.75rem;
+
+  &__left {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.625rem;
+
+    p {
+      margin: 2px 0 0;
+      color: #b91c1c;
+    }
+  }
+
+  &__btn {
+    padding: 0.4rem 0.85rem;
+    border-radius: 0.5rem;
+    border: 1px solid #f87171;
+    background: #ffffff;
+    color: #b91c1c;
+    font-weight: 700;
+    font-size: 0.75rem;
+    cursor: pointer;
+    flex-shrink: 0;
+
+    &:hover {
+      background: #fee2e2;
+    }
+  }
+}
+
+// =============================================================================
+// LAYOUT 2 COLUNAS (70% FOLHA A4 ESQUERDA + 30% PAINEL LATERAL STICKY)
+// =============================================================================
+.detran-gdocs-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(300px, 3fr);
+  gap: 1.75rem;
+  align-items: start;
+
+  @media (max-width: 1024px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.detran-gdocs-main {
+  position: relative;
+  min-width: 0;
+}
+
+.detran-gdocs-aside {
+  position: sticky;
+  top: 1rem;
+
+  @media (max-width: 1024px) {
+    position: static;
+  }
+}
+
+// =============================================================================
+// POPOVER FLUTUANTE DE SELEÇÃO DE TEXTO (Seção 2.3)
+// =============================================================================
+.detran-selection-popover {
+  position: fixed;
+  z-index: 60;
+  background: #0f172a;
+  color: #ffffff;
+  border-radius: 9999px;
+  padding: 0.35rem 0.65rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+
+  &__btn {
+    border: none;
+    background: transparent;
+    color: #f8fafc;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.25rem 0.55rem;
+    border-radius: 9999px;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+
+    &:hover {
+      background: #15803d;
+      color: #ffffff;
+    }
+
+    &.is-suggest {
+      color: #86efac;
+
+      &:hover {
+        color: #ffffff;
+      }
+    }
+  }
+
+  &__sep {
+    color: #475569;
+    font-size: 0.75rem;
+  }
+}
+
+// =============================================================================
+// CANVAS DO DOCUMENTO (FOLHA DE PAPEL A4 + MARCAÇÕES VISUAIS DE DIFF - Seção 2.2)
+// =============================================================================
+.doc-paper {
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 0.875rem;
+  padding: 2.5rem 3rem;
+  min-height: 680px;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.08), 0 0 3px 0 rgba(0, 0, 0, 0.04);
+  user-select: text;
+
+  @media (max-width: 640px) {
+    padding: 1.5rem 1.25rem;
+  }
+}
+
+.detran-doc-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.detran-doc-tag {
+  padding: 2px 10px;
+  border-radius: 4px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  background: #f0fdf4;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.detran-doc-content {
+  color: #1e293b;
+  font-size: 1rem;
+  line-height: 1.75;
+
+  > * + * {
+    margin-top: 1.25rem;
+  }
+
+  .detran-doc-h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #0f172a;
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 0.625rem;
+    margin-top: 1.75rem;
+  }
+
+  .detran-doc-h3 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #0f172a;
+    padding-top: 0.5rem;
+  }
+
+  .detran-doc-p {
+    margin: 0;
+  }
+
+  .detran-doc-callout {
+    padding: 1rem 1.25rem;
+    border-radius: 0.75rem;
+    border-left: 4px solid #3b82f6;
+    background: #eff6ff;
+    color: #1e3a8a;
+
+    &.is-warning {
+      border-left-color: #f59e0b;
+      background: #fffbeb;
+      color: #78350f;
+    }
+
+    &.is-success {
+      border-left-color: #22c55e;
+      background: #f0fdf4;
+      color: #14532d;
+    }
+
+    &.is-danger {
+      border-left-color: #ef4444;
+      background: #fef2f2;
+      color: #7f1d1d;
+    }
+  }
+
+  .detran-doc-table-wrap {
+    overflow-x: auto;
+  }
+
+  .detran-doc-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+
+    th, td {
+      border: 1px solid #e2e8f0;
+      padding: 0.625rem 0.875rem;
+      text-align: left;
+    }
+
+    th {
+      background: #f8fafc;
+      font-weight: 700;
+      color: #0f172a;
+    }
+  }
+
+  .detran-doc-list,
+  .detran-doc-links-list {
+    padding-left: 1.5rem;
+
+    li + li {
+      margin-top: 0.375rem;
+    }
+  }
+
+  .detran-doc-figure {
+    border-radius: 0.5rem;
+    overflow: hidden;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    margin: 0;
+  }
+
+  .detran-doc-img {
+    width: 100%;
+    max-height: 360px;
+    object-fit: cover;
+    display: block;
+  }
+
+  .detran-doc-figcaption {
+    font-size: 0.75rem;
+    color: #64748b;
+    padding: 0.625rem;
+    background: #ffffff;
+    text-align: center;
+    font-style: italic;
+  }
+
+  // Marcações Visuais de Diff Estilo Google Docs (Seção 2.2)
+  .suggestion-add {
+    background-color: #dcfce7;
+    color: #166534;
+    border-bottom: 2px solid #22c55e;
+    padding: 1px 4px;
+    border-radius: 3px;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:hover,
+    &.active-item {
+      background-color: #bbf7d0;
+      box-shadow: 0 0 0 2px #16a34a;
+    }
+  }
+
+  .suggestion-del {
+    background-color: #fee2e2;
+    color: #991b1b;
+    text-decoration: line-through;
+    padding: 1px 4px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:hover,
+    &.active-item {
+      background-color: #fecaca;
+      box-shadow: 0 0 0 2px #dc2626;
+    }
+  }
+
+  .comment-highlight {
+    background-color: #fef08a;
+    border-bottom: 2px solid #eab308;
+    padding: 1px 2px;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:hover,
+    &.active-item {
+      background-color: #fde047;
+      box-shadow: 0 0 0 2px #ca8a04;
+    }
+  }
+
+  .img-suggestion-box {
+    margin: 1.5rem 0;
+    padding: 0.75rem;
+    border-radius: 0.75rem;
+    border: 2px dashed #22c55e;
+    background-color: rgba(240, 253, 244, 0.45);
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:hover,
+    &.active-item {
+      background-color: rgba(240, 253, 244, 0.85);
+      box-shadow: 0 0 0 2px #16a34a;
+    }
+  }
+
+  .img-suggestion-badge {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #166534;
+    margin-bottom: 0.5rem;
+    padding: 0 0.25rem;
+
+    &__pill {
+      background: rgba(187, 247, 208, 0.85);
+      color: #14532d;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.6875rem;
+    }
+  }
+
+  .detran-blob-alert {
+    background: #fef2f2;
+    color: #b91c1c;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.375rem 0.625rem;
+    border-radius: 0.375rem;
+    margin-bottom: 0.5rem;
+  }
+}
+
+// Modo Visualização Limpa (Prévia Final - Seção 2.1 / Protótipo linhas 77-99)
+.clean-mode {
+  .suggestion-del,
+  .suggestion-del-block {
+    display: none !important;
+  }
+
+  .suggestion-add,
+  .suggestion-add-block {
+    background-color: transparent !important;
+    color: inherit !important;
+    border-bottom: none !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .comment-highlight {
+    background-color: transparent !important;
+    border-bottom: none !important;
+    box-shadow: none !important;
+  }
+
+  .img-suggestion-badge {
+    display: none !important;
+  }
+
+  .img-suggestion-box {
+    border-color: transparent !important;
+    background-color: transparent !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+}
+
+// =============================================================================
+// 2.4 BARRA DE DECISÃO FLUTUANTE INFERIOR (FLOATING ACTION BAR)
+// =============================================================================
+.detran-floating-action-bar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  width: 94%;
+  max-width: 720px;
+
+  &__card {
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    border-radius: 1rem;
+    padding: 0.75rem 1.25rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.875rem;
+  }
 
   &__status {
     display: flex;
@@ -1207,131 +1813,91 @@ export default {
   &__icon {
     width: 38px;
     height: 38px;
-    border-radius: 0.625rem;
+    border-radius: 0.75rem;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
 
     &.is-emerald {
-      background-color: rgba(209, 250, 229, 0.85);
-      border: 1px solid #a7f3d0;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
     }
 
     &.is-amber {
-      background-color: #fef3c7;
+      background: #fffbeb;
       border: 1px solid #fde68a;
     }
   }
 
-  &__headline {
+  &__title {
     font-size: 0.8125rem;
     font-weight: 700;
-    color: $slate-800;
+    color: #0f172a;
   }
 
   &__sub {
-    font-size: 0.75rem;
-    color: $slate-500;
+    font-size: 0.6875rem;
+    color: #64748b;
   }
 
   &__actions {
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
     gap: 0.625rem;
+    margin-left: auto;
   }
 }
 
-.detran-wf-btn {
+.detran-fab-btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.45rem;
-  padding: 0.55rem 1.1rem;
-  border-radius: 0.625rem;
+  padding: 0.6rem 1.15rem;
+  border-radius: 0.75rem;
   font-size: 0.8125rem;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   transition: all 0.18s ease;
   text-decoration: none !important;
-  border: 1px solid transparent;
 
   &:disabled {
     opacity: 0.6;
     cursor: not-allowed;
   }
 
-  &--warning {
-    background-color: #ffffff;
-    color: #c2410c;
-    border-color: #fdba74;
-
-    .v-icon { color: #c2410c !important; }
+  &--secondary {
+    background: #fffbeb;
+    color: #92400e !important;
+    border: 1px solid #fde68a;
 
     &:hover:not(:disabled) {
-      background-color: #fff7ed;
-      border-color: #f97316;
+      background: #fef3c7;
     }
   }
 
   &--primary {
-    background-color: $detran-600;
+    background: #15803d;
     color: #ffffff !important;
-    box-shadow: 0 2px 6px rgba($detran-600, 0.22);
-
-    .v-icon { color: #ffffff !important; }
+    border: 1px solid #15803d;
+    box-shadow: 0 4px 14px rgba(21, 128, 61, 0.28);
 
     &:hover:not(:disabled) {
-      background-color: $detran-700;
-    }
-  }
-
-  &--publish {
-    background-color: #1b6535;
-    color: #ffffff !important;
-    box-shadow: 0 4px 12px rgba(27, 101, 53, 0.25);
-
-    .v-icon { color: #ffffff !important; }
-
-    &:hover:not(:disabled) {
-      background-color: #144d28;
-    }
-  }
-
-  &--teal {
-    background-color: #0d9488;
-    color: #ffffff !important;
-
-    .v-icon { color: #ffffff !important; }
-
-    &:hover:not(:disabled) {
-      background-color: #0f766e;
+      background: #166534;
+      transform: translateY(-1px);
     }
   }
 }
 
-// Coluna Lateral Direita (Sticky, mesmo estilo do .detran-toc)
-.detran-review-aside {
-  width: 340px;
-  flex-shrink: 0;
-  position: sticky;
-  top: 1rem;
-
-  @include tablet {
-    width: 100%;
-    position: static;
-  }
-  @include mobile {
-    width: 100%;
-    position: static;
-  }
-}
-
+// =============================================================================
+// HISTÓRICO LATERAL E MODAL DE CONFIRMAÇÃO
+// =============================================================================
 .detran-review-side-card {
   background: #ffffff;
   border: 1px solid $slate-200;
-  border-radius: $radius-xl;
-  box-shadow: $shadow-soft;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
   overflow: hidden;
 }
 
@@ -1340,7 +1906,7 @@ export default {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.875rem 1.125rem;
+    padding: 0.875rem 1rem;
     border-bottom: 1px solid $slate-100;
     background: $slate-50;
   }
@@ -1355,7 +1921,7 @@ export default {
   }
 
   &__list {
-    padding: 0.875rem 1.125rem;
+    padding: 0.875rem 1rem;
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
@@ -1410,7 +1976,6 @@ export default {
   }
 }
 
-// Modal Institucional de Confirmação
 .detran-action-modal {
   background: #ffffff;
   border-radius: 1rem;
@@ -1420,14 +1985,14 @@ export default {
 
   &__header {
     padding: 1.25rem 1.5rem;
-    background-color: #185a30;
+    background-color: #15803d;
     color: #ffffff;
     display: flex;
     align-items: center;
     justify-content: space-between;
 
     &.is-warning {
-      background-color: #9a3412;
+      background-color: #b45309;
     }
   }
 
@@ -1457,7 +2022,7 @@ export default {
 
   &__subtitle {
     font-size: 0.75rem;
-    color: #a7f3d0;
+    color: #dcfce7;
     margin: 2px 0 0;
   }
 
@@ -1466,9 +2031,6 @@ export default {
     border: none;
     cursor: pointer;
     padding: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
   }
 
   &__body {
@@ -1527,11 +2089,10 @@ export default {
     color: #1e293b;
     outline: none;
     resize: vertical;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
 
     &:focus {
-      border-color: #2ea058;
-      box-shadow: 0 0 0 3px rgba(46, 160, 88, 0.15);
+      border-color: #16a34a;
+      box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.15);
     }
   }
 
@@ -1581,7 +2142,7 @@ export default {
     padding: 0.55rem 1.25rem;
     border-radius: 0.5rem;
     border: none;
-    background-color: #1b6535;
+    background-color: #15803d;
     color: #ffffff;
     font-size: 0.75rem;
     font-weight: 600;
@@ -1589,15 +2150,11 @@ export default {
     align-items: center;
     gap: 0.5rem;
     cursor: pointer;
-    box-shadow: 0 4px 12px rgba(27, 101, 53, 0.25);
+    box-shadow: 0 4px 12px rgba(21, 128, 61, 0.25);
 
     &.is-warning {
-      background-color: #c2410c;
-      box-shadow: 0 4px 12px rgba(194, 65, 12, 0.25);
-    }
-
-    &:hover:not(:disabled) {
-      filter: brightness(0.95);
+      background-color: #d97706;
+      box-shadow: 0 4px 12px rgba(217, 119, 6, 0.25);
     }
   }
 }

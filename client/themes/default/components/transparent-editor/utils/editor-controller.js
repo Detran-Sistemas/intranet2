@@ -302,7 +302,7 @@ export async function resolveMediaUpload ({
   let finalSrc = String(imageUrl || '').trim()
   const fallbackUrlFn = typeof createObjectURL === 'function' ?
     createObjectURL :
-    (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function' ? URL.createObjectURL : () => '/_assets/img/uploaded-fallback.png')
+    () => '/_assets/img/uploaded-fallback.png'
 
   if (activeTab === 1 && imageFile) {
     const fetcher = fetchImpl || (typeof fetch === 'function' ? fetch : null)

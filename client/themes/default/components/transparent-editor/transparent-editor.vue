@@ -22,6 +22,11 @@
     @insert='onInsertMedia'
   )
 
+  //- Banner de Upload Automático de Imagem no Smart Paste
+  .smart-paste-upload-banner(v-if='uploadingImageStatus')
+    v-progress-circular(indeterminate size='15' width='2' color='#15803d')
+    span {{ uploadingImageStatus }}
+
   //- Lista de Blocos Editáveis (herda integralmente a tipografia .detran-contents / .contents)
   .editor-blocks-container
     block-item(
@@ -34,6 +39,7 @@
       @insert-below='onInsertBelow'
       @delete-block='onDeleteBlock'
       @slash-command='onSlashTriggered'
+      @smart-paste='onSmartPaste'
     )
 
   //- Linha para Adicionar Novo Bloco Rapidamente (Fiel ao Protótipo: linhas 488-491)
@@ -45,6 +51,22 @@
       | Clique aqui para continuar escrevendo ou digite
       kbd.add-block-end__kbd /
       | para inserir um bloco (aviso, título, lista)...
+
+  //- Feedback Não-Intrusivo Pós-Colagem (Toast com Desfazer / Colar sem formatação)
+  .smart-paste-toast(v-if='smartPasteToast.visible')
+    .smart-paste-toast__inner
+      span.smart-paste-toast__text ✨ {{ smartPasteToast.message }}
+      button.smart-paste-toast__revert(
+        v-if='smartPasteToast.canRevertPlain'
+        type='button'
+        @click='revertToPlainPaste'
+      ) [Colar sem formatação (Ctrl+Shift+V)]
+      button.smart-paste-toast__close(
+        type='button'
+        title='Fechar aviso'
+        @click='smartPasteToast.visible = false'
+      )
+        v-icon(size='14' color='#cbd5e1') mdi-close
 </template>
 
 <script>
@@ -61,6 +83,7 @@ import {
   insertMediaBlock,
   buildEditorChangePayload
 } from './utils/editor-controller'
+import { processSmartPastePayload } from './utils/smart-paste'
 
 export default {
   name: 'TransparentEditor',
@@ -99,7 +122,15 @@ export default {
       activeBlockIndex: null,
       dialogMedia: false,
       mediaInsertIndex: null,
-      debounceTimer: null
+      debounceTimer: null,
+      uploadingImageStatus: '',
+      prePasteSnapshot: null,
+      smartPasteToast: {
+        visible: false,
+        message: 'Texto formatado automaticamente para o padrão da Intranet.',
+        canRevertPlain: false,
+        timer: null
+      }
     }
   },
   watch: {
@@ -118,6 +149,7 @@ export default {
   beforeDestroy () {
     document.removeEventListener('selectionchange', this.onSelectionChange)
     if (this.debounceTimer) clearTimeout(this.debounceTimer)
+    if (this.smartPasteToast.timer) clearTimeout(this.smartPasteToast.timer)
   },
   methods: {
     initBlocks (md) {
@@ -196,6 +228,145 @@ export default {
       this.blocks = blocks
       this.triggerChange()
     },
+    async onSmartPaste ({ index, event }) {
+      if (!event || !event.clipboardData) return
+
+      const html = event.clipboardData.getData('text/html') || ''
+      const plainText = event.clipboardData.getData('text/plain') || ''
+      const files = event.clipboardData.files ? Array.from(event.clipboardData.files) : []
+      const hasImageFiles = files.some(f => f && String(f.type || '').startsWith('image/'))
+
+      if (!hasImageFiles && !html && !plainText) return
+
+      event.preventDefault()
+
+      // Salva estado anterior para opção [Colar sem formatação (Ctrl+Shift+V)]
+      this.prePasteSnapshot = {
+        blocks: JSON.parse(JSON.stringify(this.blocks)),
+        index,
+        plainText
+      }
+
+      try {
+        const result = await processSmartPastePayload({
+          html,
+          plainText,
+          files,
+          onUploadStart: (msg) => {
+            this.uploadingImageStatus = msg || 'Enviando imagem para o servidor...'
+          },
+          onUploadComplete: () => {
+            this.uploadingImageStatus = ''
+          }
+        })
+        this.uploadingImageStatus = ''
+
+        if (result.blockedBlobUrls && result.blockedBlobUrls.length > 0 && (!result.uploadedImages || result.uploadedImages.length === 0)) {
+          this.showSmartPasteToast('URL de imagem temporária (blob:) bloqueada. Cole a imagem diretamente.', false)
+        }
+
+        const pastedBlocks = result.blocks && result.blocks.length > 0 ?
+          result.blocks :
+          (plainText ? [{ id: `paste-${Date.now()}`, type: 'paragraph', text: plainText.trim() }] : [])
+
+        if (pastedBlocks.length === 0) return
+
+        const currentBlock = this.blocks[index]
+        const currentText = currentBlock && currentBlock.text ? currentBlock.text.trim() : ''
+
+        if (pastedBlocks.length === 1 && pastedBlocks[0].type === 'paragraph' && currentBlock && currentBlock.type !== 'image' && currentBlock.type !== 'links') {
+          const mergedText = currentText ?
+            `${currentText} ${pastedBlocks[0].text}` :
+            pastedBlocks[0].text
+          this.blocks = updateBlockAt(this.blocks, index, {
+            ...currentBlock,
+            text: mergedText
+          })
+          this.$nextTick(() => {
+            const item = this.$refs.blockItems && this.$refs.blockItems[index]
+            if (item && typeof item.syncEditableDom === 'function') {
+              item.syncEditableDom()
+            }
+          })
+        } else {
+          const nextBlocks = [...this.blocks]
+          if (!currentText && currentBlock && currentBlock.type === 'paragraph') {
+            nextBlocks.splice(index, 1, ...pastedBlocks)
+          } else {
+            nextBlocks.splice(index + 1, 0, ...pastedBlocks)
+          }
+          this.blocks = nextBlocks
+          this.$nextTick(() => {
+            if (Array.isArray(this.$refs.blockItems)) {
+              this.$refs.blockItems.forEach(item => {
+                if (item && typeof item.syncEditableDom === 'function') {
+                  item.syncEditableDom()
+                }
+              })
+            }
+          })
+        }
+
+        this.triggerChange()
+
+        if (result.origin === 'image') {
+          this.showSmartPasteToast('Imagem enviada ao servidor e inserida com URL permanente!', false)
+        } else if (result.hadComplexFormatting || pastedBlocks.length > 1) {
+          this.showSmartPasteToast('Texto formatado automaticamente para o padrão da Intranet.', Boolean(plainText))
+        }
+      } catch (err) {
+        this.uploadingImageStatus = ''
+        this.showSmartPasteToast(err.message || 'Erro ao processar conteúdo colado.', false)
+      }
+    },
+    revertToPlainPaste () {
+      if (!this.prePasteSnapshot) return
+      const { blocks, index, plainText } = this.prePasteSnapshot
+      const cleanPlain = String(plainText || '').trim()
+      const restored = JSON.parse(JSON.stringify(blocks))
+
+      if (cleanPlain) {
+        const current = restored[index]
+        if (current && !String(current.text || '').trim()) {
+          restored[index] = {
+            ...current,
+            type: 'paragraph',
+            text: cleanPlain
+          }
+        } else {
+          restored.splice(index + 1, 0, {
+            id: `plain-${Date.now()}`,
+            type: 'paragraph',
+            text: cleanPlain
+          })
+        }
+      }
+
+      this.blocks = restored
+      this.prePasteSnapshot = null
+      this.smartPasteToast.visible = false
+      this.$nextTick(() => {
+        if (Array.isArray(this.$refs.blockItems)) {
+          this.$refs.blockItems.forEach(item => {
+            if (item && typeof item.syncEditableDom === 'function') {
+              item.syncEditableDom()
+            }
+          })
+        }
+      })
+      this.triggerChange()
+    },
+    showSmartPasteToast (message, canRevertPlain = true) {
+      if (this.smartPasteToast.timer) {
+        clearTimeout(this.smartPasteToast.timer)
+      }
+      this.smartPasteToast.message = message
+      this.smartPasteToast.canRevertPlain = canRevertPlain
+      this.smartPasteToast.visible = true
+      this.smartPasteToast.timer = setTimeout(() => {
+        this.smartPasteToast.visible = false
+      }, 6500)
+    },
     onSelectionChange () {
       const sel = window.getSelection()
       if (!sel || sel.isCollapsed || !sel.toString().trim()) {
@@ -266,9 +437,71 @@ export default {
     margin-top: -6px;
   }
 
-  // Permite clicar nos campos editáveis dentro dos cards .links-list
   ul.links-list.editable-links-list li a::after {
     display: none !important;
+  }
+}
+
+.smart-paste-upload-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  margin-bottom: 0.75rem;
+  border-radius: 0.625rem;
+  background-color: #f0fdf4;
+  border: 1px dashed #22c55e;
+  color: #166534;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.smart-paste-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+
+  &__inner {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.65rem 1rem;
+    border-radius: 0.75rem;
+    background: rgba(15, 23, 42, 0.95);
+    backdrop-filter: blur(8px);
+    color: #f8fafc;
+    font-size: 0.75rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  &__text {
+    font-weight: 500;
+  }
+
+  &__revert {
+    border: none;
+    background: transparent;
+    color: #4ade80;
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: underline;
+
+    &:hover {
+      color: #86efac;
+    }
+  }
+
+  &__close {
+    border: none;
+    background: transparent;
+    padding: 2px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
   }
 }
 

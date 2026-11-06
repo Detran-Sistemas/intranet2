@@ -28,6 +28,7 @@
         :data-placeholder='$t("common:editor.headingPlaceholder", "Título da seção...")'
         @input='onInputText'
         @keydown='onKeydown'
+        @paste='onPaste'
         @focus='isFocused = true'
         @blur='onBlurText'
       )
@@ -42,6 +43,7 @@
           :data-placeholder='$t("common:editor.calloutPlaceholder", "Digite um destaque...")'
           @input='onInputText'
           @keydown='onKeydown'
+          @paste='onPaste'
           @focus='isFocused = true'
           @blur='onBlurText'
         )
@@ -125,6 +127,7 @@
         :data-placeholder='$t("common:editor.paragraphPlaceholder", "Digite \x27/\x27 para comandos ou apenas escreva...")'
         @input='onInputText'
         @keydown='onKeydown'
+        @paste='onPaste'
         @focus='isFocused = true'
         @blur='onBlurText'
       )
@@ -210,6 +213,7 @@ export default {
     },
     onInputText (e) {
       const mdText = inlineHtmlToMarkdown(e.target.innerHTML)
+      /* eslint-disable-next-line vue/custom-event-name-casing */
       this.$emit('update-block', {
         index: this.index,
         block: {
@@ -220,11 +224,19 @@ export default {
 
       if (detectSlashTrigger(mdText)) {
         const rect = e.target.getBoundingClientRect()
+        /* eslint-disable-next-line vue/custom-event-name-casing */
         this.$emit('slash-command', {
           index: this.index,
           rect
         })
       }
+    },
+    onPaste (e) {
+      /* eslint-disable-next-line vue/custom-event-name-casing */
+      this.$emit('smart-paste', {
+        index: this.index,
+        event: e
+      })
     },
     onBlurText () {
       this.isFocused = false
@@ -233,17 +245,20 @@ export default {
     onKeydown (e) {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault()
+        /* eslint-disable-next-line vue/custom-event-name-casing */
         this.$emit('insert-below', this.index)
       } else if (e.key === 'Backspace') {
         const text = (e.target.innerText || '').trim()
         if (!text && this.index > 0) {
           e.preventDefault()
+          /* eslint-disable-next-line vue/custom-event-name-casing */
           this.$emit('delete-block', this.index)
         }
       }
     },
     onLinkTitleChange (idx, e) {
       this.isFocused = false
+      /* eslint-disable-next-line vue/custom-event-name-casing */
       this.$emit('update-block', {
         index: this.index,
         block: updateLinkCardItem(this.block, idx, 'title', e.target.innerText)
@@ -251,6 +266,7 @@ export default {
     },
     onLinkDescChange (idx, e) {
       this.isFocused = false
+      /* eslint-disable-next-line vue/custom-event-name-casing */
       this.$emit('update-block', {
         index: this.index,
         block: updateLinkCardItem(this.block, idx, 'description', e.target.innerText)
@@ -258,6 +274,7 @@ export default {
     },
     onImageCaptionInput (e) {
       const title = (e.target.innerText || '').trim()
+      /* eslint-disable-next-line vue/custom-event-name-casing */
       this.$emit('update-block', {
         index: this.index,
         block: {
@@ -282,6 +299,7 @@ export default {
       this.onRawChange()
     },
     onRawChange () {
+      /* eslint-disable-next-line vue/custom-event-name-casing */
       this.$emit('update-block', {
         index: this.index,
         block: {
@@ -311,11 +329,6 @@ export default {
   display: flex;
   align-items: flex-start;
   gap: 4px;
-  // Compensação matemática exata:
-  // -32px (margin-left) + 6px (padding-left) + 22px (handle) + 4px (gap) = 0px!
-  // Garante 0px de deslocamento horizontal do texto entre Modo Leitura e Modo Edição,
-  // mantendo 8px de margem branca interna em relação à borda do card (.detran-article)
-  // e envolvendo a alça (+ e ⋮⋮) dentro da borda arredondada verde do protótipo.
   padding: 6px 12px 6px 6px;
   margin-left: -32px;
   margin-right: -12px;
@@ -416,8 +429,6 @@ export default {
   flex: 1;
   min-width: 0;
 
-  // Remove margens verticais internas para que a borda verde do .notion-block
-  // abrace o conteúdo de forma justa e simétrica como no protótipo
   > p,
   > h1,
   > h2,

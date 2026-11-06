@@ -1,134 +1,215 @@
 <template lang='pug'>
   .detran-review-comments
-    //- Cabeçalho do Card Lateral
+    //- Cabeçalho do Painel Lateral (Estilo Google Docs)
     .detran-rc-header
-      .detran-rc-header__left
-        v-icon(size='16' color='#288b4a') mdi-comment-multiple-outline
-        h4.detran-rc-header__title Anotações ({{ comments.length }})
-      span.detran-rc-badge(
-        v-if='unresolvedCount > 0'
-        class='is-amber'
-      ) {{ unresolvedCount }} pendente(s)
-      span.detran-rc-badge(
-        v-else-if='comments.length > 0'
-        class='is-emerald'
-      ) Resolvidas
-
-    //- Abas de Filtro
-    .detran-rc-tabs
-      button.detran-rc-tab(
-        type='button'
-        :class='{ "is-active": filterMode === "all" }'
-        @click='filterMode = "all"'
-      ) Todas ({{ comments.length }})
-      button.detran-rc-tab(
-        type='button'
-        :class='{ "is-active": filterMode === "pending" }'
-        @click='filterMode = "pending"'
-      ) Pendentes ({{ unresolvedCount }})
-      button.detran-rc-tab(
-        v-if='selectedLine > 0'
-        type='button'
-        :class='{ "is-active": filterMode === "line" }'
-        @click='filterMode = "line"'
-      ) Linha {{ selectedLine }} ({{ lineCommentsCount }})
-
-    //- Formulário de Nova Anotação
-    .detran-rc-form
-      .detran-rc-form__top
-        span.detran-rc-form__label
-          v-icon(size='14' color='#288b4a') mdi-comment-plus-outline
-          span(v-if='newComment.lineNumber > 0') Anotação na Linha {{ newComment.lineNumber }}
-          span(v-else) Nova Anotação Geral
-        button.detran-rc-form__clear(
-          v-if='newComment.lineNumber > 0'
-          type='button'
-          @click='newComment.lineNumber = 0; $emit("clear-line")'
-          title='Converter para anotação geral'
+      .detran-rc-header__top
+        .detran-rc-header__left
+          v-icon(size='18' color='#15803d') mdi-message-text-outline
+          h2.detran-rc-header__title Revisão &amp; Comentários
+        span.detran-rc-badge(
+          :class='totalPendingCount > 0 ? "is-amber" : "is-emerald"'
         )
-          v-icon(size='13' color='#64748b') mdi-close
-          span Geral
+          | {{ totalPendingCount > 0 ? totalPendingCount + (totalPendingCount === 1 ? ' pendente' : ' pendentes') : '✓ Tudo revisado' }}
 
-      .detran-rc-form__row
-        .detran-rc-form__col-line
-          label.detran-rc-input-label Linha
-          input.detran-rc-input(
-            v-model.number='newComment.lineNumber'
-            type='number'
-            min='0'
-            placeholder='0'
-          )
-        .detran-rc-form__col-anchor
-          label.detran-rc-input-label Trecho (opcional)
-          input.detran-rc-input(
-            v-model='newComment.anchorText'
-            type='text'
-            placeholder='Ex: "Art. 2º..."'
-          )
+      //- Abas de Filtro (Seção 2.1: Todas | Pendentes | Resolvidas)
+      .detran-rc-tabs(role='tablist' aria-label='Filtro de anotações e sugestões')
+        button.detran-rc-tab(
+          type='button'
+          :class='{ "is-active": filterMode === "all" }'
+          @click='filterMode = "all"'
+        ) Todas ({{ allItems.length }})
+        button.detran-rc-tab(
+          type='button'
+          :class='{ "is-active": filterMode === "pending" }'
+          @click='filterMode = "pending"'
+        ) Pendentes ({{ totalPendingCount }})
+        button.detran-rc-tab(
+          type='button'
+          :class='{ "is-active": filterMode === "resolved" }'
+          @click='filterMode = "resolved"'
+        ) Resolvidas ({{ totalResolvedCount }})
 
-      textarea.detran-rc-textarea(
-        v-model='newComment.body'
-        rows='3'
-        placeholder='Descreva o ajuste ou observação técnica...'
-        @input='formError = ""'
-      )
+    //- Box de Nova Observação ou Sugestão de Redação (com Smart Paste ativo e SEM campo de Linha)
+    .detran-rc-composer(v-if='composerOpen')
+      .detran-rc-composer__head
+        span.detran-rc-composer__title
+          v-icon(size='15' color='#15803d') {{ composeMode === 'redaction' ? 'mdi-pencil-plus-outline' : 'mdi-comment-plus-outline' }}
+          span {{ composeMode === 'redaction' ? 'Sugerir Nova Redação no Trecho' : 'Nova Observação no Texto' }}
+        button.detran-rc-composer__close(
+          type='button'
+          title='Cancelar'
+          @click='closeComposer'
+        )
+          v-icon(size='15' color='#94a3b8') mdi-close
+
+      //- Trecho ancorado via TextQuoteSelector
+      .detran-rc-composer__quote(v-if='newComment.exact')
+        span.detran-rc-composer__quote-label Trecho selecionado:
+        span.detran-rc-composer__quote-text "{{ newComment.exact }}"
+
+      //- Campo de Sugestão de Substituição (Modo "✏️ Sugerir redação")
+      .detran-rc-composer__field(v-if='composeMode === "redaction"')
+        label.detran-rc-input-label Sugestão de substituição (Smart Paste ativo):
+        textarea.detran-rc-textarea.is-replacement(
+          ref='replacementInput'
+          v-model='newComment.suggestedReplacement'
+          rows='2'
+          placeholder='Digite ou cole o novo texto que deve substituir o trecho selecionado...'
+          @paste='onSmartPasteField($event, "suggestedReplacement")'
+          @input='formError = ""'
+        )
+
+      //- Campo de Comentário / Justificativa
+      .detran-rc-composer__field
+        label.detran-rc-input-label {{ composeMode === 'redaction' ? 'Justificativa / Observação (opcional):' : 'Comentário ou orientação para o autor:' }}
+        textarea.detran-rc-textarea(
+          ref='commentInput'
+          v-model='newComment.body'
+          rows='3'
+          placeholder='Escreva sua observação ou cole conteúdo formatado...'
+          @paste='onSmartPasteField($event, "body")'
+          @input='formError = ""'
+        )
+
+      //- Aviso de Smart Paste no Composer
+      .detran-rc-smart-paste-hint(v-if='pasteNotice')
+        span ✨ {{ pasteNotice }}
+
       p.detran-rc-error(v-if='formError') {{ formError }}
 
-      .detran-rc-form__actions
+      .detran-rc-composer__actions
+        button.detran-rc-cancel-btn(
+          type='button'
+          @click='closeComposer'
+        ) Cancelar
         button.detran-rc-submit-btn(
           type='button'
-          :disabled='submitting || !newComment.body.trim()'
+          :disabled='submitting || (!newComment.body.trim() && !newComment.suggestedReplacement.trim())'
           @click='submitComment'
         )
           v-icon(size='13' color='#ffffff') mdi-send
-          span {{ submitting ? 'Enviando...' : 'Inserir Anotação' }}
+          span {{ submitting ? 'Salvando...' : (composeMode === 'redaction' ? 'Salvar Sugestão' : 'Salvar Comentário') }}
 
-    //- Lista de Anotações
-    .detran-rc-list
-      .detran-rc-empty(v-if='filteredComments.length === 0')
-        v-icon(size='32' color='#cbd5e1') mdi-comment-check-outline
-        p.detran-rc-empty__title
-          template(v-if='filterMode === "pending"') Nenhuma anotação pendente.
-          template(v-else-if='filterMode === "line"') Sem anotações na linha {{ selectedLine }}.
-          template(v-else) Nenhuma anotação registrada.
-        p.detran-rc-empty__sub Clique em qualquer linha do comparativo ao lado para ancorar uma observação.
+    //- Botão rápido para adicionar observação geral
+    button.detran-rc-quick-add(
+      v-else
+      type='button'
+      @click='openGeneralComposer'
+    )
+      v-icon(size='15' color='#15803d') mdi-plus-circle-outline
+      span Adicionar observação ou selecione um trecho na folha
 
-      .detran-rc-item(
+    //- Lista de Cartões de Decisão Estilo Google Docs (Sugestões de Diff + Comentários)
+    .detran-rc-list(ref='cardsContainer')
+      .detran-rc-empty(v-if='filteredItems.length === 0')
+        .detran-rc-empty__icon
+          v-icon(size='26' color='#16a34a') mdi-check-decagram-outline
+        p.detran-rc-empty__title Tudo revisado por aqui!
+        p.detran-rc-empty__sub Nenhuma alteração ou comentário neste filtro. Selecione qualquer trecho na folha ao lado para comentar ou sugerir redação.
+
+      .detran-rc-card.review-card(
         v-else
-        v-for='item in filteredComments'
+        v-for='item in filteredItems'
         :key='item.id'
-        :class='{ "is-resolved": item.resolved }'
+        :id='"card-" + item.id'
+        :class='[{ "active-card": activeItemId === item.id, "is-resolved": item.status !== "pending" }]'
+        @click='$emit("focus-item", item.id)'
       )
-        .detran-rc-item__head
-          .detran-rc-item__author
-            .detran-rc-item__avatar {{ (item.userName || 'R').charAt(0).toUpperCase() }}
+        //- Cabeçalho do Card (Autor + Horário + Botões Diretos ✓ Aceitar / ✕ Recusar)
+        .detran-rc-card__head
+          .detran-rc-card__author-wrap
+            .detran-rc-card__avatar(:class='item.type === "suggestion" || item.type === "redaction" ? "is-green" : "is-amber"')
+              v-icon(
+                size='14'
+                :color='item.type === "suggestion" || item.type === "redaction" ? "#166534" : "#92400e"'
+              ) {{ item.type === 'suggestion' || item.type === 'redaction' ? 'mdi-pencil' : 'mdi-message-reply-text' }}
             div
-              .detran-rc-item__name {{ item.userName || 'Revisor' }}
-              .detran-rc-item__date {{ item.createdAt | moment('DD/MM/YYYY HH:mm') }}
-          .detran-rc-item__badges
-            button.detran-rc-line-chip(
-              v-if='item.lineNumber > 0'
+              .detran-rc-card__author {{ item.author }}
+              .detran-rc-card__meta
+                span(v-if='item.actionLabel') {{ item.actionLabel }} •
+                span {{ item.timeLabel }}
+
+          //- Ações Diretas no Card (✓ Aceitar / ✕ Recusar para pendências, ou Chip de status)
+          .detran-rc-card__actions(v-if='item.status === "pending"' @click.stop)
+            button.detran-rc-decision-btn.is-accept(
               type='button'
-              @click='$emit("select-line", item.lineNumber)'
-            ) L{{ item.lineNumber }}
-            span.detran-rc-status-chip(:class='item.resolved ? "is-emerald" : "is-amber"')
-              | {{ item.resolved ? 'Resolvido' : 'Pendente' }}
+              title='Aceitar sugestão / resolver anotação'
+              :disabled='resolvingId === item.rawCommentId'
+              @click='onAcceptItem(item)'
+            )
+              v-icon(size='14' color='currentColor') mdi-check
+              span Aceitar
+            button.detran-rc-decision-btn.is-reject(
+              type='button'
+              title='Recusar alteração / manter original'
+              :disabled='resolvingId === item.rawCommentId'
+              @click='onRejectItem(item)'
+            )
+              v-icon(size='14' color='currentColor') mdi-close
+              span Recusar
 
-        .detran-rc-item__quote(v-if='item.anchorText') "{{ item.anchorText }}"
-        p.detran-rc-item__body {{ item.body }}
+          .detran-rc-card__status-wrap(v-else @click.stop)
+            span.detran-rc-status-chip(:class='item.status === "rejected" ? "is-red" : "is-emerald"')
+              | {{ item.status === 'rejected' ? 'Recusada' : 'Aceita / Resolvida' }}
+            button.detran-rc-reopen-btn(
+              v-if='item.rawCommentId'
+              type='button'
+              title='Reabrir item'
+              @click='reopenCommentItem(item)'
+            ) Reabrir
 
-        .detran-rc-item__foot
-          button.detran-rc-resolve-btn(
-            type='button'
-            :disabled='resolvingId === item.id'
-            @click='toggleResolve(item)'
+        //- Corpo de Sugestão (Diff do Autor ou Sugestão de Redação do Revisor)
+        template(v-if='item.type === "suggestion" || item.type === "redaction"')
+          .detran-rc-diff-preview
+            .detran-rc-diff-preview__old(v-if='item.oldText')
+              span.detran-rc-diff-preview__tag.is-old Antes:
+              span "{{ item.oldText }}"
+            .detran-rc-diff-preview__new(v-if='item.newText')
+              span.detran-rc-diff-preview__tag.is-new {{ item.isImage ? 'Nova Mídia:' : 'Novo:' }}
+              span "{{ item.newText }}"
+            .detran-rc-blob-warn(v-if='item.hasBlobWarning')
+              v-icon(size='13' color='#b91c1c') mdi-alert-outline
+              span URL blob: local detectada (expira ao fechar a aba do autor).
+          p.detran-rc-card__body(v-if='item.commentText') {{ item.commentText }}
+
+        //- Corpo de Comentário de Revisão
+        template(v-else)
+          .detran-rc-card__quote(v-if='item.quote') "{{ item.quote }}"
+          p.detran-rc-card__body {{ item.commentText }}
+
+        //- Thread de Respostas
+        .detran-rc-replies(v-if='item.replies && item.replies.length > 0')
+          .detran-rc-reply(
+            v-for='(rep, rIdx) in item.replies'
+            :key='rIdx'
           )
-            v-icon(size='13' :color='item.resolved ? "#64748b" : "#1b6535"') {{ item.resolved ? 'mdi-undo' : 'mdi-check-circle-outline' }}
-            span {{ item.resolved ? 'Reabrir anotação' : 'Marcar como resolvido' }}
+            strong.detran-rc-reply__author {{ rep.author }}:
+            span.detran-rc-reply__text  {{ rep.text }}
+
+        //- Input de Resposta Rápida
+        .detran-rc-reply-box(@click.stop)
+          input.detran-rc-reply-input(
+            v-model='replyInputs[item.id]'
+            type='text'
+            placeholder='Responder...'
+            @keydown.enter='submitReply(item)'
+          )
+          button.detran-rc-reply-send(
+            type='button'
+            title='Enviar resposta'
+            @click='submitReply(item)'
+          )
+            v-icon(size='14' color='#15803d') mdi-send
 </template>
 
 <script>
 import gql from 'graphql-tag'
+import moment from 'moment'
+import {
+  encodeTextQuoteSelector,
+  decodeTextQuoteSelector
+} from '../../store/detran-workflow-review'
+import { processSmartPastePayload } from '../../themes/default/components/transparent-editor/utils/smart-paste'
 
 export default {
   name: 'ReviewComments',
@@ -141,76 +222,204 @@ export default {
       type: Array,
       default: () => []
     },
-    selectedLine: {
-      type: Number,
-      default: 0
+    suggestions: {
+      type: Array,
+      default: () => []
     },
-    selectedText: {
+    suggestionDecisions: {
+      type: Object,
+      default: () => ({})
+    },
+    activeItemId: {
       type: String,
-      default: ''
+      default: null
+    },
+    selectionPayload: {
+      type: Object,
+      default: null
     }
   },
   data () {
     return {
       filterMode: 'all',
+      composerOpen: false,
+      composeMode: 'comment',
       submitting: false,
       resolvingId: null,
       formError: '',
+      pasteNotice: '',
+      replyInputs: {},
+      localSuggestionReplies: {},
       newComment: {
-        lineNumber: 0,
-        anchorText: '',
+        exact: '',
+        prefix: '',
+        suffix: '',
+        suggestedReplacement: '',
         body: ''
       }
     }
   },
   computed: {
-    unresolvedCount () {
-      return this.comments.filter(c => !c.resolved).length
+    normalizedSuggestionItems () {
+      return (this.suggestions || []).map(sug => {
+        const decision = this.suggestionDecisions[sug.id] || sug.status || 'pending'
+        const status = decision === 'accepted' ? 'accepted' : (decision === 'rejected' ? 'rejected' : 'pending')
+        return {
+          ...sug,
+          status,
+          timeLabel: sug.time || 'Nesta submissão',
+          replies: this.localSuggestionReplies[sug.id] || sug.replies || []
+        }
+      })
     },
-    lineCommentsCount () {
-      if (!this.selectedLine) return 0
-      return this.comments.filter(c => c.lineNumber === this.selectedLine).length
+    normalizedCommentItems () {
+      return (this.comments || []).map(c => {
+        const selector = decodeTextQuoteSelector(c)
+        const isRedaction = Boolean(selector.suggestedReplacement)
+        const status = c.resolved ? (selector.status === 'rejected' ? 'rejected' : 'accepted') : 'pending'
+        return {
+          id: `com-${c.id}`,
+          rawCommentId: c.id,
+          type: isRedaction ? 'redaction' : 'comment',
+          author: c.userName || 'Revisor',
+          actionLabel: isRedaction ? 'Sugeriu nova redação' : 'Comentou no trecho',
+          timeLabel: c.createdAt ? moment(c.createdAt).format('DD/MM HH:mm') : 'Agora mesmo',
+          quote: selector.exact || '',
+          prefix: selector.prefix || '',
+          suffix: selector.suffix || '',
+          oldText: isRedaction ? selector.exact : '',
+          newText: selector.suggestedReplacement || '',
+          commentText: c.body || '',
+          status,
+          replies: selector.replies || []
+        }
+      })
     },
-    filteredComments () {
+    allItems () {
+      return [...this.normalizedSuggestionItems, ...this.normalizedCommentItems]
+    },
+    totalPendingCount () {
+      return this.allItems.filter(i => i.status === 'pending').length
+    },
+    totalResolvedCount () {
+      return this.allItems.filter(i => i.status !== 'pending').length
+    },
+    filteredItems () {
       if (this.filterMode === 'pending') {
-        return this.comments.filter(c => !c.resolved)
+        return this.allItems.filter(i => i.status === 'pending')
       }
-      if (this.filterMode === 'line' && this.selectedLine > 0) {
-        return this.comments.filter(c => c.lineNumber === this.selectedLine)
+      if (this.filterMode === 'resolved') {
+        return this.allItems.filter(i => i.status !== 'pending')
       }
-      return this.comments
+      return this.allItems
     }
   },
   watch: {
-    selectedLine: {
-      immediate: true,
-      handler (newVal) {
-        if (newVal > 0) {
-          this.newComment.lineNumber = newVal
-          if (this.selectedText) {
-            this.newComment.anchorText = this.selectedText
-          }
-          if (this.lineCommentsCount > 0) {
-            this.filterMode = 'line'
-          }
+    selectionPayload: {
+      deep: true,
+      handler (payload) {
+        if (payload && payload.exact) {
+          this.openFromSelection(payload)
         }
-      }
-    },
-    selectedText (newVal) {
-      if (newVal && this.selectedLine > 0) {
-        this.newComment.anchorText = newVal
       }
     }
   },
   methods: {
+    openFromSelection ({ exact = '', prefix = '', suffix = '', mode = 'comment' } = {}) {
+      this.composeMode = mode === 'redaction' ? 'redaction' : 'comment'
+      this.newComment = {
+        exact,
+        prefix,
+        suffix,
+        suggestedReplacement: mode === 'redaction' ? exact : '',
+        body: ''
+      }
+      this.formError = ''
+      this.composerOpen = true
+      this.$nextTick(() => {
+        const target = mode === 'redaction' ? this.$refs.replacementInput : this.$refs.commentInput
+        if (target && typeof target.focus === 'function') {
+          target.focus()
+        }
+      })
+    },
+    openGeneralComposer () {
+      this.composeMode = 'comment'
+      this.newComment = {
+        exact: '',
+        prefix: '',
+        suffix: '',
+        suggestedReplacement: '',
+        body: ''
+      }
+      this.formError = ''
+      this.composerOpen = true
+      this.$nextTick(() => {
+        if (this.$refs.commentInput) {
+          this.$refs.commentInput.focus()
+        }
+      })
+    },
+    closeComposer () {
+      this.composerOpen = false
+      this.formError = ''
+      this.pasteNotice = ''
+      this.$emit('clear-selection')
+    },
+    async onSmartPasteField (event, fieldName) {
+      if (!event || !event.clipboardData) return
+      const html = event.clipboardData.getData('text/html') || ''
+      const plainText = event.clipboardData.getData('text/plain') || ''
+      const files = event.clipboardData.files ? Array.from(event.clipboardData.files) : []
+      if (!html && files.length === 0) return
+
+      event.preventDefault()
+      try {
+        const res = await processSmartPastePayload({
+          html,
+          plainText,
+          files
+        })
+        const cleaned = (res.markdown || res.plainText || '').trim()
+        if (cleaned) {
+          const current = this.newComment[fieldName] || ''
+          this.newComment[fieldName] = current ? `${current}\n${cleaned}` : cleaned
+          if (res.hadComplexFormatting) {
+            this.pasteNotice = 'Texto colado foi higienizado para o padrão da Intranet.'
+            setTimeout(() => { this.pasteNotice = '' }, 4000)
+          }
+        }
+      } catch (err) {
+        this.formError = err.message || 'Erro ao colar conteúdo.'
+      }
+    },
     async submitComment () {
-      if (!this.newComment.body.trim()) {
-        this.formError = 'Por favor, informe o conteúdo da anotação.'
+      const bodyText = this.newComment.body.trim()
+      const replacementText = this.newComment.suggestedReplacement.trim()
+
+      if (this.composeMode === 'redaction' && !replacementText) {
+        this.formError = 'Informe a nova redação sugerida para o trecho.'
+        return
+      }
+      if (this.composeMode === 'comment' && !bodyText) {
+        this.formError = 'Informe o comentário ou observação.'
         return
       }
 
       this.submitting = true
       this.formError = ''
+
+      const finalBody = bodyText || (this.composeMode === 'redaction' ? `Sugestão de redação: "${replacementText}"` : '')
+      const encodedAnchor = (this.newComment.exact || replacementText) ?
+        encodeTextQuoteSelector({
+          exact: this.newComment.exact,
+          prefix: this.newComment.prefix,
+          suffix: this.newComment.suffix,
+          suggestedReplacement: this.composeMode === 'redaction' ? replacementText : '',
+          status: 'pending',
+          replies: []
+        }) :
+        null
 
       try {
         const result = await this.$apollo.mutate({
@@ -240,9 +449,9 @@ export default {
           `,
           variables: {
             draftId: this.draftId,
-            lineNumber: this.newComment.lineNumber > 0 ? this.newComment.lineNumber : null,
-            anchorText: this.newComment.anchorText || null,
-            body: this.newComment.body.trim()
+            lineNumber: null,
+            anchorText: encodedAnchor,
+            body: finalBody
           }
         })
 
@@ -250,22 +459,47 @@ export default {
         if (payload && payload.responseResult && payload.responseResult.succeeded && payload.comment) {
           /* eslint-disable-next-line vue/custom-event-name-casing */
           this.$emit('comment-added', payload.comment)
-          this.newComment.body = ''
-          this.newComment.anchorText = ''
+          this.closeComposer()
         } else {
           this.formError = (payload && payload.responseResult && payload.responseResult.message) || 'Erro ao registrar anotação.'
         }
       } catch (err) {
-        this.formError = err.message || 'Falha de comunicação ao adicionar anotação.'
+        this.formError = err.message || 'Falha de comunicação ao salvar anotação.'
       } finally {
         this.submitting = false
       }
     },
-
-    async toggleResolve (comment) {
-      this.resolvingId = comment.id
-      const nextResolved = !comment.resolved
-
+    async onAcceptItem (item) {
+      if (item.type === 'suggestion') {
+        /* eslint-disable-next-line vue/custom-event-name-casing */
+        this.$emit('suggestion-decision', { item, decision: 'accepted' })
+        return
+      }
+      if (item.type === 'redaction') {
+        /* eslint-disable-next-line vue/custom-event-name-casing */
+        this.$emit('redaction-decision', { item, decision: 'accepted' })
+      }
+      await this.setCommentResolved(item.rawCommentId, true)
+    },
+    async onRejectItem (item) {
+      if (item.type === 'suggestion') {
+        /* eslint-disable-next-line vue/custom-event-name-casing */
+        this.$emit('suggestion-decision', { item, decision: 'rejected' })
+        return
+      }
+      if (item.type === 'redaction') {
+        /* eslint-disable-next-line vue/custom-event-name-casing */
+        this.$emit('redaction-decision', { item, decision: 'rejected' })
+      }
+      await this.setCommentResolved(item.rawCommentId, true)
+    },
+    async reopenCommentItem (item) {
+      if (!item.rawCommentId) return
+      await this.setCommentResolved(item.rawCommentId, false)
+    },
+    async setCommentResolved (commentId, resolved) {
+      if (!commentId) return
+      this.resolvingId = commentId
       try {
         const result = await this.$apollo.mutate({
           mutation: gql`
@@ -279,31 +513,42 @@ export default {
             }
           `,
           variables: {
-            id: comment.id,
-            resolved: nextResolved
+            id: commentId,
+            resolved
           }
         })
-
         const res = result && result.data && result.data.workflow && result.data.workflow.resolveComment
         if (res && res.succeeded) {
           /* eslint-disable-next-line vue/custom-event-name-casing */
-          this.$emit('comment-resolved', { id: comment.id, resolved: nextResolved })
-        } else {
-          this.$store.commit('showNotification', {
-            style: 'red',
-            icon: 'alert',
-            message: (res && res.message) || 'Não foi possível alterar o status do comentário.'
-          })
+          this.$emit('comment-resolved', { id: commentId, resolved })
         }
       } catch (err) {
         this.$store.commit('showNotification', {
           style: 'red',
           icon: 'alert',
-          message: err.message || 'Erro ao resolver anotação.'
+          message: err.message || 'Erro ao atualizar status da anotação.'
         })
       } finally {
         this.resolvingId = null
       }
+    },
+    submitReply (item) {
+      const text = String(this.replyInputs[item.id] || '').trim()
+      if (!text) return
+      const existing = this.localSuggestionReplies[item.id] || item.replies || []
+      this.$set(this.localSuggestionReplies, item.id, [
+        ...existing,
+        { author: 'Você (Revisor)', text }
+      ])
+      this.$set(this.replyInputs, item.id, '')
+    },
+    scrollToCard (itemId) {
+      this.$nextTick(() => {
+        const el = this.$el && this.$el.querySelector(`#card-${itemId}`)
+        if (el && typeof el.scrollIntoView === 'function') {
+          el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+        }
+      })
     }
   }
 }
@@ -315,16 +560,22 @@ export default {
 .detran-review-comments {
   display: flex;
   flex-direction: column;
-  background: #ffffff;
+  gap: 0.75rem;
 }
 
 .detran-rc-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.875rem 1.125rem;
-  background-color: $slate-50;
-  border-bottom: 1px solid $slate-100;
+  background: #ffffff;
+  border: 1px solid $slate-200;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+
+  &__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+  }
 
   &__left {
     display: flex;
@@ -333,115 +584,123 @@ export default {
   }
 
   &__title {
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: $slate-700;
+    letter-spacing: 0.04em;
+    color: $slate-800;
     margin: 0;
   }
 }
 
 .detran-rc-badge {
-  padding: 2px 8px;
+  padding: 2px 10px;
   border-radius: 9999px;
-  font-size: 0.6875rem;
-  font-weight: 600;
+  font-size: 0.75rem;
+  font-weight: 700;
 
   &.is-amber {
-    background-color: #fef3c7;
-    color: #b45309;
+    background-color: #dcfce7;
+    color: #166534;
   }
 
   &.is-emerald {
-    background-color: #d1fae5;
-    color: #1b6535;
+    background-color: #f0fdf4;
+    color: #15803d;
+    border: 1px solid #bbf7d0;
   }
 }
 
 .detran-rc-tabs {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 4px;
-  padding: 0.5rem 0.875rem;
-  border-bottom: 1px solid $slate-100;
+  background-color: $slate-100;
+  padding: 4px;
+  border-radius: 0.5rem;
 }
 
 .detran-rc-tab {
-  flex: 1;
-  padding: 0.3rem 0.5rem;
+  padding: 0.375rem 0.4rem;
   border-radius: 0.375rem;
   border: none;
   background: transparent;
-  font-size: 0.6875rem;
+  font-size: 0.75rem;
   font-weight: 600;
-  color: $slate-500;
+  color: $slate-600;
   cursor: pointer;
   transition: all 0.15s ease;
 
   &:hover {
-    color: $slate-800;
-    background: $slate-50;
+    color: $slate-900;
   }
 
   &.is-active {
-    background: $detran-50;
-    color: $detran-700;
+    background: #ffffff;
+    color: $slate-800;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
   }
 }
 
-.detran-rc-form {
-  padding: 0.875rem 1rem;
-  border-bottom: 1px solid $slate-100;
-  background-color: #ffffff;
+.detran-rc-composer {
+  background: #ffffff;
+  border: 2px solid #16a34a;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.1);
 
-  &__top {
+  &__head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 0.625rem;
+    margin-bottom: 0.5rem;
   }
 
-  &__label {
+  &__title {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
     font-size: 0.75rem;
     font-weight: 700;
-    color: $slate-800;
+    color: #166534;
   }
 
-  &__clear {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
+  &__close {
     border: none;
-    background: $slate-100;
-    color: $slate-600;
-    font-size: 0.6875rem;
-    padding: 2px 6px;
-    border-radius: 4px;
+    background: transparent;
     cursor: pointer;
+    padding: 2px;
   }
 
-  &__row {
-    display: flex;
-    gap: 0.5rem;
+  &__quote {
+    background: #fefce8;
+    border-left: 3px solid #facc15;
+    padding: 0.375rem 0.625rem;
+    border-radius: 0 0.375rem 0.375rem 0;
+    margin-bottom: 0.625rem;
+    font-size: 0.75rem;
+  }
+
+  &__quote-label {
+    display: block;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: #854d0e;
+  }
+
+  &__quote-text {
+    font-style: italic;
+    color: $slate-600;
+  }
+
+  &__field {
     margin-bottom: 0.5rem;
-  }
-
-  &__col-line {
-    width: 68px;
-    flex-shrink: 0;
-  }
-
-  &__col-anchor {
-    flex: 1;
-    min-width: 0;
   }
 
   &__actions {
     display: flex;
     justify-content: flex-end;
+    gap: 0.5rem;
     margin-top: 0.5rem;
   }
 }
@@ -450,41 +709,41 @@ export default {
   display: block;
   font-size: 0.6875rem;
   font-weight: 600;
-  color: $slate-500;
-  margin-bottom: 2px;
-}
-
-.detran-rc-input {
-  width: 100%;
-  padding: 0.375rem 0.5rem;
-  font-size: 0.75rem;
-  color: $slate-800;
-  background: $slate-50;
-  border: 1px solid $slate-200;
-  border-radius: 0.5rem;
-  outline: none;
-
-  &:focus {
-    background: #ffffff;
-    border-color: #2ea058;
-  }
+  color: $slate-600;
+  margin-bottom: 3px;
 }
 
 .detran-rc-textarea {
   width: 100%;
   padding: 0.5rem 0.625rem;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   color: $slate-800;
-  background: $slate-50;
-  border: 1px solid $slate-200;
+  background: #ffffff;
+  border: 1px solid $slate-300;
   border-radius: 0.5rem;
   outline: none;
   resize: vertical;
 
-  &:focus {
-    background: #ffffff;
-    border-color: #2ea058;
+  &.is-replacement {
+    background: #f0fdf4;
+    border-color: #86efac;
+    color: #166534;
+    font-weight: 500;
   }
+
+  &:focus {
+    border-color: #16a34a;
+    box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.15);
+  }
+}
+
+.detran-rc-smart-paste-hint {
+  font-size: 0.6875rem;
+  color: #15803d;
+  background: #f0fdf4;
+  padding: 4px 8px;
+  border-radius: 4px;
+  margin-bottom: 4px;
 }
 
 .detran-rc-error {
@@ -493,19 +752,33 @@ export default {
   margin: 4px 0 0;
 }
 
+.detran-rc-cancel-btn {
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.5rem;
+  border: none;
+  background: transparent;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: $slate-600;
+  cursor: pointer;
+
+  &:hover {
+    background: $slate-100;
+  }
+}
+
 .detran-rc-submit-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.4rem 0.85rem;
+  padding: 0.375rem 0.85rem;
   border-radius: 0.5rem;
   border: none;
-  background-color: #1b6535;
+  background-color: #15803d;
   color: #ffffff;
   font-size: 0.75rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.15s ease;
 
   &:disabled {
     opacity: 0.5;
@@ -513,162 +786,339 @@ export default {
   }
 
   &:hover:not(:disabled) {
-    background-color: #144d28;
+    background-color: #166534;
+  }
+}
+
+.detran-rc-quick-add {
+  width: 100%;
+  padding: 0.625rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px dashed $slate-300;
+  background: rgba(255, 255, 255, 0.7);
+  color: $slate-600;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: #ffffff;
+    border-color: #16a34a;
+    color: #15803d;
   }
 }
 
 .detran-rc-list {
-  padding: 0.75rem 1rem;
-  max-height: 380px;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
+  gap: 0.75rem;
+  max-height: 540px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .detran-rc-empty {
+  background: #ffffff;
+  border: 1px solid $slate-200;
+  border-radius: 0.75rem;
+  padding: 2rem 1rem;
   text-align: center;
-  padding: 1.5rem 0.5rem;
+
+  &__icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 9999px;
+    background: #f0fdf4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 0.75rem;
+  }
 
   &__title {
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: $slate-600;
-    margin: 0.5rem 0 0.25rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: $slate-800;
+    margin: 0 0 0.25rem;
   }
 
   &__sub {
-    font-size: 0.6875rem;
-    color: $slate-400;
+    font-size: 0.75rem;
+    color: $slate-500;
     margin: 0;
     line-height: 1.4;
   }
 }
 
-.detran-rc-item {
-  border: 1px solid $slate-200;
-  border-radius: 0.625rem;
-  padding: 0.65rem 0.75rem;
+.detran-rc-card {
   background: #ffffff;
+  border: 1px solid $slate-200;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  cursor: pointer;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover {
+    border-color: $slate-300;
+  }
+
+  &.active-card {
+    transform: translateX(-4px);
+    border-color: #16a34a;
+    box-shadow: 0 10px 25px -5px rgba(22, 163, 74, 0.15), 0 0 0 2px rgba(22, 163, 74, 0.15);
+  }
 
   &.is-resolved {
-    opacity: 0.72;
+    opacity: 0.75;
     background: $slate-50;
   }
 
   &__head {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 0.5rem;
-    margin-bottom: 0.375rem;
+    margin-bottom: 0.625rem;
   }
 
-  &__author {
+  &__author-wrap {
     display: flex;
     align-items: center;
-    gap: 0.45rem;
+    gap: 0.5rem;
   }
 
   &__avatar {
-    width: 22px;
-    height: 22px;
+    width: 28px;
+    height: 28px;
     border-radius: 9999px;
-    background: $detran-100;
-    color: $detran-800;
-    font-size: 0.6875rem;
-    font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
+
+    &.is-green {
+      background: #dcfce7;
+    }
+
+    &.is-amber {
+      background: #fef3c7;
+    }
   }
 
-  &__name {
+  &__author {
     font-size: 0.75rem;
     font-weight: 700;
     color: $slate-800;
-    line-height: 1.1;
+    line-height: 1.2;
   }
 
-  &__date {
-    font-size: 0.625rem;
+  &__meta {
+    font-size: 0.6875rem;
     color: $slate-400;
   }
 
-  &__badges {
+  &__actions {
     display: flex;
     align-items: center;
     gap: 4px;
+    flex-shrink: 0;
+  }
+
+  &__status-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
 
   &__quote {
     font-size: 0.6875rem;
-    color: $slate-600;
     font-style: italic;
-    background: $slate-50;
-    border-left: 2px solid $detran-500;
-    padding: 3px 6px;
+    color: $slate-600;
+    border-left: 2px solid #facc15;
+    background: #fefce8;
+    padding: 4px 8px;
     border-radius: 0 4px 4px 0;
-    margin-bottom: 0.375rem;
+    margin-bottom: 0.5rem;
   }
 
   &__body {
     font-size: 0.75rem;
     color: $slate-700;
-    line-height: 1.45;
-    margin: 0 0 0.45rem;
+    line-height: 1.5;
+    margin: 0 0 0.5rem;
     white-space: pre-wrap;
-  }
-
-  &__foot {
-    display: flex;
-    justify-content: flex-end;
-    padding-top: 0.35rem;
-    border-top: 1px solid $slate-100;
   }
 }
 
-.detran-rc-line-chip {
-  padding: 1px 6px;
-  border-radius: 4px;
-  border: 1px solid $slate-200;
-  background: $slate-50;
-  font-size: 0.625rem;
+.detran-rc-decision-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 8px;
+  border-radius: 0.5rem;
+  border: 1px solid transparent;
+  font-size: 0.6875rem;
   font-weight: 700;
-  color: $slate-700;
   cursor: pointer;
+  transition: all 0.15s ease;
+
+  &.is-accept {
+    background: #f0fdf4;
+    color: #15803d;
+    border-color: #bbf7d0;
+
+    &:hover:not(:disabled) {
+      background: #16a34a;
+      color: #ffffff;
+    }
+  }
+
+  &.is-reject {
+    background: #fef2f2;
+    color: #b91c1c;
+    border-color: #fecaca;
+
+    &:hover:not(:disabled) {
+      background: #dc2626;
+      color: #ffffff;
+    }
+  }
+}
+
+.detran-rc-diff-preview {
+  background: $slate-50;
+  border: 1px solid $slate-100;
+  border-radius: 0.5rem;
+  padding: 0.625rem;
+  font-size: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-bottom: 0.5rem;
+
+  &__old {
+    color: #b91c1c;
+    text-decoration: line-through;
+    line-height: 1.4;
+  }
+
+  &__new {
+    color: #166534;
+    font-weight: 500;
+    line-height: 1.4;
+  }
+
+  &__tag {
+    font-size: 0.625rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    margin-right: 4px;
+    display: inline-block;
+
+    &.is-old { color: #991b1b; }
+    &.is-new { color: #15803d; }
+  }
+}
+
+.detran-rc-blob-warn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #b91c1c;
+  background: #fef2f2;
+  padding: 4px 6px;
+  border-radius: 4px;
 }
 
 .detran-rc-status-chip {
-  padding: 1px 6px;
+  padding: 2px 6px;
   border-radius: 4px;
   font-size: 0.625rem;
   font-weight: 700;
 
-  &.is-amber {
-    background: #fef3c7;
-    color: #b45309;
+  &.is-emerald {
+    background: #dcfce7;
+    color: #166534;
   }
 
-  &.is-emerald {
-    background: #d1fae5;
-    color: #1b6535;
+  &.is-red {
+    background: #fee2e2;
+    color: #991b1b;
   }
 }
 
-.detran-rc-resolve-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+.detran-rc-reopen-btn {
   border: none;
   background: transparent;
   font-size: 0.6875rem;
-  font-weight: 600;
-  color: #1b6535;
+  color: $slate-500;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.detran-rc-replies {
+  border-top: 1px solid $slate-100;
+  padding-top: 0.5rem;
+  margin-top: 0.375rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.detran-rc-reply {
+  font-size: 0.75rem;
+  line-height: 1.4;
+
+  &__author {
+    color: $slate-800;
+  }
+
+  &__text {
+    color: $slate-600;
+  }
+}
+
+.detran-rc-reply-box {
+  margin-top: 0.625rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid $slate-100;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.detran-rc-reply-input {
+  flex: 1;
+  font-size: 0.75rem;
+  background: $slate-50;
+  border: 1px solid $slate-200;
+  border-radius: 0.5rem;
+  padding: 0.375rem 0.625rem;
+  outline: none;
+
+  &:focus {
+    background: #ffffff;
+    border-color: #16a34a;
+  }
+}
+
+.detran-rc-reply-send {
+  border: none;
+  background: transparent;
+  padding: 0.375rem;
+  border-radius: 0.5rem;
   cursor: pointer;
 
   &:hover {
-    text-decoration: underline;
+    background: #f0fdf4;
   }
 }
 </style>
