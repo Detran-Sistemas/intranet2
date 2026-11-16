@@ -17,3 +17,5 @@ coverage/
 cypress/
 cypress.json
 design_system.html
+.trash
+.trash/

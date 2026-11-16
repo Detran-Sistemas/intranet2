@@ -55,7 +55,7 @@ jobs:
         DOCKER_BUILD_SUMMARY: false
       with:
         context: .
-        file: dev/build/Dockerfile
+        file: Dockerfile
         push: true
         tags: |
           ghcr.io/${{ env.IMAGE_NAME }}:canary

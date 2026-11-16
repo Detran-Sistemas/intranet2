@@ -23,7 +23,7 @@ COPY client/ ./client/
 COPY dev/ ./dev/
 COPY server/ ./server/
 
-ENV NODE_OPTIONS="--openssl-legacy-provider"
+ENV NODE_OPTIONS="--openssl-legacy-provider --max-old-space-size=4096"
 RUN yarn build
 
 RUN rm -rf node_modules && \
