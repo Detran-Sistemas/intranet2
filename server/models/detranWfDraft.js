@@ -25,6 +25,7 @@ module.exports = class DetranWfDraft extends Model {
         contentType: { type: 'string', default: 'markdown' },
         editorKey: { type: 'string', default: 'markdown' },
         tags: { type: ['array', 'object', 'null'] },
+        decisions: { type: ['string', 'object', 'null'] },
         state: { type: 'string', default: 'draft' },
         approvalMode: { type: 'string', default: '1_level' },
         currentLevel: { type: 'integer', default: 1 },

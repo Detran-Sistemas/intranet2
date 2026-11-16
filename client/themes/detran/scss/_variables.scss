@@ -116,6 +116,13 @@ $bp-xl: 1904px;
 @mixin tablet-up { @media (min-width: #{$bp-sm}) { @content; } }
 @mixin desktop { @media (min-width: #{$bp-md}) { @content; } }
 @mixin desktop-lg { @media (min-width: #{$bp-lg}) { @content; } }
+@mixin medium-screens { @media (min-width: #{$bp-sm}) and (max-width: 1180px) { @content; } }
+@mixin screen-compact { @media (max-width: 1180px) { @content; } }
+
+// Mixins de responsividade vertical (telas menores verticalmente, laptops 768p, janelas compactadas)
+@mixin v-compact { @media (max-height: 850px) { @content; } }
+@mixin v-short   { @media (max-height: 720px) { @content; } }
+@mixin v-tiny    { @media (max-height: 580px) { @content; } }
 
 // -----------------------------------------------------------------------------
 // TRANSIÇÕES

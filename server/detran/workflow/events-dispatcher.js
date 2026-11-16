@@ -1,7 +1,7 @@
 const { EventEmitter } = require('events')
 const https = require('https')
 const http = require('http')
-const url = require('url')
+const { URL } = require('url')
 const _ = require('lodash')
 
 /**
@@ -293,8 +293,13 @@ class WorkflowEventsDispatcher extends EventEmitter {
   postJson(targetUrl, data) {
     return new Promise((resolve) => {
       try {
-        const parsed = url.parse(targetUrl)
+        const parsed = new URL(targetUrl)
         const isHttps = parsed.protocol === 'https:'
+        const isLocalHttp = parsed.protocol === 'http:' && (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1')
+        if (!isHttps && !isLocalHttp) {
+          resolve(false)
+          return
+        }
         const client = isHttps ? https : http
         const payloadString = JSON.stringify(data)
 
@@ -303,7 +308,7 @@ class WorkflowEventsDispatcher extends EventEmitter {
             protocol: parsed.protocol,
             hostname: parsed.hostname,
             port: parsed.port || (isHttps ? 443 : 80),
-            path: parsed.path,
+            path: `${parsed.pathname || '/'}${parsed.search || ''}`,
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

@@ -147,6 +147,39 @@ describe('Homologação Editorial Estilo Google Docs & Smart Paste (Colagem Inte
         decision: 'reject'
       })
       expect(rejectedMd).toBe('Nosso objetivo é garantir informações técnicas e formais.')
+
+      // Reabrir (restore/pending) restaura a redação proposta
+      const reopenedMd = applySuggestionDecisionToMarkdown({
+        draftContent: rejectedMd,
+        suggestion,
+        decision: 'restore'
+      })
+      expect(reopenedMd).toBe('Nosso objetivo é garantir informações claras e diretas.')
+    })
+
+    test('preserva todos os cards de sugestão na lista com seus status ao aplicar decisões (accepted/rejected)', () => {
+      const originalContent = 'Texto original do parágrafo.'
+      const draftContent = 'Texto modificado do parágrafo com novidades.'
+
+      // Quando não há decisões, status de ambos é pending
+      const diff1 = buildVisualDiffDocument({
+        originalContent,
+        draftContent,
+        decisions: {}
+      })
+      expect(diff1.suggestions).toHaveLength(2)
+      expect(diff1.suggestions[0].status).toBe('pending')
+      expect(diff1.suggestions[1].status).toBe('pending')
+
+      // Quando sug-1 é aceita e sug-2 é rejeitada, ambos continuam na lista de suggestions com seus respectivos status
+      const diff2 = buildVisualDiffDocument({
+        originalContent,
+        draftContent,
+        decisions: { 'sug-1': 'accepted', 'sug-2': 'rejected' }
+      })
+      expect(diff2.suggestions).toHaveLength(2)
+      expect(diff2.suggestions[0].status).toBe('accepted')
+      expect(diff2.suggestions[1].status).toBe('rejected')
     })
   })
 
@@ -266,6 +299,53 @@ describe('Homologação Editorial Estilo Google Docs & Smart Paste (Colagem Inte
         json: async () => ({ path: 'blob:http://localhost:3000/bad' })
       })
       await expect(uploadPastedImage({ file: fakeImageFile, fetchImpl: badFetch })).rejects.toThrow()
+    })
+
+    test('decodifica e renderiza blocos diagram (Base64 SVG) e mermaid no modo de revisão sem expor texto Base64', () => {
+      const svgRaw = '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="40"><rect width="120" height="40"/><text x="10" y="25">Fluxo</text></svg>'
+      const base64Svg = Buffer.from(svgRaw, 'utf8').toString('base64')
+
+      const originalContent = [
+        '## Introdução',
+        'Fluxo oficial do processo.'
+      ].join('\n\n')
+
+      const draftContent = [
+        '## Introdução',
+        'Fluxo oficial do processo.',
+        '```diagram\n' + base64Svg + '\n```',
+        '```mermaid\ngraph TD\n\nA[Início] --> B[Fim]\n```'
+      ].join('\n\n')
+
+      const res = buildVisualDiffDocument({
+        originalContent,
+        draftContent,
+        comments: [
+          {
+            id: 99,
+            anchorText: JSON.stringify({ type: 'TextQuoteSelector', exact: 'Fluxo' }),
+            resolved: false
+          }
+        ]
+      })
+
+      // Renderiza o SVG decodificado em vez do base64 cru
+      expect(res.html).toContain('<div class="diagram">')
+      expect(res.html).toContain('<svg xmlns="http://www.w3.org/2000/svg"')
+      expect(res.html).not.toContain(base64Svg)
+
+      // Não injeta <mark> dentro de tags <svg> (deve marcar apenas o texto "Fluxo" fora do SVG)
+      expect(res.html).toContain('<mark id="item-com-99"')
+      expect(res.html).toContain('<text x="10" y="25">Fluxo</text>')
+
+      // Diagrama adicionado gera cartão com descrição amigável sem base64
+      const diagSug = res.suggestions.find(s => s.actionLabel === 'Inseriu um diagrama')
+      expect(diagSug).toBeDefined()
+      expect(diagSug.newText).toBe('[Diagrama Técnico]')
+
+      // Bloco mermaid com linha em branco interna é mantido inteiro e classificado
+      expect(res.html).toContain('<div class="mermaid">graph TD')
+      expect(res.html).toContain('A[Início] --&gt; B[Fim]</div>')
     })
   })
 })

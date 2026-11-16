@@ -5,7 +5,8 @@ const stateMachine = require('../../../detran/workflow/state-machine')
 const {
   InvalidTransitionError,
   FourEyesViolationError,
-  ConcurrencyConflictError
+  ConcurrencyConflictError,
+  PermissionDeniedError
 } = require('../../../detran/workflow/errors')
 const DetranWfDraft = require('../../../models/detranWfDraft')
 
@@ -405,6 +406,123 @@ describe('Detran Workflow - State Machine & Domain Rules (TDD)', () => {
         { comment: 'Revogado pela Resolucao 99.' }
       )
       expect(archiveResult.nextState).toBe(stateMachine.STATES.ARCHIVED)
+    })
+  })
+
+  describe('Retract & Strict Author/Reviewer Domain Rules (Etapa 1 TDD)', () => {
+    it('allows author to retract an in_review or awaiting_approval draft back to draft with level 1', async () => {
+      const draft = await DetranWfDraft.query().insert({
+        path: 'normativos/retract-ok',
+        title: 'Normativo Retract',
+        content: 'Conteudo enviado',
+        approvalMode: '2_levels',
+        authorId: userAuthor.id
+      })
+
+      await stateMachine.executeTransition(draft, stateMachine.ACTIONS.SUBMIT, userAuthor)
+      await stateMachine.executeTransition(draft, stateMachine.ACTIONS.APPROVE_STEP, userReviewer)
+      expect(draft.state).toBe(stateMachine.STATES.AWAITING_APPROVAL)
+      expect(draft.currentLevel).toBe(2)
+
+      const retractResult = await stateMachine.executeTransition(
+        draft,
+        stateMachine.ACTIONS.RETRACT,
+        userAuthor,
+        { comment: 'Puxado para ajustar anexo' }
+      )
+
+      expect(retractResult.nextState).toBe(stateMachine.STATES.DRAFT)
+      expect(retractResult.draft.state).toBe(stateMachine.STATES.DRAFT)
+      expect(retractResult.draft.currentLevel).toBe(1)
+      expect(retractResult.event).toBeDefined()
+      expect(retractResult.event.action).toBe('retract')
+      expect(retractResult.event.fromState).toBe(stateMachine.STATES.AWAITING_APPROVAL)
+      expect(retractResult.event.toState).toBe(stateMachine.STATES.DRAFT)
+    })
+
+    it('blocks non-author regular users from retracting someone else draft', async () => {
+      const otherAuthor = { id: 99, name: 'Outro Editor', permissions: ['write:drafts'] }
+      const draft = await DetranWfDraft.query().insert({
+        path: 'normativos/retract-blocked',
+        title: 'Normativo Bloqueado',
+        content: 'Conteudo enviado',
+        approvalMode: '1_level',
+        authorId: userAuthor.id
+      })
+
+      await stateMachine.executeTransition(draft, stateMachine.ACTIONS.SUBMIT, userAuthor)
+
+      await expect(
+        stateMachine.executeTransition(draft, stateMachine.ACTIONS.RETRACT, otherAuthor)
+      ).rejects.toThrow(PermissionDeniedError)
+
+      await expect(
+        stateMachine.executeTransition(draft, stateMachine.ACTIONS.RETRACT, userReviewer)
+      ).rejects.toThrow(PermissionDeniedError)
+    })
+
+    it('rejects retract from invalid states (draft, changes_requested, published)', async () => {
+      const draft = await DetranWfDraft.query().insert({
+        path: 'normativos/retract-invalid-state',
+        title: 'Estado Invalido',
+        content: 'Conteudo',
+        approvalMode: '1_level',
+        authorId: userAuthor.id
+      })
+
+      await expect(
+        stateMachine.executeTransition(draft, stateMachine.ACTIONS.RETRACT, userAuthor)
+      ).rejects.toThrow(InvalidTransitionError)
+
+      await stateMachine.executeTransition(draft, stateMachine.ACTIONS.SUBMIT, userAuthor)
+      await stateMachine.executeTransition(draft, stateMachine.ACTIONS.REQUEST_CHANGES, userReviewer)
+
+      await expect(
+        stateMachine.executeTransition(draft, stateMachine.ACTIONS.RETRACT, userAuthor)
+      ).rejects.toThrow(InvalidTransitionError)
+    })
+
+    it('blocks author from saving edits while in_review or awaiting_approval (must retract first), while allowing reviewer inline edits', async () => {
+      const draft = await DetranWfDraft.query().insert({
+        path: 'normativos/bloqueio-edicao-em-revisao',
+        title: 'Edicao Bloqueada',
+        content: 'Conteudo v1',
+        approvalMode: '2_levels',
+        authorId: userAuthor.id
+      })
+
+      await stateMachine.executeTransition(draft, stateMachine.ACTIONS.SUBMIT, userAuthor)
+
+      // Author blocked in in_review
+      await expect(
+        stateMachine.executeTransition(draft, stateMachine.ACTIONS.SAVE_DRAFT, userAuthor)
+      ).rejects.toThrow(PermissionDeniedError)
+
+      // Reviewer allowed inline edit in in_review
+      const revSave = await stateMachine.executeTransition(draft, stateMachine.ACTIONS.SAVE_DRAFT, userReviewer)
+      expect(revSave.nextState).toBe(stateMachine.STATES.IN_REVIEW)
+
+      // Advance to awaiting_approval: author still blocked
+      await stateMachine.executeTransition(draft, stateMachine.ACTIONS.APPROVE_STEP, userReviewer)
+      await expect(
+        stateMachine.executeTransition(draft, stateMachine.ACTIONS.SAVE_DRAFT, userAuthor)
+      ).rejects.toThrow(PermissionDeniedError)
+    })
+
+    it('blocks author from calling REQUEST_CHANGES on own draft (Four-Eyes)', async () => {
+      const draft = await DetranWfDraft.query().insert({
+        path: 'normativos/four-eyes-request-changes',
+        title: 'Four Eyes Request Changes',
+        content: 'Conteudo',
+        approvalMode: '1_level',
+        authorId: userAuthor.id
+      })
+
+      await stateMachine.executeTransition(draft, stateMachine.ACTIONS.SUBMIT, userAuthor)
+
+      await expect(
+        stateMachine.executeTransition(draft, stateMachine.ACTIONS.REQUEST_CHANGES, userAuthor)
+      ).rejects.toThrow(FourEyesViolationError)
     })
   })
 })

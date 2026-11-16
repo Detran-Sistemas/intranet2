@@ -42,6 +42,32 @@ export default {
     return {
       permissions: [
         {
+          category: 'Workflow & Governança',
+          items: [
+            {
+              permission: 'write:drafts',
+              hint: 'Pode redigir, salvar e submeter rascunhos para validação',
+              warning: false,
+              restrictedForSystem: true,
+              disabled: false
+            },
+            {
+              permission: 'review:pages',
+              hint: 'Pode revisar rascunhos, adicionar sugestões no texto e devolver para ajustes',
+              warning: false,
+              restrictedForSystem: true,
+              disabled: false
+            },
+            {
+              permission: 'approve:pages',
+              hint: 'Pode aprovar etapas do workflow e publicar documentos normativos',
+              warning: false,
+              restrictedForSystem: true,
+              disabled: false
+            }
+          ]
+        },
+        {
           category: 'Content',
           items: [
             {

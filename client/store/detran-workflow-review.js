@@ -1,6 +1,12 @@
 const Diff = require('diff')
 const Diff2Html = require('diff2html')
 const _ = require('lodash')
+const {
+  escapeHtml,
+  sanitizeSafeUrl,
+  decodeDiagramBase64Svg,
+  splitEscapedTableRow
+} = require('../themes/default/components/transparent-editor/utils/markdown-security')
 
 /**
  * Detran Workflow Review Logic Helper
@@ -87,18 +93,86 @@ function groupCommentsByLine (comments = []) {
  * @param {object} [params.permissions={}] - User effective permissions
  * @returns {object} Action flags
  */
+const ACTIVE_REVIEW_STATES = new Set([
+  'in_review',
+  'awaiting_approval',
+  'in_approval_step2',
+  'periodic_review',
+  'revisao_periodica'
+])
+
+/**
+ * Determine whether the current user can open direct text editing ("Editar Texto")
+ * for a draft in the comparative review screen.
+ *
+ * Authors cannot silently edit while their draft is in active review — they must
+ * retract it to `draft` first. Third-party reviewers/approvers CAN edit inline.
+ *
+ * @param {object} options
+ * @param {string} options.state
+ * @param {boolean} [options.isAuthor=false]
+ * @param {boolean} [options.canReviewOrApprove=false]
+ * @returns {boolean}
+ */
+function canEditDraftContentInReview ({ state, isAuthor = false, canReviewOrApprove = false } = {}) {
+  if (!state || state === 'published' || state === 'archived') {
+    return false
+  }
+  if (ACTIVE_REVIEW_STATES.has(state)) {
+    return Boolean(!isAuthor && canReviewOrApprove)
+  }
+  if (state === 'draft' || state === 'changes_requested') {
+    return Boolean(isAuthor || canReviewOrApprove)
+  }
+  return false
+}
+
+/**
+ * Determine whether the current user can accept/reject/reopen review items
+ * (suggestions, redactions, comments).
+ *
+ * Enforces strict Four-Eyes (authors never decide their own submission, even with
+ * elevated permissions) and locks decisions outside active review states.
+ *
+ * @param {object} options
+ * @param {boolean} [options.isAuthor=false]
+ * @param {boolean} [options.canReviewOrApprove=false]
+ * @param {string} [options.state='in_review']
+ * @returns {boolean}
+ */
+function canDecideReviewSuggestion ({ isAuthor = false, canReviewOrApprove = false, state = 'in_review' } = {}) {
+  if (isAuthor || !canReviewOrApprove) {
+    return false
+  }
+  return ACTIVE_REVIEW_STATES.has(state)
+}
+
 function getAvailableReviewActions (draftOrOptions = {}, permissionsArg = null) {
-  const state = draftOrOptions && draftOrOptions.state
-  const approvalMode = (draftOrOptions && draftOrOptions.approvalMode) || '1_level'
-  const permissions = permissionsArg || (draftOrOptions && draftOrOptions.permissions) || {}
+  const opts = draftOrOptions || {}
+  const state = opts.state
+  const approvalMode = opts.approvalMode || '1_level'
+  const permissions = permissionsArg || opts.permissions || {}
   const canReview = Boolean(permissions['review:pages'] || permissions['manage:pages'] || permissions['manage:system'])
   const canApprove = Boolean(permissions['approve:pages'] || permissions['manage:pages'] || permissions['manage:system'])
+  const resolvedIsAuthor = opts.isAuthor !== undefined ?
+    Boolean(opts.isAuthor) :
+    Boolean(opts.userId != null && opts.authorId != null && Number(opts.userId) === Number(opts.authorId))
+  const pendingReviewCount = Number(opts.pendingReviewCount) || 0
+  const canReviewOrApprove = canReview || canApprove
 
   const actions = {
     canRequestChanges: false,
     canApproveStep: false,
     canPublish: false,
     canRevalidate: false,
+    canSubmit: state === 'draft' || state === 'changes_requested',
+    canRetract: resolvedIsAuthor && (state === 'in_review' || state === 'awaiting_approval' || state === 'in_approval_step2'),
+    canEditText: canEditDraftContentInReview({ state, isAuthor: resolvedIsAuthor, canReviewOrApprove }),
+    isApprovalBlockedByPendingItems: false,
+    canFinalizeApproveStep: false,
+    canFinalizePublish: false,
+    requiresApproverToPublish: false,
+    awaitingFinalApprovalOnly: false,
     labelApproveStep: 'Aprovar Nível 1 (Técnico)',
     labelPublish: 'Homologar e Publicar',
     labelRevalidate: 'Revalidar Vigência (+12m)',
@@ -106,29 +180,60 @@ function getAvailableReviewActions (draftOrOptions = {}, permissionsArg = null) 
   }
 
   if (state === 'in_review') {
-    actions.canRequestChanges = canReview || canApprove
+    if (!resolvedIsAuthor) {
+      actions.canRequestChanges = canReviewOrApprove
+    }
     if (approvalMode === '2_levels') {
-      actions.canApproveStep = canReview || canApprove
-      actions.statusDescription = 'Aguardando Revisão Técnica (Nível 1 de 2)'
+      if (!resolvedIsAuthor) {
+        actions.canApproveStep = canReviewOrApprove
+      }
+      actions.statusDescription = resolvedIsAuthor ?
+        'Aguardando parecer do revisor técnico. Puxe de volta para editar se necessário.' :
+        'Aguardando Revisão Técnica (Nível 1 de 2)'
     } else {
-      actions.canPublish = canApprove
-      actions.statusDescription = 'Aguardando Homologação Direta (Nível Único)'
+      if (!resolvedIsAuthor) {
+        actions.canPublish = canApprove
+      }
+      actions.statusDescription = resolvedIsAuthor ?
+        'Aguardando parecer do revisor técnico. Puxe de volta para editar se necessário.' :
+        'Aguardando Homologação Direta (Nível Único)'
     }
   } else if (state === 'awaiting_approval' || state === 'in_approval_step2') {
-    actions.canRequestChanges = canApprove
-    actions.canPublish = canApprove
-    actions.statusDescription = 'Aguardando Homologação Final (Nível 2 de 2)'
+    if (!resolvedIsAuthor) {
+      actions.canRequestChanges = canApprove
+      actions.canPublish = canApprove
+    }
+    actions.statusDescription = resolvedIsAuthor ?
+      'Aguardando homologação final. Puxe de volta para editar se necessário.' :
+      'Aguardando Homologação Final (Nível 2 de 2)'
   } else if (state === 'revisao_periodica' || state === 'periodic_review') {
-    actions.canRevalidate = canApprove
-    actions.canRequestChanges = canReview || canApprove
+    if (!resolvedIsAuthor) {
+      actions.canRevalidate = canApprove
+      actions.canRequestChanges = canReviewOrApprove
+    }
     actions.statusDescription = 'Vigência de 12 meses expirada. Aguardando revalidação periódica ou revisão.'
   } else if (state === 'changes_requested') {
     actions.statusDescription = 'Ajustes solicitados ao autor. Aguardando reedição e nova submissão.'
   } else if (state === 'published') {
     actions.statusDescription = 'Documento homologado e publicado oficialmente na intranet.'
   } else if (state === 'draft') {
-    actions.statusDescription = 'Rascunho ainda em elaboração pelo autor.'
+    actions.statusDescription = 'Rascunho preliminar. Aguardando submissão pelo autor para revisão.'
   }
+
+  actions.isApprovalBlockedByPendingItems = pendingReviewCount > 0 && (actions.canApproveStep || actions.canPublish)
+  actions.canFinalizeApproveStep = Boolean(actions.canApproveStep && !actions.isApprovalBlockedByPendingItems)
+  actions.canFinalizePublish = Boolean(actions.canPublish && !actions.isApprovalBlockedByPendingItems)
+  actions.awaitingFinalApprovalOnly = Boolean(
+    !resolvedIsAuthor &&
+    !canApprove &&
+    (state === 'awaiting_approval' || state === 'in_approval_step2')
+  )
+  actions.requiresApproverToPublish = Boolean(
+    !resolvedIsAuthor &&
+    canReview &&
+    !canApprove &&
+    ((state === 'in_review' && approvalMode !== '2_levels') || actions.awaitingFinalApprovalOnly)
+  )
 
   return actions
 }
@@ -167,19 +272,15 @@ function extractLineFromDiffElement (el) {
 // NOVO MOTOR DE REVISÃO VISUAL (ESTILO GOOGLE DOCS) + TEXT QUOTE SELECTOR
 // =============================================================================
 
-function escapeHtml (str = '') {
-  return String(str || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
 /**
  * Remove símbolos crus de Markdown para exibição amigável nos cartões laterais.
  */
+
 function stripMarkdownSymbols (md = '') {
   return String(md || '')
+    .replace(/^(?:```+|~~~+)\s*diagram\b[\s\S]*?(?:\n(?:```+|~~~+)\s*$|$)/gim, '[Diagrama Técnico]')
+    .replace(/^(?:```+|~~~+)\s*mermaid\b[\s\S]*?(?:\n(?:```+|~~~+)\s*$|$)/gim, '[Diagrama Mermaid]')
+    .replace(/^(?:```+|~~~+)[^\n]*\n([\s\S]*?)\n(?:```+|~~~+)\s*$/gm, '$1')
     .replace(/^#{1,6}\s+/gm, '')
     .replace(/\s*\{#[^}\s]+\}/g, '')
     .replace(/\{\.is-(?:info|warning|success|danger)\}/g, '')
@@ -207,10 +308,18 @@ function renderInlineMarkdownToHtml (md = '') {
 
   // Código inline
   html = html.replace(/`([^`\n]+)`/g, '<code class="detran-inline-code">$1</code>')
-  // Imagens inline (caso existam no meio de uma frase)
-  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" class="detran-inline-img">')
-  // Links [texto](url)
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+  // Imagens inline (caso existam no meio de uma frase) — higieniza URL
+  html = html.replace(/!\[([^\]]*)\]\(((?:\([^)]*\)|[^)])+)\)/g, (_, alt, rawUrl) => {
+    const safeSrc = sanitizeSafeUrl(rawUrl)
+    if (!safeSrc) return alt || ''
+    return `<img src="${escapeHtml(safeSrc)}" alt="${alt}" class="detran-inline-img">`
+  })
+  // Links [texto](url) — higieniza URL contra javascript:/vbscript:/data:
+  html = html.replace(/\[([^\]]+)\]\(((?:\([^)]*\)|[^)])+)\)/g, (_, label, rawUrl) => {
+    const safeHref = sanitizeSafeUrl(rawUrl)
+    if (!safeHref) return label
+    return `<a href="${escapeHtml(safeHref)}" target="_blank" rel="noopener">${label}</a>`
+  })
   // Negrito + Itálico
   html = html.replace(/\*\*\*([^*\n]+)\*\*\*/g, '<strong><em>$1</em></strong>')
   // Negrito
@@ -230,7 +339,77 @@ function renderInlineMarkdownToHtml (md = '') {
 function splitMarkdownIntoBlocks (md = '') {
   const normalized = String(md || '').replace(/\r\n/g, '\n').trim()
   if (!normalized) return []
-  return normalized.split(/\n{2,}/).map(b => b.trim()).filter(Boolean)
+  const lines = normalized.split('\n')
+  const blocks = []
+  let current = []
+  let activeFence = null
+  let activeFenceWasQuoted = false
+
+  const flushCurrent = () => {
+    if (current.length > 0) {
+      const chunk = current.join('\n').trim()
+      if (chunk && !/^\{\.is-(?:info|warning|success|danger)\}$/i.test(chunk)) {
+        blocks.push(chunk)
+      }
+      current = []
+    }
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const trimmedLine = line.trim()
+    const unquotedTrimmed = trimmedLine.replace(/^(?:>\s*)+/, '').trim()
+
+    if (activeFence) {
+      const fenceLine = activeFenceWasQuoted ? line.replace(/^\s*(?:>\s?)+/, '') : line
+      current.push(fenceLine)
+      const checkClose = fenceLine.trim()
+      if (
+        checkClose.startsWith(activeFence[0].repeat(3)) &&
+        checkClose.replace(new RegExp('^' + activeFence[0] + '+'), '').trim() === ''
+      ) {
+        blocks.push(current.join('\n').trim())
+        current = []
+        activeFence = null
+        activeFenceWasQuoted = false
+      }
+      continue
+    }
+
+    const fenceOpen = unquotedTrimmed.match(/^(```+|~~~+)([^\s`~]*)/)
+    if (fenceOpen) {
+      flushCurrent()
+      activeFence = fenceOpen[1]
+      activeFenceWasQuoted = trimmedLine.startsWith('>')
+      current.push(activeFenceWasQuoted ? line.replace(/^\s*(?:>\s?)+/, '') : line)
+      continue
+    }
+
+    if (trimmedLine === '' || /^>(?:\s*>)*\s*$/.test(trimmedLine)) {
+      flushCurrent()
+      continue
+    }
+
+    if (/^\{\.is-(?:info|warning|success|danger)\}$/i.test(unquotedTrimmed) || /^\{\.links-list\}$/i.test(unquotedTrimmed)) {
+      if (current.length > 0) {
+        current.push(unquotedTrimmed)
+        flushCurrent()
+      }
+      continue
+    }
+
+    if (/^<\/(?:div|blockquote)\s*>$/i.test(unquotedTrimmed)) {
+      current.push(line)
+      flushCurrent()
+      continue
+    }
+
+    current.push(line)
+  }
+
+  flushCurrent()
+
+  return blocks.filter(Boolean)
 }
 
 /**
@@ -238,6 +417,38 @@ function splitMarkdownIntoBlocks (md = '') {
  */
 function classifyMarkdownBlock (rawBlock = '') {
   const trimmed = String(rawBlock || '').trim()
+
+  const fenceLines = trimmed.split('\n').map(l => l.replace(/^\s*(?:>\s?)+/, ''))
+  const fenceStart = fenceLines[0].trim().match(/^(```+|~~~+)\s*([^\s`~]*)/)
+  if (fenceStart && fenceLines.length >= 2) {
+    const fenceMarker = fenceStart[1]
+    const lang = (fenceStart[2] || '').toLowerCase()
+    const lastLine = fenceLines[fenceLines.length - 1].trim()
+    const hasClosing = lastLine.startsWith(fenceMarker[0].repeat(3))
+    const bodyLines = hasClosing ? fenceLines.slice(1, -1) : fenceLines.slice(1)
+    const code = bodyLines.join('\n')
+    const cleanCode = code.trim()
+    if (
+      lang === 'diagram' ||
+      lang === 'drawio' ||
+      lang === 'svg' ||
+      (!lang && (/^PHN2Zy/.test(cleanCode) || /^<svg[\s>]/i.test(cleanCode)))
+    ) {
+      return { kind: 'diagram', lang: 'diagram', code: cleanCode, raw: trimmed }
+    }
+    if (
+      lang === 'mermaid' ||
+      (!lang && /^(?:graph|flowchart|sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|gantt|pie|mindmap)\b/i.test(cleanCode))
+    ) {
+      return { kind: 'mermaid', lang: 'mermaid', code: cleanCode, raw: trimmed }
+    }
+    return { kind: 'code', lang, code, raw: trimmed }
+  }
+
+  if (/^(?:[-]{3,}|[*]{3,}|[_]{3,})$/.test(trimmed)) {
+    return { kind: 'hr', raw: trimmed }
+  }
+
   const imgMatch = trimmed.match(/^!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)\s*$/)
   if (imgMatch) {
     return {
@@ -259,13 +470,34 @@ function classifyMarkdownBlock (rawBlock = '') {
     }
   }
 
+  const htmlCalloutMatch = trimmed.match(/^\s*<(div|blockquote)\s+[^>]*class=["'][^"']*\bis-(info|warning|success|danger)\b[^"']*["'][^>]*>([\s\S]*)$/i)
+  if (htmlCalloutMatch) {
+    const tagName = htmlCalloutMatch[1].toLowerCase()
+    const variant = htmlCalloutMatch[2].toLowerCase()
+    const closeRegex = new RegExp(`<\\/${tagName}\\s*>\\s*$`, 'i')
+    const innerHtml = htmlCalloutMatch[3].replace(closeRegex, '').trim()
+    const cleanText = innerHtml
+      .replace(/<(?:strong|b)\b[^>]*>([\s\S]*?)<\/(?:strong|b)>/gi, '**$1**')
+      .replace(/<(?:em|i)\b[^>]*>([\s\S]*?)<\/(?:em|i)>/gi, '*$1*')
+      .replace(/<code\b[^>]*>([\s\S]*?)<\/code>/gi, '`$1`')
+      .replace(/<[^>]+>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+    return {
+      kind: 'callout',
+      variant,
+      text: cleanText,
+      raw: trimmed
+    }
+  }
+
   const lines = trimmed.split('\n')
   if (lines[0].startsWith('>')) {
-    const lastLine = lines[lines.length - 1].trim()
+    const lastLine = lines[lines.length - 1].trim().replace(/^(?:>\s*)+/, '')
     const calloutMatch = lastLine.match(/^\{\.is-(info|warning|success|danger)\}$/)
     const variant = calloutMatch ? calloutMatch[1] : 'info'
     const quoteLines = calloutMatch ? lines.slice(0, -1) : lines
-    const text = quoteLines.map(l => l.replace(/^>\s?/, '')).join(' ').trim()
+    const text = quoteLines.map(l => l.replace(/^\s*(?:>\s?)+/, '')).join(' ').trim()
     return {
       kind: 'callout',
       variant,
@@ -302,15 +534,18 @@ function classifyMarkdownBlock (rawBlock = '') {
 /**
  * Renderiza um bloco Markdown sem alterações para HTML WYSIWYG da folha A4.
  */
-function renderCleanBlockToHtml (blockObj, innerHtmlOverride = null) {
+function renderCleanBlockToHtml (blockOrMd, innerHtmlOverride = null) {
+  if (!blockOrMd) return ''
+  const blockObj = typeof blockOrMd === 'string' ? classifyMarkdownBlock(blockOrMd) : blockOrMd
   if (!blockObj) return ''
 
   if (blockObj.kind === 'image') {
     const isBlob = /^blob:/i.test(blockObj.src)
+    const safeSrc = isBlob ? blockObj.src : sanitizeSafeUrl(blockObj.src)
     const caption = escapeHtml(blockObj.title || blockObj.alt || 'Imagem ilustrativa')
     return `
       <figure class="detran-doc-figure">
-        <img src="${escapeHtml(blockObj.src)}" alt="${escapeHtml(blockObj.alt)}" class="detran-doc-img" />
+        ${safeSrc ? `<img src="${escapeHtml(safeSrc)}" alt="${escapeHtml(blockObj.alt)}" class="detran-doc-img" />` : ''}
         ${isBlob ? '<div class="detran-blob-warning">⚠️ Alerta: Imagem temporária local (blob:) detectada.</div>' : ''}
         <figcaption class="detran-doc-figcaption">${caption}</figcaption>
       </figure>
@@ -329,10 +564,9 @@ function renderCleanBlockToHtml (blockObj, innerHtmlOverride = null) {
   }
 
   if (blockObj.kind === 'table') {
-    const parseRow = row => row.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim())
-    const headerCells = parseRow(blockObj.lines[0])
+    const headerCells = splitEscapedTableRow(blockObj.lines[0])
     const isSep = blockObj.lines[1] && /^[\s|:-]+$/.test(blockObj.lines[1])
-    const bodyRows = (isSep ? blockObj.lines.slice(2) : blockObj.lines.slice(1)).map(parseRow)
+    const bodyRows = (isSep ? blockObj.lines.slice(2) : blockObj.lines.slice(1)).map(splitEscapedTableRow)
     const thead = `<thead><tr>${headerCells.map(c => `<th>${renderInlineMarkdownToHtml(c)}</th>`).join('')}</tr></thead>`
     const tbody = `<tbody>${bodyRows.map(r => `<tr>${r.map(c => `<td>${renderInlineMarkdownToHtml(c)}</td>`).join('')}</tr>`).join('')}</tbody>`
     return `<div class="detran-doc-table-wrap"><table class="detran-doc-table">${thead}${tbody}</table></div>`
@@ -342,7 +576,10 @@ function renderCleanBlockToHtml (blockObj, innerHtmlOverride = null) {
     const items = blockObj.lines.map(l => {
       const m = l.trim().match(/^[-*+]\s+\[(.+?)(?:\s+\*(.+?)\*)?\]\(([^)]+)\)/)
       if (!m) return `<li>${renderInlineMarkdownToHtml(l.replace(/^[-*+]\s+/, ''))}</li>`
-      return `<li><a href="${escapeHtml(m[3])}"><strong>${escapeHtml(m[1])}</strong>${m[2] ? ` <em>${escapeHtml(m[2])}</em>` : ''}</a></li>`
+      const safeHref = sanitizeSafeUrl(m[3])
+      const innerLabel = `<strong>${escapeHtml(m[1])}</strong>${m[2] ? ` <em>${escapeHtml(m[2])}</em>` : ''}`
+      if (!safeHref) return `<li>${innerLabel}</li>`
+      return `<li><a href="${escapeHtml(safeHref)}">${innerLabel}</a></li>`
     }).join('')
     return `<ul class="detran-doc-links-list">${items}</ul>`
   }
@@ -356,8 +593,47 @@ function renderCleanBlockToHtml (blockObj, innerHtmlOverride = null) {
     return `<${tag} class="detran-doc-list">${items}</${tag}>`
   }
 
+  if (blockObj.kind === 'diagram') {
+    const svg = decodeDiagramBase64Svg(blockObj.code)
+    if (svg) {
+      return `<div class="detran-doc-diagram"><div class="diagram">${svg}</div></div>`
+    }
+    return `<pre class="detran-doc-code"><code>${escapeHtml(blockObj.code)}</code></pre>`
+  }
+
+  if (blockObj.kind === 'mermaid') {
+    return `<div class="detran-doc-diagram detran-doc-mermaid"><div class="mermaid">${escapeHtml(blockObj.code)}</div></div>`
+  }
+
+  if (blockObj.kind === 'code') {
+    const langAttr = blockObj.lang ? ` class="language-${escapeHtml(blockObj.lang)}"` : ''
+    return `<pre class="detran-doc-code"><code${langAttr}>${escapeHtml(blockObj.code)}</code></pre>`
+  }
+
+  if (blockObj.kind === 'hr') {
+    return '<hr class="detran-doc-hr" />'
+  }
+
   const content = innerHtmlOverride !== null ? innerHtmlOverride : renderInlineMarkdownToHtml(blockObj.text)
   return `<p class="detran-doc-p">${content}</p>`
+}
+
+/**
+ * Envolve um diagrama adicionado ou removido em destaque visual mantendo o SVG/Mermaid renderizado.
+ */
+function wrapDiagramInSuggestionBox (blockObj, sugId, badgeLabel = 'Novo Diagrama Adicionado', mode = 'add') {
+  const rendered = renderCleanBlockToHtml(blockObj)
+  const cls = mode === 'del' ? 'is-del' : 'is-add'
+  const pill = mode === 'del' ? 'Sugestão de Remoção' : 'Sugestão de Adição'
+  return `
+    <div id="item-${sugId}" data-item-id="${sugId}" class="diagram-suggestion-box ${cls}">
+      <div class="img-suggestion-badge">
+        <span class="img-suggestion-badge__left">📐 ${escapeHtml(badgeLabel)}</span>
+        <span class="img-suggestion-badge__pill">${pill}</span>
+      </div>
+      ${rendered}
+    </div>
+  `.trim()
 }
 
 /**
@@ -421,6 +697,7 @@ function decodeTextQuoteSelector (commentRow = {}) {
           suffix: parsed.suffix || '',
           suggestedReplacement: parsed.suggestedReplacement || '',
           status: commentRow.resolved ? 'accepted' : (parsed.status || 'pending'),
+          reviewedAt: parsed.reviewedAt || null,
           replies: Array.isArray(parsed.replies) ? parsed.replies : []
         }
       }
@@ -436,6 +713,7 @@ function decodeTextQuoteSelector (commentRow = {}) {
     suffix: '',
     suggestedReplacement: '',
     status: commentRow && commentRow.resolved ? 'accepted' : 'pending',
+    reviewedAt: null,
     replies: []
   }
 }
@@ -491,12 +769,13 @@ function buildVisualDiffDocument ({
       if (classified.kind === 'image') {
         const sugId = `sug-${sugCounter++}`
         const decision = decisions[sugId] || 'pending'
-        if (decision === 'rejected') return
         if (decision === 'accepted') {
           htmlBlocks.push(renderCleanBlockToHtml(classified))
-          return
+        } else if (decision === 'rejected') {
+          // Imagem rejeitada não é renderizada na folha
+        } else {
+          htmlBlocks.push(wrapImageInSuggestionBox(classified, sugId, 'Nova Imagem Adicionada'))
         }
-        htmlBlocks.push(wrapImageInSuggestionBox(classified, sugId, 'Nova Imagem Adicionada'))
         suggestions.push({
           id: sugId,
           type: 'suggestion',
@@ -510,7 +789,7 @@ function buildVisualDiffDocument ({
           newText: classified.alt || classified.src,
           rawOldMarkdown: '',
           rawNewMarkdown: rawBlk,
-          status: 'pending',
+          status: decision,
           replies: []
         })
       } else {
@@ -550,8 +829,44 @@ function buildVisualDiffDocument ({
             const oldClassified = classifyMarkdownBlock(oldRaw)
             const newClassified = classifyMarkdownBlock(newRaw)
 
-            // Se adicionou/trocou uma imagem
-            if (newClassified.kind === 'image') {
+            // Se adicionou/trocou um diagrama (Draw.io SVG Base64 ou Mermaid)
+            if (newClassified.kind === 'diagram' || newClassified.kind === 'mermaid') {
+              const isSameDiagram =
+                oldClassified.kind === newClassified.kind &&
+                (newClassified.kind === 'diagram' ?
+                  decodeDiagramBase64Svg(oldClassified.code) === decodeDiagramBase64Svg(newClassified.code) :
+                  oldClassified.code.trim() === newClassified.code.trim())
+
+              if (isSameDiagram) {
+                htmlBlocks.push(renderCleanBlockToHtml(newClassified))
+              } else {
+                const sugId = `sug-${sugCounter++}`
+                const decision = decisions[sugId] || 'pending'
+                if (decision === 'accepted') {
+                  htmlBlocks.push(renderCleanBlockToHtml(newClassified))
+                } else if (decision === 'rejected') {
+                  htmlBlocks.push(renderCleanBlockToHtml(oldClassified))
+                } else {
+                  const badge = oldClassified.kind === newClassified.kind ? 'Diagrama Atualizado' : 'Novo Diagrama Adicionado'
+                  htmlBlocks.push(wrapDiagramInSuggestionBox(newClassified, sugId, badge, 'add'))
+                }
+                suggestions.push({
+                  id: sugId,
+                  type: 'suggestion',
+                  isImage: false,
+                  author: authorName || 'Autor',
+                  role: 'Autor da alteração',
+                  time: updatedAt,
+                  actionLabel: oldClassified.kind === newClassified.kind ? 'Atualizou um diagrama' : 'Inseriu um diagrama',
+                  oldText: oldClassified.kind === 'diagram' || oldClassified.kind === 'mermaid' ? '[Diagrama Anterior]' : stripMarkdownSymbols(oldRaw),
+                  newText: newClassified.kind === 'mermaid' ? '[Diagrama Mermaid]' : '[Diagrama Técnico]',
+                  rawOldMarkdown: oldRaw,
+                  rawNewMarkdown: newRaw,
+                  status: decision,
+                  replies: []
+                })
+              }
+            } else if (newClassified.kind === 'image') {
               const sugId = `sug-${sugCounter++}`
               const decision = decisions[sugId] || 'pending'
               if (decision === 'accepted') {
@@ -560,23 +875,23 @@ function buildVisualDiffDocument ({
                 htmlBlocks.push(renderCleanBlockToHtml(oldClassified))
               } else {
                 htmlBlocks.push(wrapImageInSuggestionBox(newClassified, sugId, 'Nova Imagem Adicionada'))
-                suggestions.push({
-                  id: sugId,
-                  type: 'suggestion',
-                  isImage: true,
-                  hasBlobWarning: /^blob:/i.test(newClassified.src),
-                  author: authorName || 'Autor',
-                  role: 'Autor da alteração',
-                  time: updatedAt,
-                  actionLabel: oldClassified.kind === 'image' ? 'Substituiu imagem' : 'Inseriu uma nova imagem',
-                  oldText: stripMarkdownSymbols(oldRaw),
-                  newText: newClassified.alt || newClassified.src,
-                  rawOldMarkdown: oldRaw,
-                  rawNewMarkdown: newRaw,
-                  status: 'pending',
-                  replies: []
-                })
               }
+              suggestions.push({
+                id: sugId,
+                type: 'suggestion',
+                isImage: true,
+                hasBlobWarning: /^blob:/i.test(newClassified.src),
+                author: authorName || 'Autor',
+                role: 'Autor da alteração',
+                time: updatedAt,
+                actionLabel: oldClassified.kind === 'image' ? 'Substituiu imagem' : 'Inseriu uma nova imagem',
+                oldText: stripMarkdownSymbols(oldRaw),
+                newText: newClassified.alt || newClassified.src,
+                rawOldMarkdown: oldRaw,
+                rawNewMarkdown: newRaw,
+                status: decision,
+                replies: []
+              })
             } else if (
               ['paragraph', 'heading', 'callout'].includes(oldClassified.kind) &&
               ['paragraph', 'heading', 'callout'].includes(newClassified.kind)
@@ -584,6 +899,14 @@ function buildVisualDiffDocument ({
               // Word-level diff dentro do parágrafo/título/callout (com coalescência de conectores curtos)
               const oldPlain = stripMarkdownSymbols(oldClassified.text || oldRaw)
               const newPlain = stripMarkdownSymbols(newClassified.text || newRaw)
+              if (
+                oldPlain === newPlain &&
+                oldClassified.kind === newClassified.kind &&
+                (oldClassified.variant || '') === (newClassified.variant || '')
+              ) {
+                htmlBlocks.push(renderCleanBlockToHtml(newClassified))
+                continue
+              }
               const wordDiff = coalesceWordDiffParts(Diff.diffWordsWithSpace(oldPlain, newPlain))
 
               let inlineHtml = ''
@@ -605,24 +928,24 @@ function buildVisualDiffDocument ({
                   } else {
                     inlineHtml += `<del id="item-${sugId}" data-item-id="${sugId}" class="suggestion-del" title="Clique para ver a sugestão">${escapeHtml(wPart.value)}</del>`
                     inlineHtml += `<ins id="item-${sugId}-add" data-item-id="${sugId}" class="suggestion-add" title="Clique para ver a sugestão">${escapeHtml(wNext.value)}</ins>`
-                    suggestions.push({
-                      id: sugId,
-                      type: 'suggestion',
-                      isImage: false,
-                      author: authorName || 'Autor',
-                      role: 'Autor da alteração',
-                      time: updatedAt,
-                      actionLabel: 'Trocou trecho de texto',
-                      oldText: wPart.value.trim(),
-                      newText: wNext.value.trim(),
-                      rawOldMarkdown: oldRaw,
-                      rawNewMarkdown: newRaw,
-                      wordOld: wPart.value,
-                      wordNew: wNext.value,
-                      status: 'pending',
-                      replies: []
-                    })
                   }
+                  suggestions.push({
+                    id: sugId,
+                    type: 'suggestion',
+                    isImage: false,
+                    author: authorName || 'Autor',
+                    role: 'Autor da alteração',
+                    time: updatedAt,
+                    actionLabel: 'Trocou trecho de texto',
+                    oldText: wPart.value.trim(),
+                    newText: wNext.value.trim(),
+                    rawOldMarkdown: oldRaw,
+                    rawNewMarkdown: newRaw,
+                    wordOld: wPart.value,
+                    wordNew: wNext.value,
+                    status: decision,
+                    replies: []
+                  })
                   wIdx += 2
                 } else if (wPart.added) {
                   const sugId = `sug-${sugCounter++}`
@@ -633,24 +956,24 @@ function buildVisualDiffDocument ({
                     // Omite a adição recusada
                   } else {
                     inlineHtml += `<ins id="item-${sugId}" data-item-id="${sugId}" class="suggestion-add" title="Clique para ver a sugestão">${escapeHtml(wPart.value)}</ins>`
-                    suggestions.push({
-                      id: sugId,
-                      type: 'suggestion',
-                      isImage: false,
-                      author: authorName || 'Autor',
-                      role: 'Autor da alteração',
-                      time: updatedAt,
-                      actionLabel: 'Adicionou trecho de texto',
-                      oldText: '',
-                      newText: wPart.value.trim(),
-                      rawOldMarkdown: oldRaw,
-                      rawNewMarkdown: newRaw,
-                      wordOld: '',
-                      wordNew: wPart.value,
-                      status: 'pending',
-                      replies: []
-                    })
                   }
+                  suggestions.push({
+                    id: sugId,
+                    type: 'suggestion',
+                    isImage: false,
+                    author: authorName || 'Autor',
+                    role: 'Autor da alteração',
+                    time: updatedAt,
+                    actionLabel: 'Adicionou trecho de texto',
+                    oldText: '',
+                    newText: wPart.value.trim(),
+                    rawOldMarkdown: oldRaw,
+                    rawNewMarkdown: newRaw,
+                    wordOld: '',
+                    wordNew: wPart.value,
+                    status: decision,
+                    replies: []
+                  })
                   wIdx++
                 } else if (wPart.removed) {
                   const sugId = `sug-${sugCounter++}`
@@ -661,24 +984,24 @@ function buildVisualDiffDocument ({
                     inlineHtml += escapeHtml(wPart.value)
                   } else {
                     inlineHtml += `<del id="item-${sugId}" data-item-id="${sugId}" class="suggestion-del" title="Clique para ver a sugestão">${escapeHtml(wPart.value)}</del>`
-                    suggestions.push({
-                      id: sugId,
-                      type: 'suggestion',
-                      isImage: false,
-                      author: authorName || 'Autor',
-                      role: 'Autor da alteração',
-                      time: updatedAt,
-                      actionLabel: 'Removeu trecho de texto',
-                      oldText: wPart.value.trim(),
-                      newText: '',
-                      rawOldMarkdown: oldRaw,
-                      rawNewMarkdown: newRaw,
-                      wordOld: wPart.value,
-                      wordNew: '',
-                      status: 'pending',
-                      replies: []
-                    })
                   }
+                  suggestions.push({
+                    id: sugId,
+                    type: 'suggestion',
+                    isImage: false,
+                    author: authorName || 'Autor',
+                    role: 'Autor da alteração',
+                    time: updatedAt,
+                    actionLabel: 'Removeu trecho de texto',
+                    oldText: wPart.value.trim(),
+                    newText: '',
+                    rawOldMarkdown: oldRaw,
+                    rawNewMarkdown: newRaw,
+                    wordOld: wPart.value,
+                    wordNew: '',
+                    status: decision,
+                    replies: []
+                  })
                   wIdx++
                 }
               }
@@ -699,22 +1022,22 @@ function buildVisualDiffDocument ({
                     <ins id="item-${sugId}-add" data-item-id="${sugId}" class="suggestion-add-block">${renderCleanBlockToHtml(newClassified)}</ins>
                   </div>
                 `.trim())
-                suggestions.push({
-                  id: sugId,
-                  type: 'suggestion',
-                  isImage: false,
-                  author: authorName || 'Autor',
-                  role: 'Autor da alteração',
-                  time: updatedAt,
-                  actionLabel: 'Atualizou bloco estrutural',
-                  oldText: stripMarkdownSymbols(oldRaw),
-                  newText: stripMarkdownSymbols(newRaw),
-                  rawOldMarkdown: oldRaw,
-                  rawNewMarkdown: newRaw,
-                  status: 'pending',
-                  replies: []
-                })
               }
+              suggestions.push({
+                id: sugId,
+                type: 'suggestion',
+                isImage: false,
+                author: authorName || 'Autor',
+                role: 'Autor da alteração',
+                time: updatedAt,
+                actionLabel: 'Atualizou bloco estrutural',
+                oldText: stripMarkdownSymbols(oldRaw),
+                newText: stripMarkdownSymbols(newRaw),
+                rawOldMarkdown: oldRaw,
+                rawNewMarkdown: newRaw,
+                status: decision,
+                replies: []
+              })
             }
           } else if (newRaw !== undefined) {
             // Bloco extra adicionado
@@ -751,14 +1074,24 @@ function buildVisualDiffDocument ({
     const sugId = `sug-${sugCounter++}`
     const decision = decisions[sugId] || 'pending'
 
-    if (decision === 'rejected') return
     if (decision === 'accepted') {
       htmlBlocks.push(renderCleanBlockToHtml(classified))
-      return
+    } else if (decision === 'rejected') {
+      // Omite do HTML da folha
+    } else {
+      if (classified.kind === 'image') {
+        htmlBlocks.push(wrapImageInSuggestionBox(classified, sugId, 'Nova Imagem Adicionada'))
+      } else if (classified.kind === 'diagram' || classified.kind === 'mermaid') {
+        htmlBlocks.push(wrapDiagramInSuggestionBox(classified, sugId, 'Novo Diagrama Adicionado', 'add'))
+      } else if (['paragraph', 'heading', 'callout'].includes(classified.kind)) {
+        const inner = `<ins id="item-${sugId}" data-item-id="${sugId}" class="suggestion-add" title="Clique para ver a sugestão">${renderInlineMarkdownToHtml(classified.text || newRaw)}</ins>`
+        htmlBlocks.push(renderCleanBlockToHtml(classified, inner))
+      } else {
+        htmlBlocks.push(`<ins id="item-${sugId}" data-item-id="${sugId}" class="suggestion-add-block">${renderCleanBlockToHtml(classified)}</ins>`)
+      }
     }
 
     if (classified.kind === 'image') {
-      htmlBlocks.push(wrapImageInSuggestionBox(classified, sugId, 'Nova Imagem Adicionada'))
       suggestions.push({
         id: sugId,
         type: 'suggestion',
@@ -772,12 +1105,26 @@ function buildVisualDiffDocument ({
         newText: classified.alt || classified.src,
         rawOldMarkdown: '',
         rawNewMarkdown: newRaw,
-        status: 'pending',
+        status: decision,
         replies: []
       })
-    } else {
-      const inner = `<ins id="item-${sugId}" data-item-id="${sugId}" class="suggestion-add" title="Clique para ver a sugestão">${renderInlineMarkdownToHtml(classified.text || newRaw)}</ins>`
-      htmlBlocks.push(renderCleanBlockToHtml(classified, ['paragraph', 'heading', 'callout'].includes(classified.kind) ? inner : null))
+    } else if (classified.kind === 'diagram' || classified.kind === 'mermaid') {
+      suggestions.push({
+        id: sugId,
+        type: 'suggestion',
+        isImage: false,
+        author: authorName || 'Autor',
+        role: 'Autor da alteração',
+        time: updatedAt,
+        actionLabel: 'Inseriu um diagrama',
+        oldText: '',
+        newText: classified.kind === 'mermaid' ? '[Diagrama Mermaid]' : '[Diagrama Técnico]',
+        rawOldMarkdown: '',
+        rawNewMarkdown: newRaw,
+        status: decision,
+        replies: []
+      })
+    } else if (['paragraph', 'heading', 'callout'].includes(classified.kind)) {
       suggestions.push({
         id: sugId,
         type: 'suggestion',
@@ -790,7 +1137,23 @@ function buildVisualDiffDocument ({
         newText: stripMarkdownSymbols(newRaw),
         rawOldMarkdown: '',
         rawNewMarkdown: newRaw,
-        status: 'pending',
+        status: decision,
+        replies: []
+      })
+    } else {
+      suggestions.push({
+        id: sugId,
+        type: 'suggestion',
+        isImage: false,
+        author: authorName || 'Autor',
+        role: 'Autor da alteração',
+        time: updatedAt,
+        actionLabel: 'Adicionou bloco estrutural',
+        oldText: '',
+        newText: stripMarkdownSymbols(newRaw),
+        rawOldMarkdown: '',
+        rawNewMarkdown: newRaw,
+        status: decision,
         replies: []
       })
     }
@@ -801,29 +1164,70 @@ function buildVisualDiffDocument ({
     const sugId = `sug-${sugCounter++}`
     const decision = decisions[sugId] || 'pending'
 
-    if (decision === 'accepted') return
-    if (decision === 'rejected') {
+    if (decision === 'accepted') {
+      // Omite da visualização
+    } else if (decision === 'rejected') {
       htmlBlocks.push(renderCleanBlockToHtml(classified))
-      return
+    } else {
+      if (classified.kind === 'diagram' || classified.kind === 'mermaid') {
+        htmlBlocks.push(wrapDiagramInSuggestionBox(classified, sugId, 'Diagrama Removido', 'del'))
+      } else if (['paragraph', 'heading', 'callout'].includes(classified.kind)) {
+        const inner = `<del id="item-${sugId}" data-item-id="${sugId}" class="suggestion-del" title="Clique para ver a sugestão">${renderInlineMarkdownToHtml(classified.text || oldRaw)}</del>`
+        htmlBlocks.push(renderCleanBlockToHtml(classified, inner))
+      } else {
+        htmlBlocks.push(`<del id="item-${sugId}" data-item-id="${sugId}" class="suggestion-del-block">${renderCleanBlockToHtml(classified)}</del>`)
+      }
     }
 
-    const inner = `<del id="item-${sugId}" data-item-id="${sugId}" class="suggestion-del" title="Clique para ver a sugestão">${renderInlineMarkdownToHtml(classified.text || oldRaw)}</del>`
-    htmlBlocks.push(renderCleanBlockToHtml(classified, ['paragraph', 'heading', 'callout'].includes(classified.kind) ? inner : null))
-    suggestions.push({
-      id: sugId,
-      type: 'suggestion',
-      isImage: false,
-      author: authorName || 'Autor',
-      role: 'Autor da alteração',
-      time: updatedAt,
-      actionLabel: 'Removeu trecho do documento',
-      oldText: stripMarkdownSymbols(oldRaw),
-      newText: '',
-      rawOldMarkdown: oldRaw,
-      rawNewMarkdown: '',
-      status: 'pending',
-      replies: []
-    })
+    if (classified.kind === 'diagram' || classified.kind === 'mermaid') {
+      suggestions.push({
+        id: sugId,
+        type: 'suggestion',
+        isImage: false,
+        author: authorName || 'Autor',
+        role: 'Autor da alteração',
+        time: updatedAt,
+        actionLabel: 'Removeu um diagrama',
+        oldText: classified.kind === 'mermaid' ? '[Diagrama Mermaid]' : '[Diagrama Técnico]',
+        newText: '',
+        rawOldMarkdown: oldRaw,
+        rawNewMarkdown: '',
+        status: decision,
+        replies: []
+      })
+    } else if (['paragraph', 'heading', 'callout'].includes(classified.kind)) {
+      suggestions.push({
+        id: sugId,
+        type: 'suggestion',
+        isImage: false,
+        author: authorName || 'Autor',
+        role: 'Autor da alteração',
+        time: updatedAt,
+        actionLabel: 'Removeu trecho do documento',
+        oldText: stripMarkdownSymbols(oldRaw),
+        newText: '',
+        rawOldMarkdown: oldRaw,
+        rawNewMarkdown: '',
+        status: decision,
+        replies: []
+      })
+    } else {
+      suggestions.push({
+        id: sugId,
+        type: 'suggestion',
+        isImage: false,
+        author: authorName || 'Autor',
+        role: 'Autor da alteração',
+        time: updatedAt,
+        actionLabel: 'Removeu bloco estrutural',
+        oldText: stripMarkdownSymbols(oldRaw),
+        newText: '',
+        rawOldMarkdown: oldRaw,
+        rawNewMarkdown: '',
+        status: decision,
+        replies: []
+      })
+    }
   }
 
   let documentHtml = htmlBlocks.join('\n')
@@ -918,11 +1322,22 @@ function replaceTextOutsideHtmlTags (html = '', targetText = '', replacementHtml
   if (!html || !targetText) return html
   const parts = html.split(/(<[^>]+>)/g)
   let replaced = false
+  let svgDepth = 0
+  let styleDepth = 0
   for (let i = 0; i < parts.length; i++) {
-    if (parts[i].startsWith('<')) continue
-    const pos = parts[i].indexOf(targetText)
+    const token = parts[i]
+    if (token.startsWith('<')) {
+      const lower = token.toLowerCase()
+      if (/^<svg[\s>]/.test(lower) && !/\/>$/.test(lower)) svgDepth++
+      else if (/^<\/svg>/.test(lower)) svgDepth = Math.max(0, svgDepth - 1)
+      else if (/^<style[\s>]/.test(lower) && !/\/>$/.test(lower)) styleDepth++
+      else if (/^<\/style>/.test(lower)) styleDepth = Math.max(0, styleDepth - 1)
+      continue
+    }
+    if (svgDepth > 0 || styleDepth > 0) continue
+    const pos = token.indexOf(targetText)
     if (pos !== -1) {
-      parts[i] = parts[i].slice(0, pos) + replacementHtml + parts[i].slice(pos + targetText.length)
+      parts[i] = token.slice(0, pos) + replacementHtml + token.slice(pos + targetText.length)
       replaced = true
       break
     }
@@ -946,6 +1361,9 @@ function applySuggestionDecisionToMarkdown ({
     if (decision === 'accept') {
       return content.replace(suggestion.quote, suggestion.suggestedReplacement)
     }
+    if (decision === 'restore' || decision === 'pending') {
+      return content.replace(suggestion.suggestedReplacement, suggestion.quote)
+    }
     return content
   }
 
@@ -953,7 +1371,7 @@ function applySuggestionDecisionToMarkdown ({
   // No rascunho atual, `newText` / `rawNewMarkdown` já está no `draftContent`.
   // Portanto, 'accept' mantém o novo texto; 'reject' reverte para o texto original (`wordOld` ou `rawOldMarkdown`).
   if (decision === 'reject') {
-    if (typeof suggestion.wordNew === 'string' && typeof suggestion.wordOld === 'string' && suggestion.rawNewMarkdown) {
+    if (typeof suggestion.wordNew === 'string' && suggestion.wordNew.length > 0 && typeof suggestion.wordOld === 'string' && suggestion.rawNewMarkdown) {
       const revertedBlock = suggestion.rawNewMarkdown.replace(suggestion.wordNew, suggestion.wordOld)
       return content.replace(suggestion.rawNewMarkdown, revertedBlock)
     }
@@ -968,7 +1386,81 @@ function applySuggestionDecisionToMarkdown ({
     }
   }
 
+  if (decision === 'restore' || decision === 'pending') {
+    if (typeof suggestion.wordNew === 'string' && typeof suggestion.wordOld === 'string' && suggestion.rawNewMarkdown) {
+      const revertedBlock = suggestion.rawNewMarkdown.replace(suggestion.wordNew, suggestion.wordOld)
+      if (content.includes(revertedBlock)) {
+        return content.replace(revertedBlock, suggestion.rawNewMarkdown)
+      }
+    }
+    if (suggestion.rawNewMarkdown && suggestion.rawOldMarkdown) {
+      if (content.includes(suggestion.rawOldMarkdown)) {
+        return content.replace(suggestion.rawOldMarkdown, suggestion.rawNewMarkdown)
+      }
+    }
+    if (suggestion.rawNewMarkdown && !suggestion.rawOldMarkdown) {
+      if (!content.includes(suggestion.rawNewMarkdown)) {
+        return `${content}\n\n${suggestion.rawNewMarkdown}`.trim()
+      }
+    }
+    if (!suggestion.rawNewMarkdown && suggestion.rawOldMarkdown) {
+      if (content.includes(suggestion.rawOldMarkdown)) {
+        return content.replace(suggestion.rawOldMarkdown, '').replace(/\n{3,}/g, '\n\n').trim()
+      }
+    }
+  }
+
   return content
+}
+
+function parseTimestampMs (val) {
+  if (typeof val === 'number' && Number.isFinite(val)) return val
+  if (!val) return 0
+  const ms = Date.parse(String(val))
+  return Number.isFinite(ms) ? ms : 0
+}
+
+/**
+ * Ordena os itens do painel de revisão colocando os pendentes primeiro e os
+ * já revisados (aceitos/recusados/resolvidos) no fim da lista, do mais novo
+ * para o mais antigo em cada grupo.
+ */
+function sortReviewItems (items = [], { reviewedTimestamps = {}, fallbackCreatedAt = null } = {}) {
+  if (!Array.isArray(items) || items.length === 0) return []
+  const tsMap = reviewedTimestamps && typeof reviewedTimestamps === 'object' ? reviewedTimestamps : {}
+
+  return items
+    .map((item, origIdx) => ({ item, origIdx }))
+    .sort((aWrap, bWrap) => {
+      const a = aWrap.item || {}
+      const b = bWrap.item || {}
+      const aResolved = Boolean(a.status && a.status !== 'pending')
+      const bResolved = Boolean(b.status && b.status !== 'pending')
+
+      if (aResolved !== bResolved) {
+        return aResolved ? 1 : -1
+      }
+
+      const aTime = aResolved ?
+        parseTimestampMs(tsMap[a.id] || a.reviewedAt || a.updatedAt || a.createdAt || fallbackCreatedAt) :
+        parseTimestampMs(a.createdAt || a.updatedAt || fallbackCreatedAt)
+      const bTime = bResolved ?
+        parseTimestampMs(tsMap[b.id] || b.reviewedAt || b.updatedAt || b.createdAt || fallbackCreatedAt) :
+        parseTimestampMs(b.createdAt || b.updatedAt || fallbackCreatedAt)
+
+      if (aTime !== bTime) {
+        return bTime - aTime
+      }
+
+      const aComId = Number(a.rawCommentId) || 0
+      const bComId = Number(b.rawCommentId) || 0
+      if (aComId > 0 && bComId > 0 && aComId !== bComId) {
+        return bComId - aComId
+      }
+
+      return aWrap.origIdx - bWrap.origIdx
+    })
+    .map(w => w.item)
 }
 
 module.exports = {
@@ -976,12 +1468,17 @@ module.exports = {
   renderDiffHtml,
   groupCommentsByLine,
   getAvailableReviewActions,
+  canEditDraftContentInReview,
+  canDecideReviewSuggestion,
   extractLineFromDiffElement,
+  decodeDiagramBase64Svg,
   stripMarkdownSymbols,
   renderInlineMarkdownToHtml,
+  renderCleanBlockToHtml,
   encodeTextQuoteSelector,
   decodeTextQuoteSelector,
   createTextQuoteSelectorFromText,
   buildVisualDiffDocument,
-  applySuggestionDecisionToMarkdown
+  applySuggestionDecisionToMarkdown,
+  sortReviewItems
 }

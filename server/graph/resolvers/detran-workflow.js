@@ -1,89 +1,39 @@
-const _ = require('lodash')
 const graphHelper = require('../../helpers/graph')
 const stateMachine = require('../../detran/workflow/state-machine')
 const policiesService = require('../../detran/workflow/policies')
-const { PermissionDeniedError } = require('../../detran/workflow/errors')
+const { PermissionDeniedError, InvalidTransitionError } = require('../../detran/workflow/errors')
 const DetranWfDraft = require('../../models/detranWfDraft')
 const DetranWfComment = require('../../models/detranWfComment')
 const eventsDispatcher = require('../../detran/workflow/events-dispatcher')
+const {
+  checkWorkflowAccess,
+  isSuperAdminUser,
+  formatDraftsBatch,
+  formatDraft,
+  submitDraftUseCase,
+  requestChangesUseCase,
+  approveStepUseCase,
+  publishDraftUseCase
+} = require('../../detran/workflow/use-cases')
 
 /* global WIKI */
-
-/**
- * Check RBAC access against Wiki.js core auth or user permissions array
- *
- * @param {Object} user - Authenticated user
- * @param {Array<string>} requiredPermissions - Required permissions (any match)
- * @param {Object} [pageContext] - { path, locale }
- * @returns {boolean}
- */
-function checkWorkflowAccess(user, requiredPermissions, pageContext = {}) {
-  if (!user) {
-    return false
-  }
-
-  // 1. Core Wiki.js auth integration
-  if (typeof WIKI !== 'undefined' && WIKI.auth && typeof WIKI.auth.checkAccess === 'function') {
-    return WIKI.auth.checkAccess(user, requiredPermissions, pageContext)
-  }
-
-  // 2. Standalone / Test environment with permissions array
-  if (Array.isArray(user.permissions)) {
-    if (user.permissions.includes('manage:system')) {
-      return true
-    }
-    return _.intersection(user.permissions, requiredPermissions).length > 0
-  }
-
-  // Fallback for tests without permissions array specified
-  return true
-}
 
 /**
  * Extract authenticated user from GraphQL execution context
  */
 function getContextUser(context) {
-  if (!context) return { id: 1 }
-  if (context.req && context.req.user) return context.req.user
-  if (context.user) return context.user
-  return { id: 1 }
-}
-
-/**
- * Format draft record for GraphQL output
- */
-async function formatDraft(draft) {
-  if (!draft) return null
-
-  const formatted = {
-    ...draft,
-    tags: Array.isArray(draft.tags) ? draft.tags : []
+  if (!context) return null
+  let user = null
+  if (context.req && context.req.user) {
+    user = context.req.user
+  } else if (context.user) {
+    user = context.user
   }
-
-  // Load relations if not already joined
-  if (!formatted.events && draft.$relatedQuery) {
-    formatted.events = await draft.$relatedQuery('events').orderBy('createdAt', 'desc')
+  // In Wiki.js, Guest is user ID 2, and any user <= 0 is unauthenticated
+  if (!user || !user.id || Number(user.id) <= 0 || Number(user.id) === 2) {
+    return null
   }
-  if (!formatted.comments && draft.$relatedQuery) {
-    formatted.comments = await draft.$relatedQuery('comments').orderBy('createdAt', 'asc')
-  }
-
-  // Populate author information
-  if (draft.authorId && (!formatted.authorName || !formatted.authorEmail)) {
-    try {
-      if (typeof WIKI !== 'undefined' && WIKI.models && WIKI.models.users) {
-        const author = await WIKI.models.users.query().findById(draft.authorId)
-        if (author) {
-          formatted.authorName = author.name
-          formatted.authorEmail = author.email
-        }
-      }
-    } catch {
-      // Ignored if user model unavailable
-    }
-  }
-
-  return formatted
+  return user
 }
 
 module.exports = {
@@ -95,6 +45,9 @@ module.exports = {
     async workflowSubmit(obj, args, context) {
       return module.exports.DetranWorkflowMutation.submit(obj, args, context)
     },
+    async workflowRetract(obj, args, context) {
+      return module.exports.DetranWorkflowMutation.retract(obj, args, context)
+    },
     async workflowSaveDraft(obj, args, context) {
       return module.exports.DetranWorkflowMutation.saveDraft(obj, args, context)
     }
@@ -104,21 +57,49 @@ module.exports = {
     /**
      * Get single draft by ID
      */
-    async draft(obj, args) {
+    async draft(obj, args, context) {
+      const hasAuthContext = Boolean(context && (context.req || Object.prototype.hasOwnProperty.call(context, 'user')))
+      const user = hasAuthContext ? getContextUser(context) : null
+      if (hasAuthContext && !user) {
+        throw new PermissionDeniedError('Acesso não autenticado. Faça login para continuar.')
+      }
+
       const draft = await DetranWfDraft.query().findById(args.id)
+      if (!draft) {
+        return null
+      }
+
+      if (hasAuthContext && !checkWorkflowAccess(user, ['write:drafts', 'write:pages', 'review:pages', 'approve:pages', 'manage:pages', 'manage:system'], { path: draft.path, locale: draft.locale })) {
+        throw new PermissionDeniedError('Permissão insuficiente para consultar este rascunho.')
+      }
+
       return formatDraft(draft)
     },
 
     /**
      * Get active draft by path and locale
      */
-    async draftByPath(obj, args) {
+    async draftByPath(obj, args, context) {
       const locale = args.locale || 'pt-br'
+      const hasAuthContext = Boolean(context && (context.req || Object.prototype.hasOwnProperty.call(context, 'user')))
+      const user = hasAuthContext ? getContextUser(context) : null
+      if (hasAuthContext && !user) {
+        return null
+      }
+
       const draft = await DetranWfDraft.query()
         .where({ path: args.path, locale })
         .whereNotIn('state', [stateMachine.STATES.PUBLISHED, stateMachine.STATES.ARCHIVED])
         .orderBy('updatedAt', 'desc')
         .first()
+
+      if (!draft) {
+        return null
+      }
+
+      if (hasAuthContext && !checkWorkflowAccess(user, ['write:drafts', 'write:pages', 'review:pages', 'approve:pages', 'manage:pages', 'manage:system'], { path: draft.path, locale: draft.locale })) {
+        return null
+      }
 
       return formatDraft(draft)
     },
@@ -126,14 +107,27 @@ module.exports = {
     /**
      * List drafts with optional filtering
      */
-    async drafts(obj, args) {
+    async drafts(obj, args, context) {
+      const user = getContextUser(context)
+      // In real HTTP requests, an unauthenticated session cannot query drafts
+      if (context && context.req && !user) {
+        return []
+      }
+      if (!user && !args.authorId && !args.state) {
+        return []
+      }
+
+      const isSuperAdmin = isSuperAdminUser(user)
+
       const query = DetranWfDraft.query().orderBy('updatedAt', 'desc')
 
       if (args.state) {
         query.where('state', args.state)
       }
       if (args.authorId) {
-        query.where('authorId', args.authorId)
+        query.where('authorId', Number(args.authorId))
+      } else if (!isSuperAdmin && user && user.id && !args.state) {
+        query.where('authorId', user.id)
       }
       if (args.locale) {
         query.where('locale', args.locale)
@@ -146,7 +140,7 @@ module.exports = {
       }
 
       const drafts = await query
-      return Promise.all(drafts.map(formatDraft))
+      return formatDraftsBatch(drafts)
     },
 
     /**
@@ -154,18 +148,46 @@ module.exports = {
      */
     async pendingTasks(obj, args, context) {
       const user = getContextUser(context)
-      const query = DetranWfDraft.query()
-        .whereIn('state', [
+      if (!user) {
+        return []
+      }
+      const isSuperAdmin = isSuperAdminUser(user)
+
+      const query = DetranWfDraft.query().orderBy('updatedAt', 'desc')
+
+      if (isSuperAdmin) {
+        query.whereIn('state', [
           stateMachine.STATES.IN_REVIEW,
           stateMachine.STATES.AWAITING_APPROVAL,
-          stateMachine.STATES.PERIODIC_REVIEW
+          stateMachine.STATES.PERIODIC_REVIEW,
+          stateMachine.STATES.CHANGES_REQUESTED
         ])
-        .orderBy('updatedAt', 'desc')
+      } else {
+        const canReview = checkWorkflowAccess(user, ['review:pages', 'manage:pages', 'manage:system'])
+        const canApprove = checkWorkflowAccess(user, ['approve:pages', 'manage:pages', 'manage:system'])
 
-      // Do not list own documents as pending approval tasks for regular users (4-eyes rule)
-      const isSuperAdmin = user && (Number(user.id) === 1 || (typeof WIKI !== 'undefined' && WIKI.auth && typeof WIKI.auth.checkAccess === 'function' && WIKI.auth.checkAccess(user, ['manage:system'])))
-      if (user && user.id && !isSuperAdmin) {
-        query.where('authorId', '!=', user.id)
+        const reviewableStates = []
+        if (canReview) {
+          reviewableStates.push(stateMachine.STATES.IN_REVIEW, stateMachine.STATES.PERIODIC_REVIEW)
+        }
+        if (canApprove) {
+          reviewableStates.push(stateMachine.STATES.AWAITING_APPROVAL)
+        }
+
+        query.where((builder) => {
+          if (reviewableStates.length > 0) {
+            builder.where((sub) => {
+              sub.whereIn('state', reviewableStates)
+                .andWhere('authorId', '!=', user.id)
+            }).orWhere((sub) => {
+              sub.where('state', stateMachine.STATES.CHANGES_REQUESTED)
+                .andWhere('authorId', user.id)
+            })
+          } else {
+            builder.where('state', stateMachine.STATES.CHANGES_REQUESTED)
+              .andWhere('authorId', user.id)
+          }
+        })
       }
 
       if (args.limit) {
@@ -176,7 +198,7 @@ module.exports = {
       }
 
       const drafts = await query
-      return Promise.all(drafts.map(formatDraft))
+      return formatDraftsBatch(drafts)
     },
 
     /**
@@ -208,32 +230,8 @@ module.exports = {
     async saveDraft(obj, args, context) {
       try {
         const user = getContextUser(context)
-
-        // RBAC Check
-        if (!checkWorkflowAccess(user, ['write:drafts', 'write:pages', 'manage:pages'], { path: args.path, locale: args.locale })) {
-          throw new PermissionDeniedError('Permissão insuficiente para criar ou editar rascunho.')
-        }
-
-        const effectivePolicy = await policiesService.resolvePolicy(args.path)
-        const approvalMode = policiesService.normalizeApprovalMode(args.approvalMode, effectivePolicy)
-
-        let resolvedPageId = args.pageId || null
-        let resolvedBaseHash = args.baseHash || null
-        if (typeof WIKI !== 'undefined' && WIKI.models && WIKI.models.pages) {
-          try {
-            let livePage = null
-            if (resolvedPageId) {
-              livePage = await WIKI.models.pages.query().findById(resolvedPageId)
-            } else if (args.path) {
-              livePage = await WIKI.models.pages.query().where({ path: args.path }).first()
-            }
-            if (livePage) {
-              resolvedPageId = resolvedPageId || livePage.id
-              resolvedBaseHash = resolvedBaseHash || livePage.hash || null
-            }
-          } catch {
-            // Ignored if pages table/model differs in mock
-          }
+        if (!user) {
+          throw new PermissionDeniedError('Acesso não autenticado. Faça login para continuar.')
         }
 
         let targetDraftId = args.id
@@ -248,26 +246,68 @@ module.exports = {
           }
         }
 
-        let draft
-        if (targetDraftId) {
-          draft = await DetranWfDraft.query().findById(targetDraftId)
-          if (!draft) {
-            throw new Error(`Draft #${targetDraftId} not found`)
-          }
+        let draft = targetDraftId ? await DetranWfDraft.query().findById(targetDraftId) : null
+        if (targetDraftId && !draft) {
+          throw new Error(`Draft #${targetDraftId} not found`)
+        }
 
+        // RBAC Check: creating/editing own draft requires write perms; inline review edit on in_review/awaiting_approval also allows reviewers
+        const isReviewEditableState = Boolean(
+          draft && (draft.state === stateMachine.STATES.IN_REVIEW || draft.state === stateMachine.STATES.AWAITING_APPROVAL)
+        )
+        const requiredPerms = isReviewEditableState ?
+          ['write:drafts', 'write:pages', 'review:pages', 'approve:pages', 'manage:pages', 'manage:system'] :
+          ['write:drafts', 'write:pages', 'manage:pages', 'manage:system']
+        const effectivePath = args.path || (draft && draft.path)
+        const effectiveLocale = args.locale || (draft && draft.locale) || 'pt-br'
+
+        if (!checkWorkflowAccess(user, requiredPerms, { path: effectivePath, locale: effectiveLocale })) {
+          throw new PermissionDeniedError('Permissão insuficiente para criar ou editar rascunho.')
+        }
+
+        const effectivePolicy = await policiesService.resolvePolicy(effectivePath)
+        const approvalMode = policiesService.normalizeApprovalMode(args.approvalMode || (draft && draft.approvalMode), effectivePolicy)
+
+        let resolvedPageId = args.pageId || (draft && draft.pageId) || null
+        let resolvedBaseHash = args.baseHash || (draft && draft.baseHash) || null
+        if (typeof WIKI !== 'undefined' && WIKI.models && WIKI.models.pages) {
+          try {
+            let livePage = null
+            if (resolvedPageId) {
+              livePage = await WIKI.models.pages.query().findById(resolvedPageId)
+            } else if (effectivePath) {
+              livePage = await WIKI.models.pages.query().where({ path: effectivePath }).first()
+            }
+            if (livePage) {
+              resolvedPageId = resolvedPageId || livePage.id
+              resolvedBaseHash = resolvedBaseHash || livePage.hash || null
+            }
+          } catch {
+            // Ignored if pages table/model differs in mock
+          }
+        }
+
+        if (draft) {
           await stateMachine.executeTransition(draft, stateMachine.ACTIONS.SAVE_DRAFT, user)
 
-          await draft.$query().patch({
+          const patchData = {
             pageId: resolvedPageId || draft.pageId || null,
             baseHash: resolvedBaseHash || draft.baseHash || null,
-            title: args.title,
-            description: args.description,
-            content: args.content,
+            title: args.title !== undefined ? args.title : draft.title,
+            description: args.description !== undefined ? args.description : draft.description,
+            content: args.content !== undefined ? args.content : draft.content,
             contentType: args.contentType || draft.contentType,
             editorKey: args.editorKey || draft.editorKey,
             tags: args.tags || draft.tags,
             approvalMode
-          })
+          }
+          if (args.decisions !== undefined) {
+            patchData.decisions = args.decisions
+          }
+          if (!draft.authorId && user && user.id) {
+            patchData.authorId = user.id
+          }
+          await draft.$query().patch(patchData)
           draft = await DetranWfDraft.query().findById(targetDraftId)
         } else {
           draft = await DetranWfDraft.query().insert({
@@ -280,6 +320,7 @@ module.exports = {
             contentType: args.contentType || 'markdown',
             editorKey: args.editorKey || 'markdown',
             tags: args.tags || [],
+            decisions: args.decisions || '{}',
             approvalMode,
             currentLevel: 1,
             authorId: user.id,
@@ -303,35 +344,51 @@ module.exports = {
     async submit(obj, args, context) {
       try {
         const user = getContextUser(context)
+        const formatted = await submitDraftUseCase({
+          id: args.id,
+          approvalMode: args.approvalMode,
+          comment: args.comment,
+          user
+        })
+        return {
+          responseResult: graphHelper.generateSuccess('Documento submetido para revisão com sucesso.'),
+          draft: formatted
+        }
+      } catch (err) {
+        return graphHelper.generateError(err)
+      }
+    },
+
+    /**
+     * Retract submitted draft back to editable draft (Author or Admin only)
+     */
+    async retract(obj, args, context) {
+      try {
+        const user = getContextUser(context)
+        if (!user) {
+          throw new PermissionDeniedError('Acesso não autenticado. Faça login para continuar.')
+        }
         const draft = await DetranWfDraft.query().findById(args.id)
         if (!draft) {
           throw new Error(`Draft #${args.id} not found`)
         }
 
-        // RBAC Check
-        if (!checkWorkflowAccess(user, ['write:drafts', 'write:pages', 'manage:pages'], { path: draft.path, locale: draft.locale })) {
-          throw new PermissionDeniedError('Permissão insuficiente para submeter rascunho.')
-        }
-
-        // Apply updated approval mode if supplied
-        if (args.approvalMode) {
-          const policy = await policiesService.resolvePolicy(draft.path)
-          draft.approvalMode = policiesService.normalizeApprovalMode(args.approvalMode, policy)
-          await draft.$query().patch({ approvalMode: draft.approvalMode })
+        if (!checkWorkflowAccess(user, ['write:drafts', 'write:pages', 'manage:pages', 'manage:system'], { path: draft.path, locale: draft.locale })) {
+          throw new PermissionDeniedError('Permissão insuficiente para retratar rascunho.')
         }
 
         const result = await stateMachine.executeTransition(
           draft,
-          stateMachine.ACTIONS.SUBMIT,
+          stateMachine.ACTIONS.RETRACT,
           user,
           { comment: args.comment }
         )
 
-        eventsDispatcher.dispatch('wf:submitted', { draft: result.draft, user, comment: args.comment })
+        eventsDispatcher.dispatch('wf:retracted', { draft: result.draft, user, comment: args.comment })
 
         const formatted = await formatDraft(result.draft)
         return {
-          responseResult: graphHelper.generateSuccess('Documento submetido para revisão com sucesso.'),
+          responseResult: graphHelper.generateSuccess('Documento puxado de volta para edição com sucesso.'),
           draft: formatted
         }
       } catch (err) {
@@ -345,26 +402,11 @@ module.exports = {
     async requestChanges(obj, args, context) {
       try {
         const user = getContextUser(context)
-        const draft = await DetranWfDraft.query().findById(args.id)
-        if (!draft) {
-          throw new Error(`Draft #${args.id} not found`)
-        }
-
-        // RBAC Check
-        if (!checkWorkflowAccess(user, ['review:pages', 'approve:pages', 'manage:pages'], { path: draft.path, locale: draft.locale })) {
-          throw new PermissionDeniedError('Permissão de revisor ou aprovador necessária para solicitar ajustes.')
-        }
-
-        const result = await stateMachine.executeTransition(
-          draft,
-          stateMachine.ACTIONS.REQUEST_CHANGES,
-          user,
-          { comment: args.comment }
-        )
-
-        eventsDispatcher.dispatch('wf:changes_requested', { draft: result.draft, user, comment: args.comment })
-
-        const formatted = await formatDraft(result.draft)
+        const formatted = await requestChangesUseCase({
+          id: args.id,
+          comment: args.comment,
+          user
+        })
         return {
           responseResult: graphHelper.generateSuccess('Ajustes solicitados ao autor com sucesso.'),
           draft: formatted
@@ -380,26 +422,11 @@ module.exports = {
     async approveStep(obj, args, context) {
       try {
         const user = getContextUser(context)
-        const draft = await DetranWfDraft.query().findById(args.id)
-        if (!draft) {
-          throw new Error(`Draft #${args.id} not found`)
-        }
-
-        // RBAC Check
-        if (!checkWorkflowAccess(user, ['review:pages', 'approve:pages', 'manage:pages'], { path: draft.path, locale: draft.locale })) {
-          throw new PermissionDeniedError('Permissão de revisor necessária para aprovar este nível.')
-        }
-
-        const result = await stateMachine.executeTransition(
-          draft,
-          stateMachine.ACTIONS.APPROVE_STEP,
-          user,
-          { comment: args.comment }
-        )
-
-        eventsDispatcher.dispatch('wf:approved_step', { draft: result.draft, user, comment: args.comment })
-
-        const formatted = await formatDraft(result.draft)
+        const formatted = await approveStepUseCase({
+          id: args.id,
+          comment: args.comment,
+          user
+        })
         return {
           responseResult: graphHelper.generateSuccess('Nível 1 aprovado com sucesso. Encaminhado para homologação final.'),
           draft: formatted
@@ -415,124 +442,15 @@ module.exports = {
     async publish(obj, args, context) {
       try {
         const user = getContextUser(context)
-        const draft = await DetranWfDraft.query().findById(args.id)
-        if (!draft) {
-          throw new Error(`Draft #${args.id} not found`)
-        }
-
-        // RBAC Check
-        if (!checkWorkflowAccess(user, ['approve:pages', 'manage:pages'], { path: draft.path, locale: draft.locale })) {
-          throw new PermissionDeniedError('Permissão de aprovador necessária para publicar esta página.')
-        }
-
-        // Fetch live page if exists for concurrency check
-        let livePage = null
-        if (typeof WIKI !== 'undefined' && WIKI.models && WIKI.models.pages) {
-          try {
-            if (draft.pageId) {
-              livePage = await WIKI.models.pages.query().findById(draft.pageId)
-            } else if (draft.path) {
-              livePage = await WIKI.models.pages.query().where({ path: draft.path }).first()
-            }
-            if (livePage) {
-              if (!draft.pageId) {
-                draft.pageId = livePage.id
-              }
-              if (!draft.baseHash && livePage.hash) {
-                draft.baseHash = livePage.hash
-              }
-            }
-          } catch {
-            // Live page query fallback
-          }
-        }
-
-        // Resolve policy review interval
-        const policy = await policiesService.resolvePolicy(draft.path)
-
-        // Execute transition in state machine
-        const result = await stateMachine.executeTransition(
-          draft,
-          stateMachine.ACTIONS.PUBLISH,
-          user,
-          { livePage, comment: args.comment, reviewIntervalDays: policy.reviewIntervalDays }
-        )
-
-        // Publish to core Wiki.js pages model if WIKI is running
-        let targetPageId = draft.pageId
-        if (typeof WIKI !== 'undefined' && WIKI.models && WIKI.models.pages) {
-          if (draft.pageId) {
-            if (typeof WIKI.models.pages.updatePage === 'function') {
-              await WIKI.models.pages.updatePage({
-                id: draft.pageId,
-                title: draft.title,
-                description: draft.description || '',
-                content: draft.content,
-                tags: Array.isArray(draft.tags) ? draft.tags : [],
-                isPublished: true,
-                user
-              })
-              if (livePage && livePage.hash && typeof WIKI.models.pages.deletePageFromCache === 'function') {
-                await WIKI.models.pages.deletePageFromCache(livePage.hash)
-              }
-            } else {
-              const pageQuery = WIKI.models.pages.query().where({ id: draft.pageId })
-              const pagePatch = {
-                title: draft.title,
-                content: draft.content,
-                updatedAt: new Date().toISOString()
-              }
-              if (typeof pageQuery.patch === 'function') {
-                await pageQuery.patch(pagePatch)
-              } else if (typeof pageQuery.update === 'function') {
-                await pageQuery.update(pagePatch)
-              }
-            }
-          } else {
-            if (typeof WIKI.models.pages.createPage === 'function') {
-              const newPage = await WIKI.models.pages.createPage({
-                path: draft.path,
-                locale: draft.locale || 'pt-br',
-                title: draft.title,
-                description: draft.description || '',
-                content: draft.content,
-                contentType: draft.contentType || 'markdown',
-                editor: draft.editorKey || 'markdown',
-                editorKey: draft.editorKey || 'markdown',
-                tags: Array.isArray(draft.tags) ? draft.tags : [],
-                isPublished: true,
-                isPrivate: false,
-                user
-              })
-              if (newPage && newPage.id) {
-                targetPageId = newPage.id
-                await result.draft.$query().patch({ pageId: newPage.id })
-              }
-            } else {
-              const inserted = await WIKI.models.pages.query().insert({
-                path: draft.path,
-                locale: draft.locale || 'pt-br',
-                title: draft.title,
-                content: draft.content,
-                hash: `hash_${Date.now()}`,
-                updatedAt: new Date().toISOString()
-              })
-              const newId = Array.isArray(inserted) ? inserted[0] : (inserted && inserted.id)
-              if (newId) {
-                targetPageId = newId
-                await result.draft.$query().patch({ pageId: newId })
-              }
-            }
-          }
-        }
-
-        eventsDispatcher.dispatch('wf:published', { draft: result.draft, user, comment: args.comment, pageId: targetPageId })
-
-        const formatted = await formatDraft(result.draft)
+        const { draft: formatted, pageId } = await publishDraftUseCase({
+          id: args.id,
+          comment: args.comment,
+          user
+        })
         return {
           responseResult: graphHelper.generateSuccess('Documento publicado oficialmente com sucesso.'),
           draft: formatted,
-          pageId: targetPageId
+          pageId
         }
       } catch (err) {
         return graphHelper.generateError(err)
@@ -545,6 +463,16 @@ module.exports = {
     async addComment(obj, args, context) {
       try {
         const user = getContextUser(context)
+        if (!user) {
+          throw new PermissionDeniedError('Acesso não autenticado. Faça login para continuar.')
+        }
+        const draft = await DetranWfDraft.query().findById(args.draftId)
+        if (!draft) {
+          throw new Error(`Draft #${args.draftId} not found`)
+        }
+        if (!checkWorkflowAccess(user, ['write:drafts', 'write:pages', 'review:pages', 'approve:pages', 'manage:pages', 'manage:system'], { path: draft.path, locale: draft.locale })) {
+          throw new PermissionDeniedError('Permissão insuficiente para comentar neste rascunho.')
+        }
         const comment = await DetranWfComment.query().insert({
           draftId: args.draftId,
           userId: user.id,
@@ -570,15 +498,133 @@ module.exports = {
     async resolveComment(obj, args, context) {
       try {
         const user = getContextUser(context)
-        if (!checkWorkflowAccess(user, ['write:pages', 'write:drafts', 'manage:pages'])) {
+        if (!user) {
+          throw new PermissionDeniedError('Acesso não autenticado. Faça login para continuar.')
+        }
+        if (!checkWorkflowAccess(user, ['write:pages', 'write:drafts', 'review:pages', 'approve:pages', 'manage:pages', 'manage:system'])) {
           throw new PermissionDeniedError('Permissão insuficiente para alterar status de comentário.')
         }
 
-        await DetranWfComment.query().findById(args.id).patch({ resolved: args.resolved })
+        const comment = await DetranWfComment.query().findById(args.id)
+        if (!comment) {
+          throw new Error(`Comment #${args.id} not found`)
+        }
+
+        const draft = comment.draftId ? await DetranWfDraft.query().findById(comment.draftId) : null
+        let parsedAnchor = null
+        if (comment.anchorText) {
+          try {
+            const parsed = JSON.parse(comment.anchorText)
+            if (parsed && typeof parsed === 'object') {
+              parsedAnchor = parsed
+            }
+          } catch {}
+        }
+
+        const hasExplicitDecision = typeof args.decision === 'string' && args.decision.length > 0
+        const isRedactionItem = Boolean(parsedAnchor && parsedAnchor.type === 'redaction')
+
+        if ((hasExplicitDecision || isRedactionItem) && draft) {
+          if (draft.state === stateMachine.STATES.PUBLISHED || draft.state === stateMachine.STATES.ARCHIVED) {
+            throw new InvalidTransitionError(draft.state, 'resolve_comment_decision', 'Não é possível decidir alterações em um documento já publicado ou arquivado.')
+          }
+          if (draft.authorId && Number(draft.authorId) === Number(user.id)) {
+            throw new PermissionDeniedError('O autor não pode aceitar ou recusar as alterações que ele mesmo realizou.')
+          }
+          if (!checkWorkflowAccess(user, ['review:pages', 'approve:pages', 'manage:pages', 'manage:system'], { path: draft.path, locale: draft.locale })) {
+            throw new PermissionDeniedError('Permissão de revisor ou aprovador necessária para decidir sobre alterações.')
+          }
+        }
+
+        const patchData = { resolved: args.resolved }
+        if (parsedAnchor) {
+          parsedAnchor.status = args.decision || (args.resolved ? 'accepted' : 'pending')
+          if (args.resolved) {
+            parsedAnchor.reviewedAt = new Date().toISOString()
+          } else {
+            delete parsedAnchor.reviewedAt
+          }
+          patchData.anchorText = JSON.stringify(parsedAnchor)
+        }
+
+        await comment.$query().patch(patchData)
         const status = graphHelper.generateSuccess('Status do comentário atualizado.')
         return {
           ...status,
           responseResult: status
+        }
+      } catch (err) {
+        const errStatus = graphHelper.generateError(err, false)
+        return {
+          ...errStatus,
+          responseResult: errStatus
+        }
+      }
+    },
+
+    /**
+     * Persist reviewer decision on a diff suggestion
+     */
+    async setSuggestionDecision(obj, args, context) {
+      try {
+        const user = getContextUser(context)
+        if (!user) {
+          throw new PermissionDeniedError('Acesso não autenticado. Faça login para continuar.')
+        }
+
+        const draft = await DetranWfDraft.query().findById(args.draftId)
+        if (!draft) {
+          throw new Error(`Draft #${args.draftId} not found`)
+        }
+
+        if (draft.state === stateMachine.STATES.PUBLISHED || draft.state === stateMachine.STATES.ARCHIVED) {
+          throw new InvalidTransitionError(draft.state, 'set_suggestion_decision', 'Não é possível decidir alterações em um documento já publicado ou arquivado.')
+        }
+        if (draft.authorId && Number(draft.authorId) === Number(user.id)) {
+          throw new PermissionDeniedError('O autor não pode aceitar ou recusar as alterações que ele mesmo realizou.')
+        }
+        if (!checkWorkflowAccess(user, ['review:pages', 'approve:pages', 'manage:pages', 'manage:system'], { path: draft.path, locale: draft.locale })) {
+          throw new PermissionDeniedError('Permissão de revisor ou aprovador necessária para decidir sobre alterações.')
+        }
+
+        let currentDecisions = {}
+        if (draft.decisions) {
+          try {
+            currentDecisions = typeof draft.decisions === 'string' ? JSON.parse(draft.decisions) : draft.decisions
+          } catch {
+            currentDecisions = {}
+          }
+        }
+
+        if (!currentDecisions._timestamps || typeof currentDecisions._timestamps !== 'object') {
+          currentDecisions._timestamps = {}
+        }
+
+        if (args.decision === 'pending') {
+          delete currentDecisions[args.suggestionId]
+          delete currentDecisions._timestamps[args.suggestionId]
+          if (Object.keys(currentDecisions._timestamps).length === 0) {
+            delete currentDecisions._timestamps
+          }
+        } else {
+          currentDecisions[args.suggestionId] = args.decision
+          currentDecisions._timestamps[args.suggestionId] = new Date().toISOString()
+        }
+
+        const patchData = {
+          decisions: JSON.stringify(currentDecisions)
+        }
+        if (typeof args.content === 'string' && args.content.length > 0) {
+          patchData.content = args.content
+        }
+
+        await draft.$query().patch(patchData)
+        const updated = await DetranWfDraft.query().findById(args.draftId)
+        const formatted = await formatDraft(updated)
+
+        return {
+          responseResult: graphHelper.generateSuccess('Decisão sobre alteração registrada com sucesso.'),
+          draft: formatted
         }
       } catch (err) {
         return graphHelper.generateError(err)
@@ -591,6 +637,9 @@ module.exports = {
     async revalidate(obj, args, context) {
       try {
         const user = getContextUser(context)
+        if (!user) {
+          throw new PermissionDeniedError('Acesso não autenticado. Faça login para continuar.')
+        }
         if (!checkWorkflowAccess(user, ['approve:pages', 'manage:pages'])) {
           throw new PermissionDeniedError('Permissão de aprovador necessária para revalidar normativo.')
         }
@@ -626,6 +675,9 @@ module.exports = {
     async archive(obj, args, context) {
       try {
         const user = getContextUser(context)
+        if (!user) {
+          throw new PermissionDeniedError('Acesso não autenticado. Faça login para continuar.')
+        }
         if (!checkWorkflowAccess(user, ['manage:pages'])) {
           throw new PermissionDeniedError('Permissão de gestor de conteúdo necessária para arquivar.')
         }
@@ -658,7 +710,7 @@ module.exports = {
     async setConfig(obj, args, context) {
       try {
         const user = getContextUser(context)
-        if (!checkWorkflowAccess(user, ['manage:system'])) {
+        if (!user || !checkWorkflowAccess(user, ['manage:system'])) {
           throw new PermissionDeniedError('Permissão de administrador necessária para alterar configurações.')
         }
 
@@ -678,7 +730,7 @@ module.exports = {
     async setPolicy(obj, args, context) {
       try {
         const user = getContextUser(context)
-        if (!checkWorkflowAccess(user, ['manage:system'])) {
+        if (!user || !checkWorkflowAccess(user, ['manage:system'])) {
           throw new PermissionDeniedError('Permissão de administrador necessária para configurar políticas.')
         }
 
@@ -698,7 +750,7 @@ module.exports = {
     async deletePolicy(obj, args, context) {
       try {
         const user = getContextUser(context)
-        if (!checkWorkflowAccess(user, ['manage:system'])) {
+        if (!user || !checkWorkflowAccess(user, ['manage:system'])) {
           throw new PermissionDeniedError('Permissão de administrador necessária para excluir políticas.')
         }
 

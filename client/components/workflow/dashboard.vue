@@ -44,7 +44,7 @@
               div
                 .display-1.font-weight-bold(:class='stats.pendingCount > 0 ? "amber--text text--darken-4" : "grey--text text--darken-2"')
                   | {{ stats.pendingCount }}
-                .caption.font-weight-medium.grey--text.text--darken-2 Minhas Pendências de Revisão
+                .caption.font-weight-medium.grey--text.text--darken-2 Aguardando Minha Ação
               v-spacer
               v-icon(small, color='grey') mdi-chevron-right
 
@@ -79,10 +79,10 @@
       v-card(outlined, class='detran-main-card')
         //- Toolbar com Abas e Busca
         v-toolbar(flat, color='white', class='px-2')
-          v-tabs(v-model='activeTab', color='primary', slider-color='primary')
+          v-tabs(v-model='activeTab', color='primary', slider-color='primary', show-arrows)
             v-tab
               v-icon(left, small) mdi-tray-full
-              | Minhas Pendências
+              | Aguardando Minha Ação
               v-chip.ml-2(
                 x-small
                 :color='stats.pendingCount > 0 ? "amber lighten-4" : "grey lighten-3"'
@@ -91,17 +91,17 @@
 
             v-tab
               v-icon(left, small) mdi-file-document-multiple-outline
-              | Meus Rascunhos / Enviados
+              | Meus Documentos Enviados
               v-chip.ml-2(x-small, color='grey lighten-3', text-color='grey darken-2') {{ stats.myDraftsCount }}
 
             v-tab
               v-icon(left, small) mdi-shield-refresh-outline
-              | Normativos a Vencer
+              | Histórico / Publicados &amp; Normativos
               v-chip.ml-2(
                 x-small
                 :color='stats.expiringCount > 0 ? "deep-orange lighten-5" : "grey lighten-3"'
                 :text-color='stats.expiringCount > 0 ? "deep-orange darken-3" : "grey darken-2"'
-              ) {{ stats.expiringCount }}
+              ) {{ stats.expiringCount + historyDrafts.length }}
 
           v-spacer
 
@@ -224,7 +224,7 @@
                 )
                   v-card-text.pa-4
                     v-row(align='center')
-                      v-col(cols='12', md='8')
+                      v-col(cols='12', md='7')
                         .d-flex.align-center.mb-1
                           v-chip(
                             label
@@ -257,37 +257,35 @@
                           span(v-if='draft.approvalMode === "2_levels"') Fluxo: 2 Níveis
                           span(v-else) Fluxo: 1 Nível
 
-                      v-col.text-md-right(cols='12', md='4')
-                        //- Se estiver em ajustes ou rascunho: ação no editor
-                        v-btn(
-                          v-if='draft.state === "changes_requested"'
-                          depressed
-                          color='orange darken-3'
-                          class='white--text mr-2'
-                          :href='`/e/${draft.locale}/${draft.path}`'
-                        )
-                          v-icon(left, small) mdi-pencil
-                          | Editar e Corrigir
+                      v-col(cols='12', md='5')
+                        .detran-task-actions
+                          //- Rascunho ou devolvido com ajustes: permite edição direta
+                          v-btn(
+                            v-if='tab2Actions(draft).canEdit'
+                            :class='["detran-wf-btn", draft.state === "changes_requested" ? "detran-wf-btn--warn" : "detran-wf-btn--edit"]'
+                            depressed
+                            :to='tab2Actions(draft).editRoute'
+                          )
+                            v-icon(left, size='16') mdi-pencil-outline
+                            span {{ tab2Actions(draft).editLabel }}
 
-                        v-btn(
-                          v-else-if='draft.state === "draft"'
-                          outlined
-                          color='primary'
-                          class='mr-2'
-                          :href='`/e/${draft.locale}/${draft.path}`'
-                        )
-                          v-icon(left, small) mdi-pencil-outline
-                          | Continuar Edição
+                          //- Em revisão / homologação: autor acompanha ou puxa de volta para editar
+                          v-btn.detran-wf-btn.detran-wf-btn--warn(
+                            v-if='tab2Actions(draft).canRetract'
+                            depressed
+                            @click='openRetractDialog(draft)'
+                          )
+                            v-icon(left, size='16') mdi-undo-variant
+                            span {{ tab2Actions(draft).retractLabel }}
 
-                        //- Botão para acompanhar revisão
-                        v-btn(
-                          v-if='draft.state !== "draft"'
-                          outlined
-                          color='grey darken-2'
-                          :to='`/review/${draft.id}`'
-                        )
-                          v-icon(left, small) mdi-eye-outline
-                          | Acompanhar
+                          //- Acompanhar revisão / documento
+                          v-btn.detran-wf-btn.detran-wf-btn--track(
+                            v-if='tab2Actions(draft).canTrack'
+                            depressed
+                            :to='tab2Actions(draft).trackRoute'
+                          )
+                            v-icon(left, size='16') mdi-eye-outline
+                            span {{ tab2Actions(draft).trackLabel }}
 
           //- =====================================
           //- ABA 3: NORMATIVOS A VENCER
@@ -359,6 +357,95 @@
                           v-icon(left, small) mdi-autorenew
                           | Revalidar +12m
 
+              v-divider.my-6
+
+              //- Seção de Histórico do Autor (Publicados & Arquivados)
+              .d-flex.align-center.mb-3
+                v-icon(color='primary', class='mr-2') mdi-history
+                .subtitle-1.font-weight-bold.detran-green-text Histórico de Meus Documentos Publicados e Arquivados
+
+              template(v-if='filteredHistoryDrafts.length === 0')
+                v-card.pa-6.text-center(flat, color='grey lighten-5')
+                  .body-2.grey--text.text--darken-1
+                    | Nenhum documento publicado ou arquivado encontrado no seu histórico.
+
+              template(v-else)
+                v-card.mb-3(
+                  v-for='item in filteredHistoryDrafts'
+                  :key='"hist-" + item.id'
+                  outlined
+                  class='detran-task-item-card'
+                )
+                  v-card-text.pa-4
+                    v-row(align='center')
+                      v-col(cols='12', md='8')
+                        .d-flex.align-center.mb-1
+                          v-chip(
+                            label
+                            x-small
+                            :color='getStateBadge(item.state).color'
+                            :text-color='getStateBadge(item.state).textColor'
+                            class='font-weight-bold mr-2 text-uppercase'
+                          )
+                            | {{ getStateBadge(item.state).label }}
+
+                          span.caption.grey--text /{{ item.locale }}/{{ item.path }}
+
+                        .title.font-weight-bold.detran-title.mb-1
+                          | {{ item.title }}
+
+                        .caption.grey--text.mt-1
+                          v-icon(x-small, class='mr-1') mdi-calendar-check
+                          | Atualizado em: {{ item.updatedAt | moment('DD/MM/YYYY [às] HH:mm') }}
+
+                      v-col.text-md-right(cols='12', md='4')
+                        v-btn.detran-wf-btn.detran-wf-btn--edit.mr-2(
+                          v-if='item.state === "published" && item.path'
+                          depressed
+                          :href='`/${item.locale || "pt-br"}/${item.path}`'
+                        )
+                          v-icon(left, size='16') mdi-open-in-new
+                          span Ver Página
+
+                        v-btn.detran-wf-btn.detran-wf-btn--track(
+                          depressed
+                          :to='`/review/${item.id}`'
+                        )
+                          v-icon(left, size='16') mdi-history
+                          span Histórico
+
+    //- Modal para Puxar Documento de Volta para Edição (Retração)
+    v-dialog(v-model='retractDialog.visible', max-width='520', persistent)
+      v-card
+        v-card-title.headline.font-weight-bold.detran-revalidate-header
+          v-icon(left, color='white') mdi-undo-variant
+          | Puxar de Volta para Edição
+
+        v-card-text.pt-4
+          p.body-2.grey--text.text--darken-3
+            | Ao puxar #[strong {{ retractDialog.draft ? retractDialog.draft.title : '' }}] de volta, o documento sairá da fila de revisão e retornará para Rascunho para sua edição.
+          v-textarea(
+            v-model='retractDialog.comment'
+            label='Motivo da Retirada (Opcional)'
+            outlined
+            dense
+            rows='2'
+            placeholder='Ex: Complementar item normativo antes da revisão...'
+          )
+
+        v-card-actions.px-4.pb-4.pt-0
+          v-spacer
+          v-btn(text, color='grey darken-2', @click='retractDialog.visible = false', :disabled='retracting') Cancelar
+          v-btn(
+            depressed
+            color='amber darken-3'
+            class='white--text'
+            :loading='retracting'
+            @click='executeRetract'
+          )
+            v-icon(left, small) mdi-undo-variant
+            span Confirmar Retirada
+
     //- Modal de Revalidação de Normativo
     v-dialog(v-model='revalidateDialog.visible', max-width='550', persistent)
       v-card
@@ -395,7 +482,12 @@
 
 <script>
 import gql from 'graphql-tag'
-import { getUrgencyLevel, calculateDashboardStats } from '../../store/detran-workflow-dashboard'
+import {
+  getUrgencyLevel,
+  calculateDashboardStats,
+  partitionDashboardDrafts,
+  getTab2DraftActions
+} from '../../store/detran-workflow-dashboard'
 /*
   getUrgencyLevel,
   calculateDashboardStats
@@ -417,7 +509,14 @@ export default {
       },
       pendingTasks: [],
       myDrafts: [],
-      expiringNorms: []
+      historyDrafts: [],
+      expiringNorms: [],
+      retracting: false,
+      retractDialog: {
+        visible: false,
+        draft: null,
+        comment: ''
+      }
     }
   },
   computed: {
@@ -439,6 +538,10 @@ export default {
 
     filteredExpiringNorms() {
       return this.filterBySearch(this.expiringNorms)
+    },
+
+    filteredHistoryDrafts() {
+      return this.filterBySearch(this.historyDrafts)
     }
   },
   mounted() {
@@ -473,6 +576,8 @@ export default {
           return { label: 'Ajustes Solicitados', color: 'amber lighten-5', textColor: 'amber darken-4' }
         case 'published':
           return { label: 'Publicado', color: 'green lighten-5', textColor: 'green darken-4' }
+        case 'archived':
+          return { label: 'Arquivado', color: 'grey lighten-3', textColor: 'grey darken-3' }
         case 'periodic_review':
           return { label: 'Revisão Periódica', color: 'deep-orange lighten-5', textColor: 'deep-orange darken-3' }
         default:
@@ -482,7 +587,8 @@ export default {
 
     async loadDashboardData() {
       this.loading = true
-      const currentUserId = this.$store?.get('user/id') || null
+      const rawId = this.$store?.get('user/id') || null
+      const currentUserId = rawId ? parseInt(rawId, 10) : null
 
       try {
         const result = await this.$apollo.query({
@@ -553,9 +659,22 @@ export default {
 
         const data = result?.data?.workflow
         if (data) {
-          this.pendingTasks = data.pendingTasks || []
-          this.myDrafts = data.drafts || []
-          this.expiringNorms = data.expiring || []
+          const partitioned = partitionDashboardDrafts({
+            pendingTasks: data.pendingTasks || [],
+            myDrafts: data.drafts || [],
+            expiringNorms: data.expiring || [],
+            currentUserId
+          })
+          this.pendingTasks = partitioned.pendingTasks
+          this.myDrafts = partitioned.activeDrafts
+          this.historyDrafts = partitioned.historyDrafts
+          this.expiringNorms = partitioned.expiringNorms
+
+          // Se o usuário não tiver pendências de ação a fazer,
+          // mas tiver documentos enviados/rascunhos ativos, abre diretamente a aba "Meus Documentos Enviados"
+          if (this.pendingTasks.length === 0 && this.myDrafts.length > 0 && this.activeTab === 0) {
+            this.activeTab = 1
+          }
 
           // Notifica o nav-header para atualizar badge do sininho
           /* eslint-disable-next-line vue/custom-event-name-casing */
@@ -632,6 +751,73 @@ export default {
       } finally {
         this.revalidating = false
       }
+    },
+
+    tab2Actions(draft) {
+      return getTab2DraftActions(draft, { routePrefix: '/review' })
+    },
+
+    openRetractDialog(draft) {
+      this.retractDialog.draft = draft
+      this.retractDialog.comment = ''
+      this.retractDialog.visible = true
+    },
+
+    async executeRetract() {
+      if (!this.retractDialog.draft) return
+
+      this.retracting = true
+      try {
+        const result = await this.$apollo.mutate({
+          mutation: gql`
+            mutation ($id: Int!, $comment: String) {
+              workflow {
+                retract(id: $id, comment: $comment) {
+                  responseResult {
+                    succeeded
+                    message
+                  }
+                  draft {
+                    id
+                    state
+                    currentLevel
+                    decisions
+                  }
+                }
+              }
+            }
+          `,
+          variables: {
+            id: this.retractDialog.draft.id,
+            comment: this.retractDialog.comment.trim() || null
+          }
+        })
+
+        const res = result?.data?.workflow?.retract
+        if (res?.responseResult?.succeeded) {
+          this.$store.commit('showNotification', {
+            style: 'success',
+            icon: 'check',
+            message: 'Documento retornado para rascunho. Modo de edição liberado!'
+          })
+          this.retractDialog.visible = false
+          await this.loadDashboardData()
+        } else {
+          this.$store.commit('showNotification', {
+            style: 'red',
+            icon: 'alert',
+            message: res?.responseResult?.message || 'Falha ao puxar documento de volta para edição.'
+          })
+        }
+      } catch (err) {
+        this.$store.commit('showNotification', {
+          style: 'red',
+          icon: 'alert',
+          message: err.message || 'Erro inesperado ao retirar documento.'
+        })
+      } finally {
+        this.retracting = false
+      }
     }
   }
 }
@@ -691,6 +877,29 @@ export default {
   border-color: #e2e8f0 !important;
   box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05) !important;
   background-color: #ffffff;
+
+  .v-toolbar {
+    height: auto !important;
+    min-height: 56px;
+
+    .v-toolbar__content {
+      flex-wrap: wrap !important;
+      height: auto !important;
+      min-height: 56px !important;
+      gap: 8px;
+      padding-top: 6px;
+      padding-bottom: 6px;
+    }
+  }
+
+  @media (max-width: 1050px) {
+    .v-text-field {
+      max-width: 100% !important;
+      width: 100% !important;
+      margin-left: 0 !important;
+      margin-top: 8px !important;
+    }
+  }
 }
 
 .detran-task-item-card {
@@ -720,6 +929,79 @@ export default {
 
 .detran-btn-success {
   background-color: #1e6b37 !important;
+}
+
+.detran-task-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+
+  @media (max-width: 959px) {
+    justify-content: flex-start;
+  }
+}
+
+.detran-wf-btn {
+  height: 38px !important;
+  min-height: 38px !important;
+  padding: 0 16px !important;
+  border-radius: 10px !important;
+  font-size: 0.8125rem !important;
+  font-weight: 600 !important;
+  text-transform: none !important;
+  letter-spacing: -0.01em !important;
+  box-shadow: none !important;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+
+  ::v-deep .v-icon {
+    color: inherit !important;
+    transition: transform 0.18s ease !important;
+  }
+
+  &--warn {
+    background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(194, 65, 12, 0.9) !important;
+    box-shadow: 0 2px 8px rgba(234, 88, 12, 0.24) !important;
+
+    &:hover {
+      background: linear-gradient(135deg, #c2410c 0%, #9a3412 100%) !important;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(234, 88, 12, 0.34) !important;
+    }
+  }
+
+  &--edit {
+    background: #f0fdf4 !important;
+    color: #1b6535 !important;
+    border: 1px solid #bbf7d0 !important;
+    box-shadow: 0 1px 2px rgba(27, 101, 53, 0.06) !important;
+
+    &:hover {
+      background: #1b6535 !important;
+      color: #ffffff !important;
+      border-color: #1b6535 !important;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(27, 101, 53, 0.22) !important;
+    }
+  }
+
+  &--track {
+    background: #ffffff !important;
+    color: #334155 !important;
+    border: 1px solid #cbd5e1 !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05) !important;
+
+    &:hover {
+      background: #f8fafc !important;
+      color: #1b6535 !important;
+      border-color: #86efac !important;
+      transform: translateY(-1px);
+      box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08) !important;
+    }
+  }
 }
 
 .detran-revalidate-header {

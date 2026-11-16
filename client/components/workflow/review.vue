@@ -1,6 +1,5 @@
 <template lang='pug'>
   .detran-workflow-review-page
-
     //- Barra de Carregamento Superior Suave
     v-progress-linear.mb-4.rounded(
       v-if='loading'
@@ -13,39 +12,67 @@
     //- 2.1 HEADER SUPERIOR + TOOLBAR ESTILO GOOGLE DOCS
     //- ========================================================================
     header.detran-gdocs-header
-      .detran-gdocs-header__top
-        nav.detran-breadcrumb(aria-label='Trilha de navegação')
-          a.detran-breadcrumb__home(href='/' title='Início')
-            v-icon(size='14' color='#94a3b8') mdi-home
-          span.detran-breadcrumb__sep(aria-hidden='true') /
-          router-link.detran-breadcrumb__item(to='/') Governança &amp; Workflow
-          span.detran-breadcrumb__sep(aria-hidden='true') /
-          span.detran-breadcrumb__item.is-current {{ 'Revisão #' + (draft.id || draftId) }}
+      //- 1. TOPO DA DIV: BOTÕES DE NAVEGAÇÃO E CONTROLES DE MODO
+      .detran-gdocs-header__top-bar
+        .detran-gdocs-header__top-left
+          button.detran-back-btn(
+            type='button'
+            title='Voltar para a Central de Tarefas'
+            @click='goBack'
+          )
+            v-icon(size='16') mdi-arrow-left
+            span Voltar
+          span.detran-gdocs-top-sep |
+          nav.detran-breadcrumb(aria-label='Trilha de navegação')
+            a.detran-breadcrumb__home(href='/' title='Início')
+              v-icon(size='14' color='#94a3b8') mdi-home
+            span.detran-breadcrumb__sep(aria-hidden='true') /
+            router-link.detran-breadcrumb__item(to='/') Governança &amp; Workflow
+            span.detran-breadcrumb__sep(aria-hidden='true') /
+            span.detran-breadcrumb__item.is-current {{ 'Revisão #' + (draft.id || draftId) }}
 
-        .detran-gdocs-header__row
-          .detran-gdocs-header__title-group
-            h1.detran-page-title {{ draft.title || 'Revisão de Documento' }}
-            span.detran-review-status-pill(:class='stateBadge.pillClass')
-              v-icon(size='14' :color='stateBadge.iconColor') {{ stateBadge.icon }}
-              span {{ stateBadge.label }}
-
-          .detran-review-header-btns
-            button.detran-back-btn(
+        .detran-gdocs-header__top-right
+          .detran-mode-switcher(role='group' aria-label='Modo de visualização da folha')
+            button.detran-mode-switcher__btn(
               type='button'
-              title='Voltar para a Central de Tarefas'
-              @click='goBack'
+              :class='{ "is-active": docMode === "suggest" }'
+              @click='setDocMode("suggest")'
             )
-              v-icon(size='16') mdi-arrow-left
-              span Voltar
-            a.detran-portal-link-btn(
-              v-if='draft.path'
-              :href='"/" + (draft.locale || "pt-br") + "/" + draft.path'
-              title='Abrir página no portal'
+              v-icon(size='14' :color='docMode === "suggest" ? "#16a34a" : "#64748b"') mdi-compare-horizontal
+              span Modo Sugestões (Diff Visual)
+            button.detran-mode-switcher__btn(
+              v-if='canEditDraftText'
+              type='button'
+              :class='{ "is-active": docMode === "edit" }'
+              @click='setDocMode("edit")'
             )
-              v-icon(size='15') mdi-open-in-new
-              span Ver Página no Portal
+              v-icon(size='14' :color='docMode === "edit" ? "#16a34a" : "#64748b"') mdi-pencil-outline
+              span Editar Texto
+            button.detran-mode-switcher__btn(
+              type='button'
+              :class='{ "is-active": docMode === "clean" }'
+              @click='setDocMode("clean")'
+            )
+              v-icon(size='14' :color='docMode === "clean" ? "#16a34a" : "#64748b"') mdi-eye-outline
+              span Prévia Final Limpa
 
-      //- Barra de Ferramentas e Metadados Compactos (Estilo Google Docs)
+          a.detran-portal-link-btn(
+            v-if='draft.path'
+            :href='"/" + (draft.locale || "pt-br") + "/" + draft.path'
+            title='Abrir página no portal'
+          )
+            v-icon(size='15') mdi-open-in-new
+            span Ver Página no Portal
+
+      //- 2. SEÇÃO SEPARADA EXCLUSIVA DO TÍTULO DO TEXTO
+      .detran-gdocs-header__title-section
+        .detran-gdocs-header__title-group
+          h1.detran-page-title {{ draft.title || 'Revisão de Documento' }}
+          span.detran-review-status-pill(:class='stateBadge.pillClass')
+            v-icon(size='14' :color='stateBadge.iconColor') {{ stateBadge.icon }}
+            span {{ stateBadge.label }}
+
+      //- 3. BARRA DE FERRAMENTAS E METADADOS
       .detran-gdocs-toolbar
         .detran-gdocs-toolbar__meta
           .detran-gdocs-toolbar__author
@@ -65,29 +92,13 @@
 
         .detran-gdocs-toolbar__controls
           span.detran-gdocs-toolbar__hint
-            v-icon(size='14' color='#64748b') mdi-cursor-text
-            span Selecione qualquer trecho do texto com o mouse para adicionar um comentário ou sugerir alteração
-
-          .detran-mode-switcher(role='group' aria-label='Modo de visualização da folha')
-            button.detran-mode-switcher__btn(
-              type='button'
-              :class='{ "is-active": docMode === "suggest" }'
-              @click='setDocMode("suggest")'
-            )
-              v-icon(size='14' :color='docMode === "suggest" ? "#16a34a" : "#64748b"') mdi-pencil-outline
-              span Modo Sugestões (Diff Visual)
-            button.detran-mode-switcher__btn(
-              type='button'
-              :class='{ "is-active": docMode === "clean" }'
-              @click='setDocMode("clean")'
-            )
-              v-icon(size='14' :color='docMode === "clean" ? "#16a34a" : "#64748b"') mdi-eye-outline
-              span Prévia Final Limpa
+            v-icon(size='14' color='#64748b') {{ docMode === 'edit' ? 'mdi-pencil-outline' : 'mdi-cursor-text' }}
+            span {{ toolbarHintText }}
 
     //- ========================================================================
     //- BANNER EXPLICATIVO RÁPIDO PARA REVISOR LEIGO (Descartável)
     //- ========================================================================
-    .detran-onboarding-banner(v-if='showOnboarding')
+    .detran-onboarding-banner(v-if='showOnboarding && docMode === "suggest"')
       .detran-onboarding-banner__left
         span.detran-onboarding-banner__title
           v-icon(size='16' color='#16a34a') mdi-sparkles
@@ -140,16 +151,17 @@
             @click='triggerSelectionAction("comment")'
           )
             span 💬 Comentar trecho
-          span.detran-selection-popover__sep |
-          button.detran-selection-popover__btn.is-suggest(
-            type='button'
-            @click='triggerSelectionAction("redaction")'
-          )
-            span ✏️ Sugerir redação
+          template(v-if='canDecideSuggestions')
+            span.detran-selection-popover__sep |
+            button.detran-selection-popover__btn.is-suggest(
+              type='button'
+              @click='triggerSelectionAction("redaction")'
+            )
+              span ✏️ Sugerir redação
 
-        //- Folha de Papel A4 (Container de Leitura WYSIWYG — Zero Markdown cru!)
+        //- Folha de Papel A4 (Container de Leitura WYSIWYG ou Edição Transparente in-place!)
         article#documentPaper.doc-paper(
-          :class='{ "clean-mode": docMode === "clean" }'
+          :class='{ "clean-mode": docMode === "clean", "edit-mode": docMode === "edit" }'
         )
           //- Tags de Categoria da Página no Topo da Folha
           .detran-doc-tags.select-none
@@ -158,17 +170,34 @@
               v-for='tag in (draft.tags || [])'
               :key='tag'
             ) {{ '#' + String(tag).toUpperCase() }}
+            span.detran-doc-edit-badge(v-if='docMode === "edit"')
+              v-icon(size='13' color='#15803d') mdi-auto-fix
+              span Modo Edição Ativo — Clique em qualquer bloco para editar
+
+          //- Editor Transparente Integrado na Página de Revisão
+          transparent-editor(
+            v-if='docMode === "edit"'
+            :initial-markdown='draft.content || ""'
+            :page-id='draft.pageId'
+            :page-path='draft.path'
+            :page-title='draft.title'
+            @change='onReviewEditorChange'
+            @save-draft='onReviewEditorSaveDraft'
+          )
 
           //- Conteúdo Editorial Formatado (HTML rico + marcações visuais de diff)
           #docContent.detran-doc-content(
+            v-else
             ref='docContent'
             v-html='visualDiff.html'
             @mouseup='onDocMouseUp'
             @click='onDocContentClick'
           )
 
-      //- COLUNA LATERAL (DIREITA - 30%, STICKY): Painel de Anotações e Sugestões
-      aside.detran-gdocs-aside(aria-label='Painel de anotações e sugestões')
+      //- COLUNA LATERAL (DIREITA - 30%, STICKY): Anotações e Sugestões + Decisão Editorial
+      aside.detran-gdocs-aside(aria-label='Painel de decisão, anotações e sugestões')
+
+        //- 1. LISTA DE MODIFICAÇÕES, ANOTAÇÕES E SUGESTÕES (Em evidência no topo!)
         review-comments(
           ref='reviewCommentsPanel'
           :draft-id='draftId'
@@ -177,6 +206,10 @@
           :suggestion-decisions='suggestionDecisions'
           :active-item-id='activeItemId'
           :selection-payload='activeSelectionPayload'
+          :is-author='isAuthor'
+          :can-review-or-approve='canReviewOrApprove'
+          :draft-state='draft.state'
+          :draft-updated-at='draft.updatedAt'
           @focus-item='onFocusItem'
           @clear-selection='activeSelectionPayload = null'
           @suggestion-decision='onSuggestionDecision'
@@ -185,7 +218,7 @@
           @comment-resolved='onCommentResolved'
         )
 
-        //- Card de Histórico de Tramitação
+        //- 2. Card de Histórico de Tramitação
         .detran-review-side-card.mt-4(v-if='draft.events && draft.events.length > 0')
           .detran-side-history__header
             v-icon(size='16' color='#15803d') mdi-timeline-clock-outline
@@ -202,63 +235,99 @@
                   span.detran-side-history__date {{ evt.createdAt | moment('DD/MM HH:mm') }}
                 .detran-side-history__comment(v-if='evt.comment') "{{ evt.comment }}"
 
-    //- ========================================================================
-    //- 2.4 BARRA DE DECISÃO FLUTUANTE INFERIOR (FLOATING ACTION BAR)
-    //- ========================================================================
-    .detran-floating-action-bar
-      .detran-floating-action-bar__card
-        //- Indicador de Progresso em Tempo Real
-        .detran-floating-action-bar__status
-          .detran-floating-action-bar__icon(:class='pendingReviewCount > 0 ? "is-amber" : "is-emerald"')
-            v-icon(
-              size='20'
-              :color='pendingReviewCount > 0 ? "#d97706" : "#15803d"'
-            ) {{ pendingReviewCount > 0 ? 'mdi-alert-circle-outline' : 'mdi-check-decagram' }}
-          .detran-floating-action-bar__text
-            .detran-floating-action-bar__title
-              template(v-if='draft.state === "published"') ✓ Documento Homologado e Publicado no Portal
-              template(v-else-if='pendingReviewCount > 0') Faltam {{ pendingReviewCount }} {{ pendingReviewCount === 1 ? 'revisão pendente' : 'revisões pendentes' }}
-              template(v-else) ✓ Todas as alterações revisadas
-            .detran-floating-action-bar__sub
-              template(v-if='draft.state === "published"') {{ actionsHelper.statusDescription }}
-              template(v-else-if='pendingReviewCount > 0') {{ pendingReviewCount }} {{ pendingReviewCount === 1 ? 'item aguardando' : 'itens aguardando' }} análise ou decisão nos cartões laterais
-              template(v-else) Nenhuma pendência restante — pronto para publicar no portal
+        //- 3. SEÇÃO DE DECISÃO EDITORIAL / SUBMIT DA EDIÇÃO (Último item da div)
+        section.detran-decision-side-card.mt-4(aria-label='Decisão editorial e submissão')
+          .detran-decision-side-card__header
+            .detran-decision-side-card__icon(:class='decisionCardIconClass')
+              v-icon(
+                size='18'
+                :color='decisionCardIconColor'
+              ) {{ decisionCardIcon }}
+            .detran-decision-side-card__text
+              .detran-decision-side-card__title {{ decisionCardTitle }}
+              .detran-decision-side-card__sub {{ decisionCardSubtitle }}
 
-        //- Botões de Decisão (Devolver com Ajustes / Aprovar e Publicar)
-        .detran-floating-action-bar__actions
-          template(v-if='draft.state !== "published"')
-            button.detran-fab-btn.detran-fab-btn--secondary(
-              type='button'
-              :disabled='submittingAction'
-              @click='openActionDialog("requestChanges")'
-            )
-              v-icon(size='16' color='#92400e') mdi-undo-variant
-              span Devolver com Ajustes
+          .detran-decision-side-card__actions
+            template(v-if='draft.state === "published"')
+              a.detran-fab-btn.detran-fab-btn--primary(
+                v-if='draft.path'
+                :href='"/" + (draft.locale || "pt-br") + "/" + draft.path'
+              )
+                v-icon(size='15' color='#ffffff') mdi-open-in-new
+                span Abrir Página Publicada
 
-            button.detran-fab-btn.detran-fab-btn--primary(
-              v-if='actionsHelper.canApproveStep && !actionsHelper.canPublish'
-              type='button'
-              :disabled='submittingAction'
-              @click='openActionDialog("approveStep")'
-            )
-              v-icon(size='16' color='#ffffff') mdi-check-all
-              span Aprovar Revisão Técnica
+            template(v-else-if='draft.state === "changes_requested" || draft.state === "draft"')
+              button.detran-fab-btn.detran-fab-btn--secondary(
+                v-if='canEditDraftText'
+                type='button'
+                @click='setDocMode(docMode === "edit" ? "suggest" : "edit")'
+              )
+                v-icon(size='15' color='#92400e') {{ docMode === 'edit' ? 'mdi-compare-horizontal' : 'mdi-pencil-outline' }}
+                span {{ docMode === 'edit' ? 'Ver Diff e Sugestões' : (draft.state === 'changes_requested' ? 'Editar e Corrigir' : 'Continuar Edição') }}
+              button.detran-fab-btn.detran-fab-btn--primary(
+                v-if='canEditDraftText'
+                type='button'
+                :disabled='submittingAction'
+                @click='openActionDialog("submit")'
+              )
+                v-icon(size='15' color='#ffffff') mdi-send-check-outline
+                span Submeter à Aprovação
 
-            button.detran-fab-btn.detran-fab-btn--primary(
-              v-else
-              type='button'
-              :disabled='submittingAction'
-              @click='openActionDialog("publish")'
-            )
-              v-icon(size='17' color='#ffffff') mdi-check-circle-outline
-              span Aprovar e Publicar
+            template(v-else-if='isAuthor || !canReviewOrApprove')
+              button.detran-fab-btn.detran-fab-btn--secondary(
+                v-if='actionsHelper.canRetract'
+                type='button'
+                :disabled='submittingAction'
+                @click='openActionDialog("retract")'
+              )
+                v-icon(size='15' color='#92400e') mdi-undo-variant
+                span Puxar de Volta para Edição
 
-          a.detran-fab-btn.detran-fab-btn--primary(
-            v-else-if='draft.path'
-            :href='"/" + (draft.locale || "pt-br") + "/" + draft.path'
-          )
-            v-icon(size='16' color='#ffffff') mdi-open-in-new
-            span Abrir Página Publicada
+            template(v-else)
+              button.detran-fab-btn.detran-fab-btn--secondary(
+                v-if='docMode === "edit"'
+                type='button'
+                @click='setDocMode("suggest")'
+              )
+                v-icon(size='15' color='#92400e') mdi-compare-horizontal
+                span Ver Diff e Sugestões
+
+              button.detran-fab-btn.detran-fab-btn--secondary(
+                v-if='actionsHelper.canRequestChanges'
+                type='button'
+                :disabled='submittingAction'
+                @click='openActionDialog("requestChanges")'
+              )
+                v-icon(size='15' color='#92400e') mdi-undo-variant
+                span Devolver com Ajustes
+
+              button.detran-fab-btn.detran-fab-btn--primary(
+                v-if='actionsHelper.canApproveStep && !actionsHelper.canPublish'
+                type='button'
+                :disabled='submittingAction || actionsHelper.isApprovalBlockedByPendingItems'
+                :title='actionsHelper.isApprovalBlockedByPendingItems ? "Analise todas as sugestões e comentários pendentes antes de aprovar" : "Aprovar revisão técnica"'
+                @click='openActionDialog("approveStep")'
+              )
+                v-icon(size='15' color='#ffffff') mdi-check-all
+                span Aprovar Revisão Técnica
+
+              button.detran-fab-btn.detran-fab-btn--primary(
+                v-else-if='actionsHelper.canPublish'
+                type='button'
+                :disabled='submittingAction || actionsHelper.isApprovalBlockedByPendingItems'
+                :title='actionsHelper.isApprovalBlockedByPendingItems ? "Analise todas as sugestões e comentários pendentes antes de publicar" : "Homologar e publicar página"'
+                @click='openActionDialog("publish")'
+              )
+                v-icon(size='16' color='#ffffff') mdi-check-circle-outline
+                span Aprovar e Publicar
+
+              p.detran-decision-side-card__lock-hint(
+                v-if='actionsHelper.isApprovalBlockedByPendingItems'
+              ) Aceite ou recuse todos os {{ pendingReviewCount }} {{ pendingReviewCount === 1 ? 'item pendente' : 'itens pendentes' }} para liberar a aprovação (ou devolva com ajustes).
+
+              p.detran-decision-side-card__lock-hint(
+                v-else-if='actionsHelper.requiresApproverToPublish && !actionsHelper.canApproveStep && !actionsHelper.canPublish'
+              ) {{ actionsHelper.awaitingFinalApprovalOnly ? 'Revisão técnica já concluída (Nível 1). Aguardando homologação final por usuário com perfil Aprovador.' : 'Publicação direta em 1 nível é exclusiva para Aprovadores. Devolva com ajustes ou configure fluxo de 2 níveis no Admin.' }}
 
     //- ========================================================================
     //- MODAL INSTITUCIONAL DE CONFIRMAÇÃO DE DECISÃO
@@ -285,16 +354,19 @@
             v-icon(color='#a7f3d0' size='20') mdi-close
 
         .detran-action-modal__body
-          .detran-action-modal__callout(:class='actionDialog.type === "requestChanges" ? "is-amber" : "is-emerald"')
+          .detran-action-modal__callout(:class='(actionDialog.type === "requestChanges" || actionDialog.type === "retract") ? "is-amber" : "is-emerald"')
             v-icon.mt-0.mr-2(
               size='18'
-              :color='actionDialog.type === "requestChanges" ? "#d97706" : "#15803d"'
-            ) {{ actionDialog.type === 'requestChanges' ? 'mdi-alert-circle-outline' : 'mdi-check-decagram-outline' }}
+              :color='(actionDialog.type === "requestChanges" || actionDialog.type === "retract") ? "#d97706" : "#15803d"'
+            ) {{ (actionDialog.type === 'requestChanges' || actionDialog.type === 'retract') ? 'mdi-alert-circle-outline' : 'mdi-check-decagram-outline' }}
             div
               p.detran-action-modal__callout-text {{ actionDialog.description }}
               p.detran-action-modal__callout-warn(
-                v-if='actionDialog.type === "publish" && pendingReviewCount > 0'
-              ) Nota: {{ pendingReviewCount }} sugestão(ões)/anotação(ões) ainda não marcadas serão consolidadas automaticamente.
+                v-if='actionDialog.type === "requestChanges" && pendingReviewCount > 0'
+              ) Nota: As decisões já registradas e os {{ pendingReviewCount }} item(ns) ainda pendente(s) serão mantidos para orientação do autor.
+              p.detran-action-modal__callout-warn(
+                v-else-if='actionDialog.type === "retract"'
+              ) Ao confirmar, o documento sairá da fila de revisão e voltará ao estado Rascunho para sua edição.
 
           div
             label.detran-action-modal__label {{ actionDialog.commentLabel }}
@@ -318,7 +390,7 @@
           ) Cancelar
           button.detran-action-modal__submit(
             type='button'
-            :class='actionDialog.type === "requestChanges" ? "is-warning" : ""'
+            :class='(actionDialog.type === "requestChanges" || actionDialog.type === "retract") ? "is-warning" : ""'
             :disabled='submittingAction'
             @click='executeAction'
           )
@@ -330,15 +402,19 @@
               color='#ffffff'
             )
             v-icon(v-else size='15' color='#ffffff') mdi-check
-            span {{ actionDialog.type === 'requestChanges' ? 'Enviar para Ajustes' : 'Confirmar e Publicar' }}
+            span {{ actionDialog.type === 'requestChanges' ? 'Enviar para Ajustes' : (actionDialog.type === 'retract' ? 'Puxar para Edição' : (actionDialog.type === 'submit' ? 'Submeter à Aprovação' : (actionDialog.type === 'approveStep' ? 'Aprovar Revisão' : 'Confirmar e Publicar'))) }}
 </template>
 
 <script>
 import gql from 'graphql-tag'
 import moment from 'moment'
+import mermaid from 'mermaid'
 import ReviewComments from './review-comments.vue'
+import TransparentEditor from '../../themes/default/components/transparent-editor/transparent-editor.vue'
 import {
   getAvailableReviewActions,
+  canEditDraftContentInReview,
+  canDecideReviewSuggestion,
   buildVisualDiffDocument,
   createTextQuoteSelectorFromText,
   applySuggestionDecisionToMarkdown
@@ -348,7 +424,8 @@ import { inspectMarkdownForBlobUrls } from '../../themes/default/components/tran
 export default {
   name: 'DetranWorkflowReview',
   components: {
-    ReviewComments
+    ReviewComments,
+    TransparentEditor
   },
   props: {
     id: {
@@ -365,6 +442,7 @@ export default {
       activeItemId: null,
       suggestionDecisions: {},
       draftModifiedByReview: false,
+      reviewSaveTimer: null,
       selectionPopover: {
         visible: false,
         top: 0,
@@ -433,16 +511,82 @@ export default {
       return sub ? sub.comment : ''
     },
 
+    toolbarHintText () {
+      if (this.docMode === 'edit') {
+        return 'Modo Edição Ativo: altere o texto diretamente na folha e salve suas modificações'
+      }
+      if (this.docMode === 'clean') {
+        return 'Exibindo prévia final limpa de como a página ficará publicada no portal'
+      }
+      return 'Selecione qualquer trecho do texto com o mouse para adicionar um comentário ou sugerir alteração'
+    },
+
     blobInspection () {
       return inspectMarkdownForBlobUrls(this.draft.content || '')
+    },
+
+    userId () {
+      if (this.$store && this.$store.state && this.$store.state.user && this.$store.state.user.id) {
+        return Number(this.$store.state.user.id)
+      }
+      if (this.$store && typeof this.$store.get === 'function') {
+        const val = this.$store.get('user/id')
+        if (val) return Number(val)
+      }
+      return 0
+    },
+
+    userEmail () {
+      if (this.$store && this.$store.state && this.$store.state.user && this.$store.state.user.email) {
+        return String(this.$store.state.user.email).trim().toLowerCase()
+      }
+      if (this.$store && typeof this.$store.get === 'function') {
+        const val = this.$store.get('user/email')
+        if (val) return String(val).trim().toLowerCase()
+      }
+      return ''
+    },
+
+    userPermissions () {
+      let perms = []
+      if (this.$store && this.$store.state && this.$store.state.user && this.$store.state.user.permissions) {
+        perms = this.$store.state.user.permissions
+      } else if (this.$store && typeof this.$store.get === 'function') {
+        perms = this.$store.get('user/permissions') || []
+      }
+      if (Array.isArray(perms)) {
+        return perms.reduce((acc, p) => { acc[p] = true; return acc }, {})
+      }
+      return perms || {}
+    },
+
+    canReviewOrApprove () {
+      const perms = this.userPermissions
+      return Boolean(perms['review:pages'] || perms['approve:pages'] || perms['manage:pages'] || perms['manage:system'])
+    },
+
+    isAuthor () {
+      if (!this.draft) return false
+      const uid = this.userId
+      if (uid && this.draft.authorId && Number(this.draft.authorId) === uid) {
+        return true
+      }
+      const uemail = this.userEmail
+      if (uemail && this.draft.authorEmail && String(this.draft.authorEmail).trim().toLowerCase() === uemail) {
+        return true
+      }
+      return false
     },
 
     visualDiff () {
       const formattedTime = this.draft.updatedAt ?
         moment(this.draft.updatedAt).format('DD/MM [às] HH:mm') :
         'Recente'
+      const baseline = (this.draft && typeof this.draft.baseContent === 'string' && this.draft.baseContent.length > 0) ?
+        this.draft.baseContent :
+        (this.livePage && this.livePage.content ? this.livePage.content : '')
       return buildVisualDiffDocument({
-        originalContent: this.livePage.content || '',
+        originalContent: baseline,
         draftContent: this.draft.content || '',
         comments: this.draft.comments || [],
         authorName: this.draft.authorName || 'Autor',
@@ -466,12 +610,106 @@ export default {
       return this.pendingSuggestionsCount + this.unresolvedCommentsCount
     },
 
+    canEditDraftText () {
+      return canEditDraftContentInReview({
+        state: this.draft && this.draft.state,
+        isAuthor: this.isAuthor,
+        canReviewOrApprove: this.canReviewOrApprove
+      })
+    },
+
+    canDecideSuggestions () {
+      return canDecideReviewSuggestion({
+        isAuthor: this.isAuthor,
+        canReviewOrApprove: this.canReviewOrApprove,
+        state: this.draft && this.draft.state
+      })
+    },
+
     actionsHelper () {
-      const defaultPerms = {
-        'review:pages': true,
-        'approve:pages': true
+      return getAvailableReviewActions(
+        {
+          ...(this.draft || {}),
+          isAuthor: this.isAuthor,
+          pendingReviewCount: this.pendingReviewCount
+        },
+        this.userPermissions
+      )
+    },
+
+    decisionCardIconClass () {
+      if (this.draft.state === 'published') return 'is-emerald'
+      if (this.draft.state === 'changes_requested' || this.draft.state === 'draft') return 'is-amber'
+      if (this.isAuthor || !this.canReviewOrApprove) return 'is-amber'
+      if (this.actionsHelper.awaitingFinalApprovalOnly) return 'is-emerald'
+      if (this.actionsHelper.requiresApproverToPublish && !this.actionsHelper.canApproveStep && !this.actionsHelper.canPublish) return 'is-amber'
+      return this.pendingReviewCount > 0 ? 'is-amber' : 'is-emerald'
+    },
+
+    decisionCardIconColor () {
+      if (this.draft.state === 'published') return '#15803d'
+      if (this.draft.state === 'changes_requested' || this.draft.state === 'draft') return '#d97706'
+      if (this.isAuthor || !this.canReviewOrApprove) return '#d97706'
+      if (this.actionsHelper.awaitingFinalApprovalOnly) return '#15803d'
+      if (this.actionsHelper.requiresApproverToPublish && !this.actionsHelper.canApproveStep && !this.actionsHelper.canPublish) return '#d97706'
+      return this.pendingReviewCount > 0 ? '#d97706' : '#15803d'
+    },
+
+    decisionCardIcon () {
+      if (this.draft.state === 'published') return 'mdi-check-decagram'
+      if (this.draft.state === 'changes_requested') return 'mdi-undo-variant'
+      if (this.draft.state === 'draft') return 'mdi-file-document-edit-outline'
+      if (this.isAuthor || !this.canReviewOrApprove) return 'mdi-clock-outline'
+      if (this.actionsHelper.awaitingFinalApprovalOnly) return 'mdi-stamper'
+      if (this.actionsHelper.requiresApproverToPublish && !this.actionsHelper.canApproveStep && !this.actionsHelper.canPublish) return 'mdi-shield-account-outline'
+      return this.pendingReviewCount > 0 ? 'mdi-alert-circle-outline' : 'mdi-check-decagram'
+    },
+
+    decisionCardTitle () {
+      if (this.draft.state === 'published') return '✓ Documento Homologado'
+      if (this.draft.state === 'changes_requested') return 'Devolvido para Ajustes'
+      if (this.draft.state === 'draft') return 'Rascunho em Elaboração'
+      if (this.isAuthor) {
+        return 'Modo Acompanhamento (Em Revisão)'
       }
-      return getAvailableReviewActions(this.draft, this.draft.permissions || defaultPerms)
+      if (!this.canReviewOrApprove) {
+        return 'Visualização do Documento'
+      }
+      if (this.actionsHelper.awaitingFinalApprovalOnly) {
+        return 'Revisão Técnica Concluída'
+      }
+      if (this.pendingReviewCount > 0) {
+        return `Faltam ${this.pendingReviewCount} ${this.pendingReviewCount === 1 ? 'revisão pendente' : 'revisões pendentes'}`
+      }
+      if (this.actionsHelper.requiresApproverToPublish && !this.actionsHelper.canApproveStep && !this.actionsHelper.canPublish) {
+        return 'Alterações Revisadas (Sem Publicação)'
+      }
+      return '✓ Todas as alterações revisadas'
+    },
+
+    decisionCardSubtitle () {
+      if (this.draft.state === 'published') return this.actionsHelper.statusDescription
+      if (this.draft.state === 'changes_requested') return 'Ajustes solicitados ao autor. Aguardando reedição e nova submissão.'
+      if (this.draft.state === 'draft') return 'Rascunho ainda não submetido para validação editorial.'
+      if (this.isAuthor) {
+        return 'Documento na fila de análise. Acompanhe comentários abaixo ou puxe de volta para edição se precisar alterar o texto.'
+      }
+      if (!this.canReviewOrApprove) {
+        return 'Acompanhamento de tramitação editorial.'
+      }
+      if (this.actionsHelper.awaitingFinalApprovalOnly) {
+        return 'Documento encaminhado ao Nível 2 e aguardando homologação final por um Aprovador.'
+      }
+      if (this.pendingReviewCount > 0) {
+        return `${this.pendingReviewCount} ${this.pendingReviewCount === 1 ? 'item aguardando' : 'itens aguardando'} análise nos cartões abaixo`
+      }
+      if (this.actionsHelper.requiresApproverToPublish && !this.actionsHelper.canApproveStep && !this.actionsHelper.canPublish) {
+        return 'Rascunho em fluxo de 1 nível — publicação oficial restrita ao perfil Aprovador'
+      }
+      if (this.actionsHelper.canApproveStep && !this.actionsHelper.canPublish) {
+        return 'Nenhuma pendência restante — pronto para aprovar a revisão técnica e encaminhar ao Aprovador'
+      }
+      return 'Nenhuma pendência restante — pronto para aprovar e publicar'
     },
 
     stateBadge () {
@@ -523,13 +761,33 @@ export default {
           this.loadReviewData(newId)
         }
       }
+    },
+    'visualDiff.html' () {
+      this.$nextTick(() => {
+        this.renderMermaidDiagrams()
+      })
+    },
+    docMode () {
+      this.$nextTick(() => {
+        this.renderMermaidDiagrams()
+      })
     }
   },
   mounted () {
     document.addEventListener('mousedown', this.onGlobalMouseDown)
+    try {
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: 'default'
+      })
+    } catch (e) {}
+    this.$nextTick(() => {
+      this.renderMermaidDiagrams()
+    })
   },
   beforeDestroy () {
     document.removeEventListener('mousedown', this.onGlobalMouseDown)
+    if (this.reviewSaveTimer) clearTimeout(this.reviewSaveTimer)
   },
   methods: {
     goBack () {
@@ -540,13 +798,81 @@ export default {
       }
     },
 
+    renderMermaidDiagrams () {
+      const root = this.$refs.docContent
+      if (!root) return
+      const mermaidNodes = root.querySelectorAll('.mermaid')
+      if (!mermaidNodes || !mermaidNodes.length) return
+      mermaidNodes.forEach((elm, idx) => {
+        if (elm.dataset.mermaidRendered === 'true') return
+        const code = (elm.textContent || '').trim()
+        if (!code) return
+        try {
+          const diagramId = `review-mermaid-${Date.now()}-${idx}`
+          mermaid.render(diagramId, code, (svgCode) => {
+            elm.innerHTML = svgCode
+            elm.dataset.mermaidRendered = 'true'
+          })
+        } catch (err) {
+          // Mantém fallback textual em caso de sintaxe incompleta
+        }
+      })
+    },
+
     setDocMode (mode) {
+      if (mode === 'edit' && !this.canEditDraftText) {
+        this.$store.commit('showNotification', {
+          style: 'amber',
+          icon: 'alert',
+          message: this.isAuthor ?
+            'Documento em revisão: clique em "Puxar de Volta para Edição" antes de alterar o texto.' :
+            'Você não possui permissão para editar este documento.'
+        })
+        return
+      }
       this.docMode = mode
       if (mode === 'clean') {
         this.$store.commit('showNotification', {
           style: 'success',
           icon: 'eye',
           message: 'Exibindo prévia final limpa (como a página ficará publicada no portal).'
+        })
+      } else if (mode === 'edit') {
+        this.$store.commit('showNotification', {
+          style: 'success',
+          icon: 'pencil',
+          message: 'Modo de edição ativo: edite o texto à esquerda e aceite ou recuse sugestões à direita.'
+        })
+      }
+    },
+
+    onReviewEditorChange ({ markdown }) {
+      this.draft.content = markdown
+      this.draftModifiedByReview = true
+      if (this.reviewSaveTimer) clearTimeout(this.reviewSaveTimer)
+      this.reviewSaveTimer = setTimeout(() => {
+        this.persistReviewedDraftContentIfNeeded().catch(() => {})
+      }, 900)
+    },
+
+    async onReviewEditorSaveDraft (payload) {
+      if (payload && typeof payload.markdown === 'string') {
+        this.draft.content = payload.markdown
+      }
+      this.draftModifiedByReview = true
+      if (this.reviewSaveTimer) clearTimeout(this.reviewSaveTimer)
+      try {
+        await this.persistReviewedDraftContentIfNeeded()
+        this.$store.commit('showNotification', {
+          style: 'success',
+          icon: 'check',
+          message: 'Rascunho salvo com sucesso!'
+        })
+      } catch (err) {
+        this.$store.commit('showNotification', {
+          style: 'red',
+          icon: 'alert',
+          message: 'Erro ao salvar rascunho.'
         })
       }
     },
@@ -558,6 +884,9 @@ export default {
     },
 
     onDocMouseUp () {
+      if (this.docMode === 'edit' || !this.draft || this.draft.state === 'published' || this.draft.state === 'archived') {
+        return
+      }
       if (typeof window === 'undefined' || !window.getSelection) return
       const selection = window.getSelection()
       const selectedText = selection ? selection.toString().trim() : ''
@@ -625,7 +954,16 @@ export default {
       Array.from(this.$el.querySelectorAll(`[data-item-id="${itemId}"]`)).forEach(el => el.classList.add('active-item'))
     },
 
-    onSuggestionDecision ({ item, decision }) {
+    async onSuggestionDecision ({ item, decision }) {
+      if (this.isAuthor || !this.canReviewOrApprove) {
+        this.$store.commit('showNotification', {
+          style: 'amber',
+          icon: 'alert',
+          message: 'O autor não pode aceitar ou recusar as próprias alterações.'
+        })
+        return
+      }
+      const prevDecision = this.suggestionDecisions[item.id] || 'pending'
       this.$set(this.suggestionDecisions, item.id, decision)
 
       if (decision === 'rejected') {
@@ -635,21 +973,92 @@ export default {
           decision: 'reject'
         })
         this.draftModifiedByReview = true
+      } else if (decision === 'pending' && prevDecision === 'rejected') {
+        this.draft.content = applySuggestionDecisionToMarkdown({
+          draftContent: this.draft.content,
+          suggestion: item,
+          decision: 'restore'
+        })
+        this.draftModifiedByReview = true
+      }
+
+      try {
+        const result = await this.$apollo.mutate({
+          mutation: gql`
+            mutation ($draftId: Int!, $suggestionId: String!, $decision: String!, $content: String) {
+              workflow {
+                setSuggestionDecision(
+                  draftId: $draftId
+                  suggestionId: $suggestionId
+                  decision: $decision
+                  content: $content
+                ) {
+                  responseResult {
+                    succeeded
+                    message
+                  }
+                  draft {
+                    id
+                    decisions
+                    content
+                  }
+                }
+              }
+            }
+          `,
+          variables: {
+            draftId: this.draft.id,
+            suggestionId: item.id,
+            decision,
+            content: this.draft.content
+          }
+        })
+        const res = result && result.data && result.data.workflow && result.data.workflow.setSuggestionDecision
+        if (res && res.responseResult && res.responseResult.succeeded) {
+          if (res.draft && res.draft.decisions) {
+            try {
+              this.suggestionDecisions = typeof res.draft.decisions === 'string' ? JSON.parse(res.draft.decisions) : res.draft.decisions
+            } catch (e) {}
+          }
+        }
+      } catch (err) {
+        this.$store.commit('showNotification', {
+          style: 'red',
+          icon: 'alert',
+          message: err.message || 'Erro ao persistir decisão da sugestão.'
+        })
+      }
+
+      if (decision === 'rejected') {
         this.$store.commit('showNotification', {
           style: 'orange',
           icon: 'undo',
           message: 'Sugestão recusada e trecho revertido para a versão original.'
         })
-      } else {
+      } else if (decision === 'accepted') {
         this.$store.commit('showNotification', {
           style: 'success',
           icon: 'check',
           message: 'Sugestão aceita e incorporada ao documento!'
         })
+      } else {
+        this.$store.commit('showNotification', {
+          style: 'blue',
+          icon: 'undo',
+          message: 'Item reaberto como pendente.'
+        })
       }
     },
 
-    onRedactionDecision ({ item, decision }) {
+    async onRedactionDecision ({ item, decision }) {
+      if (this.isAuthor || !this.canReviewOrApprove) {
+        this.$store.commit('showNotification', {
+          style: 'amber',
+          icon: 'alert',
+          message: 'Apenas revisores e aprovadores podem decidir sobre sugestões de redação.'
+        })
+        return
+      }
       if (decision === 'accepted' && item.newText && item.quote) {
         this.draft.content = applySuggestionDecisionToMarkdown({
           draftContent: this.draft.content,
@@ -660,6 +1069,7 @@ export default {
           decision: 'accept'
         })
         this.draftModifiedByReview = true
+        await this.persistReviewedDraftContentIfNeeded().catch(() => {})
         this.$store.commit('showNotification', {
           style: 'success',
           icon: 'check',
@@ -719,6 +1129,7 @@ export default {
                   title
                   description
                   content
+                  baseContent
                   contentType
                   editorKey
                   tags
@@ -729,6 +1140,7 @@ export default {
                   authorName
                   authorEmail
                   baseHash
+                  decisions
                   reviewDueDate
                   createdAt
                   updatedAt
@@ -773,15 +1185,42 @@ export default {
         }
 
         this.draft = draftData
-        this.suggestionDecisions = {}
+        if (draftData.decisions) {
+          try {
+            this.suggestionDecisions = typeof draftData.decisions === 'string' ? JSON.parse(draftData.decisions) : draftData.decisions
+          } catch (e) {
+            this.suggestionDecisions = {}
+          }
+        } else {
+          this.suggestionDecisions = {}
+        }
         this.draftModifiedByReview = false
 
-        if (draftData.pageId) {
-          await this.loadLivePageContent(draftData.pageId)
-        } else if (draftData.path) {
-          await this.loadLivePageByPath(draftData.path, draftData.locale || 'pt-br')
-        } else {
-          this.livePage = { content: '', title: '', description: '' }
+        if (draftData.baseContent !== undefined && draftData.baseContent !== null) {
+          this.livePage = {
+            content: draftData.baseContent,
+            title: draftData.title || '',
+            description: draftData.description || ''
+          }
+        }
+
+        const routeEdit = this.$route && this.$route.query && this.$route.query.edit
+        const urlEdit = typeof window !== 'undefined' && window.location && new URLSearchParams(window.location.search).get('edit')
+        const wantsEdit = routeEdit === '1' || routeEdit === 'true' || urlEdit === '1' || urlEdit === 'true'
+        if (wantsEdit && this.canEditDraftText) {
+          this.docMode = 'edit'
+        } else if (!this.canEditDraftText && this.docMode === 'edit') {
+          this.docMode = 'suggest'
+        }
+
+        if (!this.livePage || !this.livePage.content) {
+          if (draftData.pageId) {
+            await this.loadLivePageContent(draftData.pageId)
+          } else if (draftData.path) {
+            await this.loadLivePageByPath(draftData.path, draftData.locale || 'pt-br')
+          } else {
+            this.livePage = { content: '', title: '', description: '' }
+          }
         }
       } catch (err) {
         this.$store.commit('showNotification', {
@@ -870,10 +1309,24 @@ export default {
       })
     },
 
-    onCommentResolved ({ id, resolved }) {
+    onCommentResolved ({ id, resolved, decision }) {
+      const nowIso = new Date().toISOString()
       this.draft.comments = (this.draft.comments || []).map(c => {
         if (c.id === id) {
-          return { ...c, resolved }
+          let updatedAnchor = c.anchorText
+          if (updatedAnchor) {
+            try {
+              const parsed = JSON.parse(updatedAnchor)
+              parsed.status = decision || (resolved ? 'accepted' : 'pending')
+              if (resolved) {
+                parsed.reviewedAt = nowIso
+              } else {
+                delete parsed.reviewedAt
+              }
+              updatedAnchor = JSON.stringify(parsed)
+            } catch (e) {}
+          }
+          return { ...c, resolved, updatedAt: nowIso, anchorText: updatedAnchor }
         }
         return c
       })
@@ -885,6 +1338,15 @@ export default {
     },
 
     openActionDialog (type) {
+      if ((type === 'approveStep' || type === 'publish') && this.pendingReviewCount > 0) {
+        this.$store.commit('showNotification', {
+          style: 'amber',
+          icon: 'alert',
+          message: `Analise (aceite ou recuse) todos os ${this.pendingReviewCount} item(ns) pendente(s) antes de aprovar ou publicar.`
+        })
+        return
+      }
+
       this.actionDialog.type = type
       this.actionDialog.comment = ''
       this.actionDialog.error = ''
@@ -913,6 +1375,22 @@ export default {
         this.actionDialog.commentPlaceholder = 'Ex: Revisado e homologado conforme diretrizes editoriais...'
         this.actionDialog.icon = 'mdi-shield-check'
         this.actionDialog.headerClass = 'is-emerald'
+      } else if (type === 'submit') {
+        this.actionDialog.title = 'Submeter Documento para Aprovação'
+        this.actionDialog.description =
+          'Suas edições no texto e decisões sobre as sugestões serão salvas e enviadas novamente para revisão e aprovação.'
+        this.actionDialog.commentLabel = 'Resumo dos ajustes realizados (Opcional):'
+        this.actionDialog.commentPlaceholder = 'Ex: Ajustes aplicados nos trechos apontados pela revisão...'
+        this.actionDialog.icon = 'mdi-send-check-outline'
+        this.actionDialog.headerClass = 'is-emerald'
+      } else if (type === 'retract') {
+        this.actionDialog.title = 'Puxar de Volta para Edição'
+        this.actionDialog.description =
+          'Você retomará o documento como rascunho para realizar alterações no texto antes da revisão.'
+        this.actionDialog.commentLabel = 'Motivo da retirada (Opcional):'
+        this.actionDialog.commentPlaceholder = 'Ex: Necessário complementar anexo ou ajustar redação...'
+        this.actionDialog.icon = 'mdi-undo-variant'
+        this.actionDialog.headerClass = 'is-warning'
       }
 
       this.actionDialog.visible = true
@@ -923,6 +1401,7 @@ export default {
       await this.$apollo.mutate({
         mutation: gql`
           mutation (
+            $id: Int
             $pageId: Int
             $path: String!
             $locale: String!
@@ -932,9 +1411,11 @@ export default {
             $contentType: String
             $editorKey: String
             $tags: [String]
+            $decisions: String
           ) {
             workflow {
               saveDraft(
+                id: $id
                 pageId: $pageId
                 path: $path
                 locale: $locale
@@ -944,6 +1425,7 @@ export default {
                 contentType: $contentType
                 editorKey: $editorKey
                 tags: $tags
+                decisions: $decisions
               ) {
                 responseResult {
                   succeeded
@@ -954,6 +1436,7 @@ export default {
           }
         `,
         variables: {
+          id: this.draft.id || null,
           pageId: this.draft.pageId || null,
           path: this.draft.path,
           locale: this.draft.locale || 'pt-br',
@@ -962,7 +1445,8 @@ export default {
           content: this.draft.content,
           contentType: this.draft.contentType || 'markdown',
           editorKey: this.draft.editorKey || 'markdown',
-          tags: this.draft.tags || []
+          tags: this.draft.tags || [],
+          decisions: JSON.stringify(this.suggestionDecisions || {})
         }
       })
       this.draftModifiedByReview = false
@@ -976,6 +1460,11 @@ export default {
         return
       }
 
+      if ((type === 'approveStep' || type === 'publish') && this.pendingReviewCount > 0) {
+        this.actionDialog.error = `Analise todos os ${this.pendingReviewCount} item(ns) pendente(s) antes de aprovar ou publicar.`
+        return
+      }
+
       this.submittingAction = true
       this.actionDialog.error = ''
 
@@ -985,7 +1474,9 @@ export default {
           this.sanitizeDraftBlobUrls()
         }
 
-        await this.persistReviewedDraftContentIfNeeded()
+        if (type !== 'retract') {
+          await this.persistReviewedDraftContentIfNeeded()
+        }
 
         if (type === 'requestChanges') {
           const res = await this.$apollo.mutate({
@@ -1010,6 +1501,10 @@ export default {
           const data = res && res.data && res.data.workflow && res.data.workflow.requestChanges
           if (data && data.responseResult && data.responseResult.succeeded) {
             this.draft.state = 'changes_requested'
+            this.draft.events = [
+              { id: Date.now(), action: 'request_changes', comment: comment.trim(), createdAt: new Date().toISOString() },
+              ...(this.draft.events || [])
+            ]
             this.$store.commit('showNotification', {
               style: 'success',
               icon: 'check',
@@ -1045,6 +1540,10 @@ export default {
           const data = res && res.data && res.data.workflow && res.data.workflow.approveStep
           if (data && data.responseResult && data.responseResult.succeeded) {
             this.draft.state = (data.draft && data.draft.state) || 'awaiting_approval'
+            this.draft.events = [
+              { id: Date.now(), action: 'approve_step', comment: comment.trim() || null, createdAt: new Date().toISOString() },
+              ...(this.draft.events || [])
+            ]
             this.$store.commit('showNotification', {
               style: 'success',
               icon: 'check',
@@ -1080,6 +1579,10 @@ export default {
           const data = res && res.data && res.data.workflow && res.data.workflow.publish
           if (data && data.responseResult && data.responseResult.succeeded) {
             this.draft.state = 'published'
+            this.draft.events = [
+              { id: Date.now(), action: 'publish', comment: comment.trim() || null, createdAt: new Date().toISOString() },
+              ...(this.draft.events || [])
+            ]
             this.draft.pageId = data.pageId || this.draft.pageId
             this.docMode = 'clean'
             this.$store.commit('showNotification', {
@@ -1092,6 +1595,89 @@ export default {
             this.actionDialog.visible = false
           } else {
             this.actionDialog.error = (data && data.responseResult && data.responseResult.message) || 'Falha ao aprovar e publicar.'
+          }
+        } else if (type === 'submit') {
+          const submitComment = comment.trim() || 'Ajustes realizados e submetidos novamente para aprovação'
+          const res = await this.$apollo.mutate({
+            mutation: gql`
+              mutation ($id: Int!, $comment: String) {
+                workflow {
+                  submit(id: $id, comment: $comment) {
+                    responseResult {
+                      succeeded
+                      message
+                    }
+                    draft {
+                      id
+                      state
+                      currentLevel
+                    }
+                  }
+                }
+              }
+            `,
+            variables: { id: this.draft.id, comment: submitComment }
+          })
+          const data = res && res.data && res.data.workflow && res.data.workflow.submit
+          if (data && data.responseResult && data.responseResult.succeeded) {
+            this.draft.state = (data.draft && data.draft.state) || 'in_review'
+            this.draft.events = [
+              { id: Date.now(), action: 'submit', comment: submitComment, createdAt: new Date().toISOString() },
+              ...(this.draft.events || [])
+            ]
+            this.docMode = 'suggest'
+            this.$store.commit('showNotification', {
+              style: 'success',
+              icon: 'check',
+              message: 'Documento reenviado para aprovação com sucesso!'
+            })
+            /* eslint-disable-next-line vue/custom-event-name-casing */
+            this.$root.$emit('workflowRefreshTasks')
+            this.actionDialog.visible = false
+          } else {
+            this.actionDialog.error = (data && data.responseResult && data.responseResult.message) || 'Falha ao submeter para aprovação.'
+          }
+        } else if (type === 'retract') {
+          const res = await this.$apollo.mutate({
+            mutation: gql`
+              mutation ($id: Int!, $comment: String) {
+                workflow {
+                  retract(id: $id, comment: $comment) {
+                    responseResult {
+                      succeeded
+                      message
+                    }
+                    draft {
+                      id
+                      state
+                      currentLevel
+                      decisions
+                    }
+                  }
+                }
+              }
+            `,
+            variables: { id: this.draft.id, comment: comment.trim() || null }
+          })
+          const data = res && res.data && res.data.workflow && res.data.workflow.retract
+          if (data && data.responseResult && data.responseResult.succeeded) {
+            this.draft.state = (data.draft && data.draft.state) || 'draft'
+            this.suggestionDecisions = {}
+            this.draft.events = [
+              { id: Date.now(), action: 'retract', comment: comment.trim() || 'Retirado pelo autor para edição', createdAt: new Date().toISOString() },
+              ...(this.draft.events || [])
+            ]
+            this.docMode = 'edit'
+            this.$store.commit('showNotification', {
+              style: 'success',
+              icon: 'check',
+              message: 'Documento retornado para rascunho. Modo de edição liberado!'
+            })
+            /* eslint-disable-next-line vue/custom-event-name-casing */
+            this.$root.$emit('workflowRefreshTasks')
+            this.actionDialog.visible = false
+          } else {
+            this.actionDialog.error = (data && data.responseResult && data.responseResult.message) || 'Falha ao puxar documento de volta para edição.'
           }
         }
       } catch (err) {
@@ -1110,7 +1696,7 @@ export default {
 .detran-workflow-review-page {
   width: 100%;
   font-family: $font-family-base;
-  padding-bottom: 6.5rem;
+  padding-bottom: 2rem;
 }
 
 // =============================================================================
@@ -1124,17 +1710,33 @@ export default {
   margin-bottom: 1.25rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 
-  &__top {
-    padding: 1rem 1.5rem;
-  }
-
-  &__row {
+  &__top-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 1rem;
-    margin-top: 0.375rem;
+    gap: 0.75rem;
+    padding: 0.625rem 1.25rem;
+    background: #f8fafc;
+    border-bottom: 1px solid $slate-200;
+  }
+
+  &__top-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  &__top-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  &__title-section {
+    padding: 1.125rem 1.25rem 0.875rem;
   }
 
   &__title-group {
@@ -1142,6 +1744,32 @@ export default {
     align-items: center;
     flex-wrap: wrap;
     gap: 0.75rem;
+  }
+}
+
+.detran-gdocs-top-sep {
+  color: $slate-300;
+  font-weight: 300;
+}
+
+.detran-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: $slate-700;
+  background: #ffffff;
+  border: 1px solid $slate-300;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: $slate-100;
+    color: $slate-900;
+    border-color: $slate-400;
   }
 }
 
@@ -1266,6 +1894,21 @@ export default {
     align-items: center;
     gap: 0.75rem;
     margin-left: auto;
+  }
+
+  @media (max-width: 1024px) {
+    padding: 0.5rem 1rem;
+
+    &__meta {
+      width: 100%;
+      justify-content: space-between;
+    }
+
+    &__controls {
+      width: 100%;
+      justify-content: space-between;
+      margin-left: 0;
+    }
   }
 
   &__hint {
@@ -1437,8 +2080,9 @@ export default {
   gap: 1.75rem;
   align-items: start;
 
-  @media (max-width: 1024px) {
+  @media (max-width: 1200px) {
     grid-template-columns: 1fr;
+    gap: 1.5rem;
   }
 }
 
@@ -1450,9 +2094,12 @@ export default {
 .detran-gdocs-aside {
   position: sticky;
   top: 1rem;
+  display: flex;
+  flex-direction: column;
 
-  @media (max-width: 1024px) {
+  @media (max-width: 1200px) {
     position: static;
+    margin-top: 1rem;
   }
 }
 
@@ -1514,9 +2161,14 @@ export default {
   min-height: 680px;
   box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.08), 0 0 3px 0 rgba(0, 0, 0, 0.04);
   user-select: text;
+  overflow-x: hidden;
+
+  @media (max-width: 1200px) {
+    padding: 1.75rem 1.5rem;
+  }
 
   @media (max-width: 640px) {
-    padding: 1.5rem 1.25rem;
+    padding: 1.25rem 1rem;
   }
 }
 
@@ -1538,10 +2190,25 @@ export default {
   border: 1px solid #bbf7d0;
 }
 
+.detran-doc-edit-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+
 .detran-doc-content {
   color: #1e293b;
   font-size: 1rem;
   line-height: 1.75;
+  overflow-wrap: break-word;
 
   > * + * {
     margin-top: 1.25rem;
@@ -1648,6 +2315,87 @@ export default {
     font-style: italic;
   }
 
+  .detran-doc-diagram {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+
+    .diagram,
+    .mermaid {
+      display: block;
+      width: 100%;
+      text-align: center;
+
+      svg {
+        max-width: 100% !important;
+        height: auto !important;
+        display: block !important;
+        margin: 0 auto !important;
+        color-scheme: light !important;
+        direction: ltr !important;
+
+        foreignObject {
+          overflow: visible !important;
+
+          p {
+            margin: 0 !important;
+          }
+        }
+      }
+    }
+  }
+
+  .detran-doc-code {
+    max-width: 100%;
+    overflow-x: auto;
+    padding: 1rem 1.25rem;
+    border-radius: 0.75rem;
+    background: #0f172a;
+    color: #e2e8f0;
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    font-family: 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+
+    code {
+      background: transparent !important;
+      color: inherit !important;
+      padding: 0 !important;
+    }
+  }
+
+  .detran-doc-hr {
+    border: none;
+    border-top: 1px solid #e2e8f0;
+    margin: 1.5rem 0;
+  }
+
+  .diagram-suggestion-box {
+    margin: 1.5rem 0;
+    padding: 0.75rem;
+    border-radius: 0.75rem;
+    border: 2px dashed #22c55e;
+    background-color: rgba(240, 253, 244, 0.45);
+
+    &.is-del {
+      border-color: #ef4444;
+      background-color: rgba(254, 242, 242, 0.55);
+
+      .img-suggestion-badge {
+        color: #991b1b;
+      }
+
+      .img-suggestion-badge__pill {
+        background: #fecaca;
+        color: #7f1d1d;
+      }
+    }
+  }
+
   // Marcações Visuais de Diff Estilo Google Docs (Seção 2.2)
   .suggestion-add {
     background-color: #dcfce7;
@@ -1746,7 +2494,8 @@ export default {
 // Modo Visualização Limpa (Prévia Final - Seção 2.1 / Protótipo linhas 77-99)
 .clean-mode {
   .suggestion-del,
-  .suggestion-del-block {
+  .suggestion-del-block,
+  .diagram-suggestion-box.is-del {
     display: none !important;
   }
 
@@ -1769,7 +2518,8 @@ export default {
     display: none !important;
   }
 
-  .img-suggestion-box {
+  .img-suggestion-box,
+  .diagram-suggestion-box {
     border-color: transparent !important;
     background-color: transparent !important;
     padding: 0 !important;
@@ -1778,42 +2528,25 @@ export default {
 }
 
 // =============================================================================
-// 2.4 BARRA DE DECISÃO FLUTUANTE INFERIOR (FLOATING ACTION BAR)
+// 2.4 SEÇÃO DE DECISÃO EDITORIAL NA LATERAL (ANTES DE REVISÃO & COMENTÁRIOS)
 // =============================================================================
-.detran-floating-action-bar {
-  position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 50;
-  width: 94%;
-  max-width: 720px;
+.detran-decision-side-card {
+  background: #ffffff;
+  border: 1px solid $slate-200;
+  border-radius: 0.75rem;
+  padding: 0.875rem 1rem;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
 
-  &__card {
-    background: rgba(255, 255, 255, 0.92);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(226, 232, 240, 0.95);
-    border-radius: 1rem;
-    padding: 0.75rem 1.25rem;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  &__header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 0.875rem;
-  }
-
-  &__status {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
+    gap: 0.65rem;
   }
 
   &__icon {
-    width: 38px;
-    height: 38px;
-    border-radius: 0.75rem;
+    width: 34px;
+    height: 34px;
+    border-radius: 0.625rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1830,22 +2563,51 @@ export default {
     }
   }
 
+  &__text {
+    flex: 1;
+    min-width: 0;
+  }
+
   &__title {
     font-size: 0.8125rem;
     font-weight: 700;
     color: #0f172a;
+    line-height: 1.25;
   }
 
   &__sub {
     font-size: 0.6875rem;
     color: #64748b;
+    line-height: 1.3;
+    margin-top: 2px;
   }
 
   &__actions {
     display: flex;
-    align-items: center;
-    gap: 0.625rem;
-    margin-left: auto;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+
+    .detran-fab-btn {
+      flex: 1 1 135px;
+      padding: 0.55rem 0.75rem;
+      font-size: 0.78125rem;
+      border-radius: 0.625rem;
+      white-space: nowrap;
+    }
+  }
+
+  &__lock-hint {
+    width: 100%;
+    margin: 0.35rem 0 0;
+    padding: 0.5rem 0.65rem;
+    border-radius: 0.5rem;
+    background-color: #fffbeb;
+    border: 1px solid #fde68a;
+    color: #92400e;
+    font-size: 0.71875rem;
+    line-height: 1.4;
+    text-align: left;
   }
 }
 
@@ -1874,6 +2636,17 @@ export default {
 
     &:hover:not(:disabled) {
       background: #fef3c7;
+    }
+  }
+
+  &--neutral {
+    background: #ffffff;
+    color: #334155 !important;
+    border: 1px solid #cbd5e1;
+
+    &:hover:not(:disabled) {
+      background: #f8fafc;
+      border-color: #94a3b8;
     }
   }
 

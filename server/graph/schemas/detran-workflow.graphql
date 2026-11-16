@@ -9,6 +9,7 @@ extend type Query {
 extend type Mutation {
   workflow: DetranWorkflowMutation
   workflowSubmit(id: Int!, approvalMode: String, comment: String): DetranWorkflowDraftResponse @auth(requires: ["write:drafts", "write:pages", "manage:pages", "manage:system"])
+  workflowRetract(id: Int!, comment: String): DetranWorkflowDraftResponse @auth(requires: ["write:drafts", "write:pages", "manage:pages", "manage:system"])
   workflowSaveDraft(
     id: Int
     pageId: Int
@@ -22,7 +23,8 @@ extend type Mutation {
     tags: [String]
     approvalMode: String
     baseHash: String
-  ): DetranWorkflowDraftResponse @auth(requires: ["write:drafts", "write:pages", "manage:pages", "manage:system"])
+    decisions: String
+  ): DetranWorkflowDraftResponse @auth(requires: ["write:drafts", "write:pages", "review:pages", "approve:pages", "manage:pages", "manage:system"])
 }
 
 # -----------------------------------------------
@@ -31,7 +33,7 @@ extend type Mutation {
 
 type DetranWorkflowQuery {
   # Get single draft by ID with its events and comments
-  draft(id: Int!): DetranWorkflowDraft @auth(requires: ["read:pages", "manage:system"])
+  draft(id: Int!): DetranWorkflowDraft @auth(requires: ["write:drafts", "write:pages", "review:pages", "approve:pages", "manage:pages", "manage:system"])
 
   # Get the active draft for a specific path & locale
   draftByPath(path: String!, locale: String): DetranWorkflowDraft @auth(requires: ["read:pages", "manage:system"])
@@ -77,12 +79,19 @@ type DetranWorkflowMutation {
     tags: [String]
     approvalMode: String
     baseHash: String
-  ): DetranWorkflowDraftResponse @auth(requires: ["write:drafts", "write:pages", "manage:pages", "manage:system"])
+    decisions: String
+  ): DetranWorkflowDraftResponse @auth(requires: ["write:drafts", "write:pages", "review:pages", "approve:pages", "manage:pages", "manage:system"])
 
   # Submit draft for review (draft / changes_requested -> in_review)
   submit(
     id: Int!
     approvalMode: String
+    comment: String
+  ): DetranWorkflowDraftResponse @auth(requires: ["write:drafts", "write:pages", "manage:pages", "manage:system"])
+
+  # Retract submitted draft back to editable draft (in_review / awaiting_approval -> draft)
+  retract(
+    id: Int!
     comment: String
   ): DetranWorkflowDraftResponse @auth(requires: ["write:drafts", "write:pages", "manage:pages", "manage:system"])
 
@@ -110,13 +119,22 @@ type DetranWorkflowMutation {
     lineNumber: Int
     anchorText: String
     body: String!
-  ): DetranWorkflowCommentResponse @auth(requires: ["read:pages", "manage:system"])
+  ): DetranWorkflowCommentResponse @auth(requires: ["write:drafts", "write:pages", "review:pages", "approve:pages", "manage:pages", "manage:system"])
 
   # Toggle comment resolution status
   resolveComment(
     id: Int!
     resolved: Boolean!
-  ): DefaultResponse @auth(requires: ["write:pages", "write:drafts", "manage:pages", "manage:system"])
+    decision: String
+  ): DefaultResponse @auth(requires: ["write:pages", "write:drafts", "review:pages", "approve:pages", "manage:pages", "manage:system"])
+
+  # Persist reviewer decision on a diff suggestion (e.g. "sug-1" -> "accepted" | "rejected" | "pending")
+  setSuggestionDecision(
+    draftId: Int!
+    suggestionId: String!
+    decision: String!
+    content: String
+  ): DetranWorkflowDraftResponse @auth(requires: ["review:pages", "approve:pages", "manage:pages", "manage:system"])
 
   # Revalidate normativo validity for +12 months
   revalidate(
@@ -163,6 +181,7 @@ type DetranWorkflowDraft {
   title: String!
   description: String
   content: String!
+  baseContent: String
   contentType: String!
   editorKey: String!
   tags: [String]
@@ -174,10 +193,12 @@ type DetranWorkflowDraft {
   authorEmail: String
   baseHash: String
   reviewDueDate: Date
+  decisions: String
   createdAt: Date!
   updatedAt: Date!
   events: [DetranWorkflowEvent]
   comments: [DetranWorkflowComment]
+  lastComment: String
 }
 
 type DetranWorkflowEvent {

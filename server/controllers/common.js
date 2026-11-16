@@ -436,13 +436,17 @@ router.get(['/w', '/w/*'], async (req, res, next) => {
   let sdi = 1
   let sidebar = []
   try {
-    sidebar = (await WIKI.models.navigation.getTree({ cache: true, locale, groups: req.user.groups })).map(n => ({
-      i: `sdi-${sdi++}`,
+    let rawItems = await WIKI.models.navigation.getTree({ cache: true, locale, groups: req.user.groups })
+    if (!rawItems || rawItems.length === 0) {
+      rawItems = await WIKI.models.navigation.getTree({ cache: true, locale: WIKI.config.lang.code || 'en', groups: req.user.groups })
+    }
+    sidebar = (rawItems || []).map(n => ({
+      i: 'sdi-' + (sdi++),
       k: n.kind,
       l: n.label,
-      t: n.target,
-      h: n.hint,
-      icon: n.icon || ''
+      c: n.icon,
+      y: n.targetType,
+      t: n.target
     }))
   } catch (err) {
     sidebar = []
@@ -558,7 +562,7 @@ router.get('/*', async (req, res, next) => {
 
     try {
       // -> Get Page from cache
-      const page = await WIKI.models.pages.getPage({
+      let page = await WIKI.models.pages.getPage({
         path: pageArgs.path,
         locale: pageArgs.locale,
         userId: req.user.id,
@@ -568,6 +572,44 @@ router.get('/*', async (req, res, next) => {
 
       // -> Effective Permissions
       const effectivePermissions = WIKI.auth.getEffectivePermissions(req, pageArgs)
+
+      // -> Synthesize draft page view when unpublished page has an active workflow draft or ?edit=1
+      if (!page && effectivePermissions.pages.write) {
+        try {
+          const DetranWfDraft = require('../models/detranWfDraft')
+          const activeDraft = await DetranWfDraft.query()
+            .where('path', pageArgs.path)
+            .whereRaw('LOWER(locale) = ?', [String(pageArgs.locale || 'pt-br').toLowerCase()])
+            .whereIn('state', ['draft', 'changes_requested', 'in_review', 'awaiting_approval'])
+            .orderBy('updatedAt', 'desc')
+            .first()
+          if (activeDraft || req.query.edit === '1' || req.query.edit === 'true') {
+            const nowIso = new Date().toISOString()
+            page = {
+              id: (activeDraft && activeDraft.pageId) || 0,
+              path: pageArgs.path,
+              localeCode: pageArgs.locale,
+              title: (activeDraft && activeDraft.title) || _.startCase(_.last(pageArgs.path.split('/')) || pageArgs.path),
+              description: (activeDraft && activeDraft.description) || '',
+              isPublished: false,
+              isPrivate: false,
+              publishStartDate: '',
+              publishEndDate: '',
+              tags: (activeDraft && Array.isArray(activeDraft.tags)) ? activeDraft.tags : [],
+              content: (activeDraft && activeDraft.content) || '',
+              render: '',
+              toc: '[]',
+              contentType: 'markdown',
+              editorKey: 'markdown',
+              createdAt: (activeDraft && activeDraft.createdAt) || nowIso,
+              updatedAt: (activeDraft && activeDraft.updatedAt) || nowIso,
+              authorId: (activeDraft && activeDraft.authorId) || req.user.id,
+              authorName: req.user.name || 'Servidor',
+              extra: { css: '', js: '' }
+            }
+          }
+        } catch (draftErr) {}
+      }
 
       // -> Check User Access
       if (!effectivePermissions.pages.read) {

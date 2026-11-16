@@ -54,7 +54,7 @@
 
             //- Rodapé institucional
             .detran-login-hero__footer
-              span.detran-login-hero__state Governo do Estado de Minas Gerais
+              span.detran-login-hero__state Governo do Estado de Minas Gerais • Detran-MG • Coordenadoria de Inovação
 
           //- -------------------------------------------------------------
           //- PAINEL DIREITO: Card Glassmorphism de Autenticação
@@ -288,7 +288,7 @@
               //- Rodapé de Segurança do Card
               .detran-login-security.mt-6
                 v-icon(size='14' color='#94a3b8') mdi-shield-lock-outline
-                span Comunicação segura com certificado digital SSL/TLS
+                span Comunicação segura com certificado digital SSL/TLS • Coordenadoria de Inovação
 
       //- -------------------------------------------------------------
       //- MODAIS TFA (Preservados integralmente)

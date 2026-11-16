@@ -22,14 +22,15 @@
           alt='Detran-MG'
         )
 
-      //- Botão fechar drawer no mobile
-      button.detran-sidebar__close-mobile(
-        @click='$emit("close-mobile")'
-        aria-label='Fechar navegação'
-        title='Fechar navegação'
-        type='button'
-      )
-        v-icon(size='20' color='white') mdi-close
+      .detran-sidebar__header-actions
+        //- Botão fechar drawer no mobile (alinhado lado a lado sem sobreposição)
+        button.detran-sidebar__close-mobile(
+          @click='$emit("close-mobile")'
+          aria-label='Fechar navegação'
+          title='Fechar navegação'
+          type='button'
+        )
+          v-icon(size='20' color='white') mdi-close
 
     //- Switcher Menu / Árvore (apenas exibido quando navMode é MIXED ou não fixado e sidebar não recolhida)
     .detran-sidebar__switcher.anim-hidden.anim-fade-in-up.stagger-1(v-if='navMode === "MIXED" || !navMode || navMode === "SIDEBAR"')
@@ -210,48 +211,6 @@
       template(v-else)
         p.detran-sidebar__empty Nenhuma página encontrada
 
-    //- Footer: Perfil do usuário + Configurações (Admin)
-    .detran-sidebar__user-footer
-      //- Quando NÃO autenticado: Botão de Login direto
-      a.detran-sidebar__user-btn.detran-sidebar__login-card.glass-hover(
-        v-if='!isAuthenticated'
-        href='/login'
-        title='Fazer Login'
-      )
-        .detran-sidebar__login-avatar
-          v-icon(size='22') mdi-login
-        .detran-sidebar__user-info
-          p.detran-sidebar__user-name Fazer Login
-          p.detran-sidebar__user-email Acessar sua conta
-
-      //- Quando autenticado: Card do usuário real com modal
-      button.detran-sidebar__user-btn.glass-hover(
-        v-else
-        @click='openUserModal'
-        :title='$t("common:sidebar.profile", "Acessar Meu Perfil")'
-        type='button'
-      )
-        img.detran-sidebar__avatar(
-          v-if='hasUserAvatar || userAvatar'
-          :src='userAvatar'
-          :alt='userName'
-          @error='onAvatarError'
-          loading='lazy'
-        )
-        .detran-sidebar__avatar-initials(v-else) {{ userInitials }}
-        .detran-sidebar__user-info
-          p.detran-sidebar__user-name {{ userName }}
-          p.detran-sidebar__user-email {{ userEmail }}
-
-      a.detran-sidebar__settings-btn.glass-hover(
-        v-if='canManageSystem'
-        href='/a'
-        @click.prevent='goToAdmin'
-        :title='$t("common:sidebar.admin", "Configurações Gerais (Admin)")'
-        aria-label='Configurações Gerais (Admin)'
-      )
-        v-icon(size='16' color='rgba(255,255,255,0.7)') mdi-cog
-
     //- Modal do Usuário (Perfil / Sair)
     v-dialog(
       v-model='userModalOpen'
@@ -320,6 +279,7 @@
 import { get } from 'vuex-pathify'
 import gql from 'graphql-tag'
 import NavTreeItem from './nav-tree-item.vue'
+import { broadcastLogout } from '../../../modules/auth-sync'
 
 const browseQuery = gql`
   query($path: String, $parent: Int, $locale: String!, $mode: PageTreeMode!) {
@@ -341,6 +301,13 @@ const browseQuery = gql`
 `
 
 const defaultAvatar = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><linearGradient id='g' x1='0%' y1='0%' x2='100%' y2='100%'><stop offset='0%' stop-color='%2333a65b'/><stop offset='100%' stop-color='%231b5830'/></linearGradient></defs><rect width='100' height='100' rx='50' fill='url(%23g)'/><circle cx='50' cy='38' r='18' fill='%23ffffff' opacity='0.95'/><path d='M22 86 C22 66 36 58 50 58 C64 58 78 66 78 86 Z' fill='%23ffffff' opacity='0.95'/></svg>"
+
+const defaultApps = [
+  { id: 'servicedesk', nome: 'Service Desk', icone: 'mdi-headset', descricao: 'Suporte e Chamados', resolvedSsoUrl: '/apps/servicedesk' },
+  { id: 'sei', nome: 'SEI! Minas', icone: 'mdi-file-document-edit-outline', descricao: 'Processos Eletrônicos', resolvedSsoUrl: '/apps/sei' },
+  { id: 'siafi', nome: 'SIAFI-MG', icone: 'mdi-finance', descricao: 'Execução Orçamentária', resolvedSsoUrl: '/apps/siafi' },
+  { id: 'infra', nome: 'Painel de Infraestrutura', icone: 'mdi-server-network', descricao: 'Monitoramento & TI', resolvedSsoUrl: '/apps/infra' }
+]
 
 export default {
   name: 'NavSidebar',
@@ -380,7 +347,8 @@ export default {
       collapsedGroups: {},
       avatarFailed: false,
       userModalOpen: false,
-      treeKey: 0
+      treeKey: 0,
+      internalApps: []
     }
   },
 
@@ -414,6 +382,12 @@ export default {
       if (parts.length === 1) return parts[0].charAt(0).toUpperCase()
       return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase()
     },
+    computedApps () {
+      if (this.internalApps && this.internalApps.length > 0) {
+        return this.internalApps
+      }
+      return defaultApps
+    },
     hasUserAvatar () {
       if (this.avatarFailed) return false
       return !!(this.rawPictureUrl && this.rawPictureUrl.length > 1 && !this.rawPictureUrl.includes('pravatar.cc'))
@@ -443,7 +417,8 @@ export default {
         // Cabeçalho (Header das configurações do Wiki.js)
         if (item.k === 'header') {
           // Se for título de seção em caixa alta e sem ícone customizado de grupo (ex: "PRINCIPAL", "ACESSO RÁPIDO")
-          const isSection = (item.l && item.l === item.l.toUpperCase()) && (!item.c || item.c === 'mdi-format-title')
+          const icon = item.c || item.icon
+          const isSection = (item.l && item.l === item.l.toUpperCase()) && (!icon || icon === 'mdi-format-title')
           if (isSection) {
             currentGroup = null
             result.push({
@@ -513,6 +488,21 @@ export default {
           this.navTab = saved
         }
       } catch (e) {}
+    }
+
+    if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
+      fetch('/api/detran/apps')
+        .then(r => r.json())
+        .then(data => {
+          if (data && Array.isArray(data.apps) && data.apps.length > 0) {
+            this.internalApps = data.apps
+          } else {
+            this.internalApps = defaultApps
+          }
+        })
+        .catch(() => {
+          this.internalApps = defaultApps
+        })
     }
 
     try {
@@ -716,6 +706,11 @@ export default {
 
     doLogout () {
       this.userModalOpen = false
+      const uid = (this.$store && this.$store.state && this.$store.state.user) ? this.$store.state.user.id : 0
+      broadcastLogout(uid)
+      if (this.$store) {
+        this.$store.commit('user/CLEAR_AUTH')
+      }
       window.location.assign('/logout')
     },
 
@@ -742,6 +737,9 @@ export default {
   min-width: $sidebar-width;
   max-width: $sidebar-width;
   height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -873,8 +871,29 @@ export default {
                   visibility 0s 0.2s !important;
     }
 
+    .detran-sidebar__header-row {
+      justify-content: center !important;
+      padding: 0 0.5rem !important;
+    }
+
     .detran-sidebar__logo {
+      justify-content: center !important;
       padding: 0 0.5rem;
+    }
+
+    .detran-sidebar__apps-btn {
+      opacity: 0 !important;
+      max-width: 0 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      transform: scale(0.5) !important;
+      pointer-events: none !important;
+      visibility: hidden;
+      transition: opacity 0.12s ease,
+                  max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+                  transform 0.2s ease,
+                  margin 0.35s ease,
+                  visibility 0s 0.2s !important;
     }
 
     .detran-sidebar__logo-img {
@@ -928,10 +947,28 @@ export default {
     justify-content: center !important;
     z-index: 40 !important;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25) !important;
-    transition: background-color 0.2s, transform 0.2s !important;
+    transition: background-color 0.2s, transform 0.2s, top 0.3s !important;
     cursor: pointer;
     border: none;
     padding: 0;
+
+    @include v-compact {
+      top: 24px !important;
+      width: 22px !important;
+      height: 22px !important;
+    }
+
+    @include v-short {
+      top: 18px !important;
+      width: 20px !important;
+      height: 20px !important;
+    }
+
+    @include v-tiny {
+      top: 14px !important;
+      width: 18px !important;
+      height: 18px !important;
+    }
 
     .v-icon {
       color: white !important;
@@ -960,37 +997,161 @@ export default {
   &__header-row {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: space-between;
     position: relative;
     border-bottom: none !important;
     overflow: hidden;
+    flex-shrink: 0;
+    padding: 0 1.25rem 0 1rem;
+    height: 80px;
+    transition: height 0.35s cubic-bezier(0.4, 0, 0.2, 1), padding 0.35s ease;
+
+    @include v-compact {
+      height: 56px;
+      padding: 0 1rem 0 0.875rem;
+    }
+
+    @include v-short {
+      height: 46px;
+      padding: 0 0.875rem 0 0.75rem;
+    }
+
+    @include v-tiny {
+      height: 38px;
+      padding: 0 0.75rem 0 0.5rem;
+    }
+  }
+
+  &__apps-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: $radius-lg;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: white !important;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+    padding: 0;
+
+    .v-icon {
+      color: rgba(255, 255, 255, 0.95) !important;
+      transition: transform 0.25s ease, color 0.2s ease;
+    }
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.22);
+      border-color: rgba(255, 255, 255, 0.35);
+      transform: scale(1.05);
+
+      .v-icon {
+        color: #ffffff !important;
+        transform: rotate(45deg);
+      }
+    }
+
+    &:active {
+      transform: scale(0.96);
+    }
+
+    @include v-compact {
+      width: 30px;
+      height: 30px;
+      border-radius: $radius-md;
+      .v-icon { font-size: 18px !important; }
+    }
+
+    @include v-short {
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+      .v-icon { font-size: 16px !important; }
+    }
+
+    @include v-tiny {
+      width: 22px;
+      height: 22px;
+      border-radius: 5px;
+      .v-icon { font-size: 14px !important; }
+    }
+  }
+
+  &__header-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+
+    @include v-compact {
+      gap: 0.375rem;
+    }
+
+    @include v-short {
+      gap: 0.25rem;
+    }
   }
 
   &__close-mobile {
     display: none;
-    position: absolute;
-    right: 1rem;
-    top: 50%;
-    transform: translateY(-50%);
     width: 36px;
     height: 36px;
-    border-radius: $radius-md;
-    background: rgba(255, 255, 255, 0.10);
-    border: none;
+    border-radius: $radius-lg;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.18);
     cursor: pointer;
     align-items: center;
     justify-content: center;
     transition: background 0.2s ease, transform 0.2s ease;
     flex-shrink: 0;
-    z-index: 10;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+    padding: 0;
+
+    .v-icon {
+      color: rgba(255, 255, 255, 0.95) !important;
+      transition: transform 0.2s ease;
+    }
 
     &:hover {
-      background: rgba(255, 255, 255, 0.20);
-      transform: translateY(-50%) scale(1.05);
+      background: rgba(255, 255, 255, 0.22);
+      border-color: rgba(255, 255, 255, 0.35);
+      transform: scale(1.05);
+
+      .v-icon {
+        transform: rotate(90deg);
+      }
+    }
+
+    &:active {
+      transform: scale(0.96);
     }
 
     @include mobile {
-      display: flex;
+      display: inline-flex;
+    }
+
+    @include v-compact {
+      width: 30px;
+      height: 30px;
+      border-radius: $radius-md;
+      .v-icon { font-size: 18px !important; }
+    }
+
+    @include v-short {
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+      .v-icon { font-size: 16px !important; }
+    }
+
+    @include v-tiny {
+      width: 22px;
+      height: 22px;
+      border-radius: 5px;
+      .v-icon { font-size: 14px !important; }
     }
   }
 
@@ -998,17 +1159,33 @@ export default {
   // Logo / Branding
   // ---------------------------------------------------------------------------
   &__logo {
-    height: 80px;
+    height: 100%;
     display: flex;
     align-items: center;
-    justify-content: center;
-    padding: 0 1rem;
+    justify-content: flex-start;
+    padding: 0;
     overflow: hidden;
-    transition: padding 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     text-decoration: none;
     color: inherit;
     cursor: pointer;
-    width: 100%;
+    flex: 1;
+    min-width: 0;
+
+    @include v-compact {
+      height: 56px;
+      padding: 0 0.875rem;
+    }
+
+    @include v-short {
+      height: 46px;
+      padding: 0 0.75rem;
+    }
+
+    @include v-tiny {
+      height: 38px;
+      padding: 0 0.5rem;
+    }
 
     &:hover &__logo-img {
       opacity: 0.95;
@@ -1022,12 +1199,24 @@ export default {
     width: auto;
     height: auto;
     object-fit: contain;
-    transition: max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-                max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
-                transform 0.2s ease,
-                opacity 0.2s ease;
+    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     display: block;
     filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.25));
+
+    @include v-compact {
+      max-height: 30px;
+      max-width: 135px;
+    }
+
+    @include v-short {
+      max-height: 24px;
+      max-width: 115px;
+    }
+
+    @include v-tiny {
+      max-height: 20px;
+      max-width: 95px;
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -1038,10 +1227,26 @@ export default {
     max-height: 80px;
     opacity: 1;
     overflow: hidden;
+    flex-shrink: 0;
     transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1),
                 max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
                 padding 0.35s cubic-bezier(0.4, 0, 0.2, 1),
                 margin 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+
+    @include v-compact {
+      padding: 0.5rem 0.875rem 0.25rem;
+      max-height: 56px;
+    }
+
+    @include v-short {
+      padding: 0.35rem 0.75rem 0.2rem;
+      max-height: 48px;
+    }
+
+    @include v-tiny {
+      padding: 0.2rem 0.625rem 0.15rem;
+      max-height: 42px;
+    }
   }
 
   &__switch-wrap {
@@ -1055,6 +1260,16 @@ export default {
     border: 1px solid rgba(255, 255, 255, 0.06) !important;
     overflow: hidden !important;
     width: 100% !important;
+
+    @include v-compact {
+      padding: 3px !important;
+      border-radius: 0.625rem !important;
+    }
+
+    @include v-short {
+      padding: 2px !important;
+      border-radius: 0.5rem !important;
+    }
   }
 
   &__switch-slider {
@@ -1073,6 +1288,22 @@ export default {
     will-change: transform !important;
     pointer-events: none !important;
     z-index: 1 !important;
+
+    @include v-compact {
+      top: 3px !important;
+      bottom: 3px !important;
+      left: 3px !important;
+      width: calc(50% - 3px) !important;
+      border-radius: 0.45rem !important;
+    }
+
+    @include v-short {
+      top: 2px !important;
+      bottom: 2px !important;
+      left: 2px !important;
+      width: calc(50% - 2px) !important;
+      border-radius: 0.375rem !important;
+    }
 
     .is-tab-browse & {
       transform: translateX(100%) !important;
@@ -1120,13 +1351,32 @@ export default {
         color: rgba(255, 255, 255, 0.85) !important;
       }
     }
+
+    @include v-compact {
+      gap: 6px !important;
+      padding: 0.325rem 0.5rem !important;
+      font-size: 0.7rem !important;
+    }
+
+    @include v-short {
+      gap: 4px !important;
+      padding: 0.25rem 0.4rem !important;
+      font-size: 0.65rem !important;
+    }
+
+    @include v-tiny {
+      gap: 3px !important;
+      padding: 0.2rem 0.35rem !important;
+      font-size: 0.625rem !important;
+    }
   }
 
   // ---------------------------------------------------------------------------
   // Navegação
   // ---------------------------------------------------------------------------
   &__nav {
-    flex: 1;
+    flex: 1 1 0%;
+    min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
     padding: 0.5rem 1rem;
@@ -1134,8 +1384,45 @@ export default {
     flex-direction: column;
     gap: 4px;
     scroll-behavior: smooth !important;
+    overscroll-behavior-y: contain;
     -webkit-overflow-scrolling: touch;
     transition: padding 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+
+    &::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 9999px;
+      transition: background 0.2s ease;
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.4);
+      }
+    }
+
+    @include v-compact {
+      padding: 0.35rem 0.75rem;
+      gap: 2px;
+    }
+
+    @include v-short {
+      padding: 0.25rem 0.625rem;
+      gap: 2px;
+    }
+
+    @include v-tiny {
+      padding: 0.15rem 0.5rem;
+      gap: 1px;
+    }
   }
 
   &__tree-header {
@@ -1201,6 +1488,22 @@ export default {
                 max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1),
                 margin 0.35s ease,
                 padding 0.35s ease;
+
+    @include v-compact {
+      margin: 0.4rem 0 0.2rem;
+      padding: 0 0.75rem;
+      font-size: 0.625rem;
+    }
+
+    @include v-short {
+      margin: 0.25rem 0 0.15rem;
+      padding: 0 0.625rem;
+      font-size: 0.58rem;
+    }
+
+    @include v-tiny {
+      display: none !important;
+    }
   }
 
   &__divider {
@@ -1272,6 +1575,23 @@ export default {
         color: #ffffff !important;
       }
     }
+
+    @include v-compact {
+      padding: 0.375rem 0.625rem !important;
+      font-size: 0.875rem !important;
+      border-radius: $radius-md !important;
+    }
+
+    @include v-short {
+      padding: 0.275rem 0.5rem !important;
+      font-size: 0.8125rem !important;
+      border-radius: $radius-sm !important;
+    }
+
+    @include v-tiny {
+      padding: 0.2rem 0.45rem !important;
+      font-size: 0.75rem !important;
+    }
   }
 
   &__link-icon {
@@ -1282,6 +1602,33 @@ export default {
     justify-content: center;
     flex-shrink: 0;
     transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+
+    @include v-compact {
+      width: 26px;
+      height: 26px;
+
+      .v-icon {
+        font-size: 16px !important;
+      }
+    }
+
+    @include v-short {
+      width: 22px;
+      height: 22px;
+
+      .v-icon {
+        font-size: 15px !important;
+      }
+    }
+
+    @include v-tiny {
+      width: 20px;
+      height: 20px;
+
+      .v-icon {
+        font-size: 14px !important;
+      }
+    }
   }
 
   &__link-text {
@@ -1351,6 +1698,23 @@ export default {
       .v-icon { color: #ffffff !important; transform: scale(1.1); }
       .detran-sidebar__collapsed-dot { background: #a7f3d0; transform: scale(1.3); }
     }
+
+    @include v-compact {
+      padding: 0.375rem 0.625rem !important;
+      font-size: 0.875rem !important;
+      border-radius: $radius-md !important;
+    }
+
+    @include v-short {
+      padding: 0.275rem 0.5rem !important;
+      font-size: 0.8125rem !important;
+      border-radius: $radius-sm !important;
+    }
+
+    @include v-tiny {
+      padding: 0.2rem 0.45rem !important;
+      font-size: 0.75rem !important;
+    }
   }
 
   &__collapsed-dot {
@@ -1389,6 +1753,16 @@ export default {
     padding-top: 2px;
     gap: 2px;
     will-change: height, opacity;
+
+    @include v-compact {
+      gap: 1px;
+      padding-top: 1px;
+    }
+
+    @include v-short {
+      gap: 1px;
+      padding-top: 0;
+    }
   }
 
   &__sublink {
@@ -1402,6 +1776,24 @@ export default {
     text-decoration: none !important;
     border-radius: $radius-md !important;
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+
+    @include v-compact {
+      margin-left: 22px !important;
+      padding: 0.325rem 0.75rem !important;
+      font-size: 0.78rem !important;
+    }
+
+    @include v-short {
+      margin-left: 18px !important;
+      padding: 0.25rem 0.625rem !important;
+      font-size: 0.72rem !important;
+    }
+
+    @include v-tiny {
+      margin-left: 14px !important;
+      padding: 0.175rem 0.5rem !important;
+      font-size: 0.68rem !important;
+    }
 
     .detran-sidebar__sublink-icon {
       margin-right: 0.5rem !important;
@@ -1509,14 +1901,32 @@ export default {
   // ---------------------------------------------------------------------------
   &__user-footer {
     padding: 0.75rem 1rem !important; // p-3
-    border-top: none !important;
-    background: transparent !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+    background: rgba(0, 0, 0, 0.12) !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
     gap: 0.5rem !important;
     flex-shrink: 0 !important;
+    margin-top: auto;
     transition: padding 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
+
+    @include v-compact {
+      padding: 0.5rem 0.75rem !important;
+      gap: 0.375rem !important;
+    }
+
+    @include v-short {
+      padding: 0.35rem 0.625rem !important;
+      gap: 0.25rem !important;
+    }
+
+    @include v-tiny {
+      padding: 0.25rem 0.5rem !important;
+      gap: 0.25rem !important;
+    }
   }
 
   &__user-btn {
@@ -1536,6 +1946,20 @@ export default {
     &:hover {
       background: rgba(255, 255, 255, 0.10) !important;
     }
+
+    @include v-compact {
+      padding: 0.35rem 0.5rem !important;
+      border-radius: 0.5rem !important;
+    }
+
+    @include v-short {
+      padding: 0.25rem 0.375rem !important;
+      border-radius: 0.375rem !important;
+    }
+
+    @include v-tiny {
+      padding: 0.2rem 0.25rem !important;
+    }
   }
 
   &__avatar {
@@ -1546,6 +1970,21 @@ export default {
     flex-shrink: 0 !important;
     object-fit: cover !important;
     display: block !important;
+
+    @include v-compact {
+      width: 34px !important;
+      height: 34px !important;
+    }
+
+    @include v-short {
+      width: 28px !important;
+      height: 28px !important;
+    }
+
+    @include v-tiny {
+      width: 24px !important;
+      height: 24px !important;
+    }
   }
 
   &__avatar-initials {
@@ -1561,6 +2000,24 @@ export default {
     font-size: 0.875rem !important;
     font-weight: 700 !important;
     color: white !important;
+
+    @include v-compact {
+      width: 34px !important;
+      height: 34px !important;
+      font-size: 0.8rem !important;
+    }
+
+    @include v-short {
+      width: 28px !important;
+      height: 28px !important;
+      font-size: 0.72rem !important;
+    }
+
+    @include v-tiny {
+      width: 24px !important;
+      height: 24px !important;
+      font-size: 0.65rem !important;
+    }
   }
 
   &__login-card {
@@ -1590,6 +2047,24 @@ export default {
       color: rgba(255, 255, 255, 0.85) !important;
       transition: color 0.2s ease, transform 0.2s ease !important;
     }
+
+    @include v-compact {
+      width: 34px !important;
+      height: 34px !important;
+      .v-icon { font-size: 19px !important; }
+    }
+
+    @include v-short {
+      width: 28px !important;
+      height: 28px !important;
+      .v-icon { font-size: 17px !important; }
+    }
+
+    @include v-tiny {
+      width: 24px !important;
+      height: 24px !important;
+      .v-icon { font-size: 15px !important; }
+    }
   }
 
   &__user-info {
@@ -1614,6 +2089,18 @@ export default {
     text-overflow: ellipsis !important;
     margin: 0 !important;
     line-height: 1.25 !important;
+
+    @include v-compact {
+      font-size: 0.8125rem !important;
+    }
+
+    @include v-short {
+      font-size: 0.75rem !important;
+    }
+
+    @include v-tiny {
+      font-size: 0.7rem !important;
+    }
   }
 
   &__user-email {
@@ -1624,6 +2111,18 @@ export default {
     text-overflow: ellipsis !important;
     margin: 0 !important;
     line-height: 1.25 !important;
+
+    @include v-compact {
+      font-size: 0.7rem !important;
+    }
+
+    @include v-short {
+      font-size: 0.65rem !important;
+    }
+
+    @include v-tiny {
+      display: none !important;
+    }
   }
 
   &__settings-btn {
@@ -1659,6 +2158,26 @@ export default {
         color: #ffffff !important;
         transform: rotate(45deg);
       }
+    }
+
+    @include v-compact {
+      width: 34px !important;
+      height: 34px !important;
+      border-radius: 0.5rem !important;
+      .v-icon { font-size: 15px !important; }
+    }
+
+    @include v-short {
+      width: 28px !important;
+      height: 28px !important;
+      border-radius: 0.375rem !important;
+      .v-icon { font-size: 14px !important; }
+    }
+
+    @include v-tiny {
+      width: 24px !important;
+      height: 24px !important;
+      .v-icon { font-size: 13px !important; }
     }
   }
 
@@ -2006,5 +2525,23 @@ export default {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+}
+
+// ---------------------------------------------------------------------------
+// POPOVER DE APLICAÇÕES SATÉLITES
+// ---------------------------------------------------------------------------
+.v-menu__content.detran-apps-popover-menu {
+  border-radius: 16px !important;
+  box-shadow: 0 20px 40px -8px rgba(0, 0, 0, 0.22), 0 4px 12px -2px rgba(0, 0, 0, 0.08) !important;
+  overflow: hidden !important;
+  background: white !important;
+  z-index: 100 !important;
+}
+
+.detran-apps-popover {
+  border-radius: 16px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 </style>

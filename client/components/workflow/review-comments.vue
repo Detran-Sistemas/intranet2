@@ -9,7 +9,11 @@
         span.detran-rc-badge(
           :class='totalPendingCount > 0 ? "is-amber" : "is-emerald"'
         )
-          | {{ totalPendingCount > 0 ? totalPendingCount + (totalPendingCount === 1 ? ' pendente' : ' pendentes') : '✓ Tudo revisado' }}
+          template(v-if='totalPendingCount > 0')
+            span.detran-rc-badge__count {{ totalPendingCount }}
+            span.detran-rc-badge__label {{ totalPendingCount === 1 ? 'pendente' : 'pendentes' }}
+          template(v-else)
+            span.detran-rc-badge__done ✓ Tudo revisado
 
       //- Abas de Filtro (Seção 2.1: Todas | Pendentes | Resolvidas)
       .detran-rc-tabs(role='tablist' aria-label='Filtro de anotações e sugestões')
@@ -103,103 +107,114 @@
     .detran-rc-list(ref='cardsContainer')
       .detran-rc-empty(v-if='filteredItems.length === 0')
         .detran-rc-empty__icon
-          v-icon(size='26' color='#16a34a') mdi-check-decagram-outline
-        p.detran-rc-empty__title Tudo revisado por aqui!
-        p.detran-rc-empty__sub Nenhuma alteração ou comentário neste filtro. Selecione qualquer trecho na folha ao lado para comentar ou sugerir redação.
+          v-icon(size='26' :color='filterMode === "resolved" ? "#64748b" : "#16a34a"') {{ emptyStateIcon }}
+        p.detran-rc-empty__title {{ emptyStateTitle }}
+        p.detran-rc-empty__sub {{ emptyStateSubtitle }}
 
-      .detran-rc-card.review-card(
-        v-else
-        v-for='item in filteredItems'
-        :key='item.id'
-        :id='"card-" + item.id'
-        :class='[{ "active-card": activeItemId === item.id, "is-resolved": item.status !== "pending" }]'
-        @click='$emit("focus-item", item.id)'
-      )
-        //- Cabeçalho do Card (Autor + Horário + Botões Diretos ✓ Aceitar / ✕ Recusar)
-        .detran-rc-card__head
-          .detran-rc-card__author-wrap
-            .detran-rc-card__avatar(:class='item.type === "suggestion" || item.type === "redaction" ? "is-green" : "is-amber"')
-              v-icon(
-                size='14'
-                :color='item.type === "suggestion" || item.type === "redaction" ? "#166534" : "#92400e"'
-              ) {{ item.type === 'suggestion' || item.type === 'redaction' ? 'mdi-pencil' : 'mdi-message-reply-text' }}
-            div
-              .detran-rc-card__author {{ item.author }}
-              .detran-rc-card__meta
-                span(v-if='item.actionLabel') {{ item.actionLabel }} •
-                span {{ item.timeLabel }}
+      template(v-else v-for='(item, itemIdx) in filteredItems')
+        .detran-rc-section-divider(
+          v-if='filterMode === "all" && item.status !== "pending" && (itemIdx === 0 || filteredItems[itemIdx - 1].status === "pending")'
+          :key='"div-" + item.id'
+        )
+          v-icon(size='13' color='#64748b') mdi-check-circle-outline
+          span Já revisados ({{ totalResolvedCount }}) • do mais novo ao mais antigo
 
-          //- Ações Diretas no Card (✓ Aceitar / ✕ Recusar para pendências, ou Chip de status)
-          .detran-rc-card__actions(v-if='item.status === "pending"' @click.stop)
-            button.detran-rc-decision-btn.is-accept(
-              type='button'
-              title='Aceitar sugestão / resolver anotação'
-              :disabled='resolvingId === item.rawCommentId'
-              @click='onAcceptItem(item)'
+        .detran-rc-card.review-card(
+          :key='item.id'
+          :id='"card-" + item.id'
+          :class='[{ "active-card": activeItemId === item.id, "is-resolved": item.status !== "pending" }]'
+          @click='$emit("focus-item", item.id)'
+        )
+          //- Cabeçalho do Card (Autor + Horário + Botões Diretos ✓ Aceitar / ✕ Recusar)
+          .detran-rc-card__head
+            .detran-rc-card__author-wrap
+              .detran-rc-card__avatar(:class='item.type === "suggestion" || item.type === "redaction" ? "is-green" : "is-amber"')
+                v-icon(
+                  size='14'
+                  :color='item.type === "suggestion" || item.type === "redaction" ? "#166534" : "#92400e"'
+                ) {{ item.type === 'suggestion' || item.type === 'redaction' ? 'mdi-pencil' : 'mdi-message-reply-text' }}
+              div
+                .detran-rc-card__author {{ item.author }}
+                .detran-rc-card__meta
+                  span(v-if='item.actionLabel') {{ item.actionLabel }} •
+                  span {{ item.timeLabel }}
+
+            //- Ações Diretas no Card (✓ Aceitar / ✕ Recusar para revisor, ou Chip Aguardando Revisor para autor)
+            .detran-rc-card__actions(v-if='item.status === "pending"' @click.stop)
+              template(v-if='canDecideItem(item)')
+                button.detran-rc-decision-btn.is-accept(
+                  type='button'
+                  title='Aceitar sugestão / resolver anotação'
+                  :disabled='resolvingId === item.rawCommentId'
+                  @click='onAcceptItem(item)'
+                )
+                  v-icon(size='14' color='currentColor') mdi-check
+                  span Aceitar
+                button.detran-rc-decision-btn.is-reject(
+                  type='button'
+                  title='Recusar alteração / manter original'
+                  :disabled='resolvingId === item.rawCommentId'
+                  @click='onRejectItem(item)'
+                )
+                  v-icon(size='14' color='currentColor') mdi-close
+                  span Recusar
+              template(v-else)
+                span.detran-rc-status-chip.is-amber(:title='isAuthor ? "Documento em análise — autor não avalia as próprias alterações" : "Alteração submetida pelo autor — aguardando parecer do revisor"')
+                  v-icon(size='12' color='#92400e') mdi-clock-outline
+                  span {{ draftState === 'published' ? 'Concluído' : 'Aguardando Revisor' }}
+
+            .detran-rc-card__status-wrap(v-else @click.stop)
+              span.detran-rc-status-chip(:class='item.status === "rejected" ? "is-red" : "is-emerald"')
+                | {{ item.status === 'rejected' ? 'Recusada' : (item.status === 'accepted' ? 'Aceita' : 'Resolvida') }}
+              button.detran-rc-reopen-btn(
+                v-if='canDecideItem(item)'
+                type='button'
+                title='Reabrir item'
+                @click='onReopenItem(item)'
+              ) Reabrir
+
+          //- Corpo de Sugestão (Diff do Autor ou Sugestão de Redação do Revisor)
+          template(v-if='item.type === "suggestion" || item.type === "redaction"')
+            .detran-rc-diff-preview
+              .detran-rc-diff-preview__old(v-if='item.oldText')
+                span.detran-rc-diff-preview__tag.is-old Antes:
+                span "{{ item.oldText }}"
+              .detran-rc-diff-preview__new(v-if='item.newText')
+                span.detran-rc-diff-preview__tag.is-new {{ item.isImage ? 'Nova Mídia:' : 'Novo:' }}
+                span "{{ item.newText }}"
+              .detran-rc-blob-warn(v-if='item.hasBlobWarning')
+                v-icon(size='13' color='#b91c1c') mdi-alert-outline
+                span URL blob: local detectada (expira ao fechar a aba do autor).
+            p.detran-rc-card__body(v-if='item.commentText') {{ item.commentText }}
+
+          //- Corpo de Comentário de Revisão
+          template(v-else)
+            .detran-rc-card__quote(v-if='item.quote') "{{ item.quote }}"
+            p.detran-rc-card__body {{ item.commentText }}
+
+          //- Thread de Respostas
+          .detran-rc-replies(v-if='item.replies && item.replies.length > 0')
+            .detran-rc-reply(
+              v-for='(rep, rIdx) in item.replies'
+              :key='rIdx'
             )
-              v-icon(size='14' color='currentColor') mdi-check
-              span Aceitar
-            button.detran-rc-decision-btn.is-reject(
-              type='button'
-              title='Recusar alteração / manter original'
-              :disabled='resolvingId === item.rawCommentId'
-              @click='onRejectItem(item)'
+              strong.detran-rc-reply__author {{ rep.author }}:
+              span.detran-rc-reply__text  {{ rep.text }}
+
+          //- Input de Resposta Rápida
+          .detran-rc-reply-box(@click.stop)
+            input.detran-rc-reply-input(
+              v-model='replyInputs[item.id]'
+              type='text'
+              placeholder='Responder...'
+              @keydown.enter='submitReply(item)'
             )
-              v-icon(size='14' color='currentColor') mdi-close
-              span Recusar
-
-          .detran-rc-card__status-wrap(v-else @click.stop)
-            span.detran-rc-status-chip(:class='item.status === "rejected" ? "is-red" : "is-emerald"')
-              | {{ item.status === 'rejected' ? 'Recusada' : 'Aceita / Resolvida' }}
-            button.detran-rc-reopen-btn(
-              v-if='item.rawCommentId'
+            button.detran-rc-reply-send(
               type='button'
-              title='Reabrir item'
-              @click='reopenCommentItem(item)'
-            ) Reabrir
-
-        //- Corpo de Sugestão (Diff do Autor ou Sugestão de Redação do Revisor)
-        template(v-if='item.type === "suggestion" || item.type === "redaction"')
-          .detran-rc-diff-preview
-            .detran-rc-diff-preview__old(v-if='item.oldText')
-              span.detran-rc-diff-preview__tag.is-old Antes:
-              span "{{ item.oldText }}"
-            .detran-rc-diff-preview__new(v-if='item.newText')
-              span.detran-rc-diff-preview__tag.is-new {{ item.isImage ? 'Nova Mídia:' : 'Novo:' }}
-              span "{{ item.newText }}"
-            .detran-rc-blob-warn(v-if='item.hasBlobWarning')
-              v-icon(size='13' color='#b91c1c') mdi-alert-outline
-              span URL blob: local detectada (expira ao fechar a aba do autor).
-          p.detran-rc-card__body(v-if='item.commentText') {{ item.commentText }}
-
-        //- Corpo de Comentário de Revisão
-        template(v-else)
-          .detran-rc-card__quote(v-if='item.quote') "{{ item.quote }}"
-          p.detran-rc-card__body {{ item.commentText }}
-
-        //- Thread de Respostas
-        .detran-rc-replies(v-if='item.replies && item.replies.length > 0')
-          .detran-rc-reply(
-            v-for='(rep, rIdx) in item.replies'
-            :key='rIdx'
-          )
-            strong.detran-rc-reply__author {{ rep.author }}:
-            span.detran-rc-reply__text  {{ rep.text }}
-
-        //- Input de Resposta Rápida
-        .detran-rc-reply-box(@click.stop)
-          input.detran-rc-reply-input(
-            v-model='replyInputs[item.id]'
-            type='text'
-            placeholder='Responder...'
-            @keydown.enter='submitReply(item)'
-          )
-          button.detran-rc-reply-send(
-            type='button'
-            title='Enviar resposta'
-            @click='submitReply(item)'
-          )
-            v-icon(size='14' color='#15803d') mdi-send
+              title='Enviar resposta'
+              @click='submitReply(item)'
+            )
+              v-icon(size='14' color='#15803d') mdi-send
 </template>
 
 <script>
@@ -207,7 +222,9 @@ import gql from 'graphql-tag'
 import moment from 'moment'
 import {
   encodeTextQuoteSelector,
-  decodeTextQuoteSelector
+  decodeTextQuoteSelector,
+  canDecideReviewSuggestion,
+  sortReviewItems
 } from '../../store/detran-workflow-review'
 import { processSmartPastePayload } from '../../themes/default/components/transparent-editor/utils/smart-paste'
 
@@ -237,6 +254,22 @@ export default {
     selectionPayload: {
       type: Object,
       default: null
+    },
+    isAuthor: {
+      type: Boolean,
+      default: false
+    },
+    canReviewOrApprove: {
+      type: Boolean,
+      default: false
+    },
+    draftState: {
+      type: String,
+      default: 'in_review'
+    },
+    draftUpdatedAt: {
+      type: String,
+      default: null
     }
   },
   data () {
@@ -250,6 +283,7 @@ export default {
       pasteNotice: '',
       replyInputs: {},
       localSuggestionReplies: {},
+      localReviewedTimestamps: {},
       newComment: {
         exact: '',
         prefix: '',
@@ -260,14 +294,26 @@ export default {
     }
   },
   computed: {
+    mergedReviewedTimestamps () {
+      const serverTs = (this.suggestionDecisions && this.suggestionDecisions._timestamps && typeof this.suggestionDecisions._timestamps === 'object') ?
+        this.suggestionDecisions._timestamps :
+        {}
+      return {
+        ...serverTs,
+        ...this.localReviewedTimestamps
+      }
+    },
     normalizedSuggestionItems () {
       return (this.suggestions || []).map(sug => {
         const decision = this.suggestionDecisions[sug.id] || sug.status || 'pending'
         const status = decision === 'accepted' ? 'accepted' : (decision === 'rejected' ? 'rejected' : 'pending')
+        const reviewedAt = status !== 'pending' ? (this.mergedReviewedTimestamps[sug.id] || sug.reviewedAt || null) : null
         return {
           ...sug,
           status,
-          timeLabel: sug.time || 'Nesta submissão',
+          createdAt: sug.createdAt || this.draftUpdatedAt || null,
+          reviewedAt,
+          timeLabel: reviewedAt ? `Revisado às ${moment(reviewedAt).format('HH:mm')}` : (sug.time || 'Nesta submissão'),
           replies: this.localSuggestionReplies[sug.id] || sug.replies || []
         }
       })
@@ -277,12 +323,19 @@ export default {
         const selector = decodeTextQuoteSelector(c)
         const isRedaction = Boolean(selector.suggestedReplacement)
         const status = c.resolved ? (selector.status === 'rejected' ? 'rejected' : 'accepted') : 'pending'
+        const itemId = `com-${c.id}`
+        const reviewedAt = status !== 'pending' ?
+          (this.mergedReviewedTimestamps[itemId] || selector.reviewedAt || c.updatedAt || c.createdAt || null) :
+          null
         return {
-          id: `com-${c.id}`,
+          id: itemId,
           rawCommentId: c.id,
           type: isRedaction ? 'redaction' : 'comment',
           author: c.userName || 'Revisor',
           actionLabel: isRedaction ? 'Sugeriu nova redação' : 'Comentou no trecho',
+          createdAt: c.createdAt || null,
+          updatedAt: c.updatedAt || null,
+          reviewedAt,
           timeLabel: c.createdAt ? moment(c.createdAt).format('DD/MM HH:mm') : 'Agora mesmo',
           quote: selector.exact || '',
           prefix: selector.prefix || '',
@@ -296,7 +349,13 @@ export default {
       })
     },
     allItems () {
-      return [...this.normalizedSuggestionItems, ...this.normalizedCommentItems]
+      return sortReviewItems(
+        [...this.normalizedSuggestionItems, ...this.normalizedCommentItems],
+        {
+          reviewedTimestamps: this.mergedReviewedTimestamps,
+          fallbackCreatedAt: this.draftUpdatedAt
+        }
+      )
     },
     totalPendingCount () {
       return this.allItems.filter(i => i.status === 'pending').length
@@ -312,6 +371,26 @@ export default {
         return this.allItems.filter(i => i.status !== 'pending')
       }
       return this.allItems
+    },
+    emptyStateIcon () {
+      if (this.filterMode === 'resolved') return 'mdi-tray-arrow-down'
+      return 'mdi-check-decagram-outline'
+    },
+    emptyStateTitle () {
+      if (this.filterMode === 'resolved') return 'Nenhuma alteração resolvida'
+      if (this.filterMode === 'pending') {
+        return this.allItems.length > 0 ? 'Nenhuma pendência neste momento!' : 'Tudo revisado por aqui!'
+      }
+      return 'Nenhuma anotação registrada'
+    },
+    emptyStateSubtitle () {
+      if (this.filterMode === 'resolved') {
+        return 'As alterações aceitas ou recusadas pelo revisor aparecerão aqui.'
+      }
+      if (this.filterMode === 'pending' && this.allItems.length > 0) {
+        return `Todas as ${this.totalResolvedCount} alterações deste documento já foram analisadas.`
+      }
+      return 'Nenhuma alteração ou comentário neste filtro. Selecione qualquer trecho na folha ao lado para comentar ou sugerir redação.'
     }
   },
   watch: {
@@ -469,7 +548,18 @@ export default {
         this.submitting = false
       }
     },
+    canDecideItem (item) {
+      if (!item) return false
+      return canDecideReviewSuggestion({
+        isAuthor: this.isAuthor,
+        canReviewOrApprove: this.canReviewOrApprove,
+        state: this.draftState || 'in_review',
+        itemType: item.type
+      })
+    },
     async onAcceptItem (item) {
+      if (!this.canDecideItem(item)) return
+      this.$set(this.localReviewedTimestamps, item.id, new Date().toISOString())
       if (item.type === 'suggestion') {
         /* eslint-disable-next-line vue/custom-event-name-casing */
         this.$emit('suggestion-decision', { item, decision: 'accepted' })
@@ -479,9 +569,11 @@ export default {
         /* eslint-disable-next-line vue/custom-event-name-casing */
         this.$emit('redaction-decision', { item, decision: 'accepted' })
       }
-      await this.setCommentResolved(item.rawCommentId, true)
+      await this.setCommentResolved(item.rawCommentId, true, 'accepted')
     },
     async onRejectItem (item) {
+      if (!this.canDecideItem(item)) return
+      this.$set(this.localReviewedTimestamps, item.id, new Date().toISOString())
       if (item.type === 'suggestion') {
         /* eslint-disable-next-line vue/custom-event-name-casing */
         this.$emit('suggestion-decision', { item, decision: 'rejected' })
@@ -491,36 +583,48 @@ export default {
         /* eslint-disable-next-line vue/custom-event-name-casing */
         this.$emit('redaction-decision', { item, decision: 'rejected' })
       }
-      await this.setCommentResolved(item.rawCommentId, true)
+      await this.setCommentResolved(item.rawCommentId, true, 'rejected')
+    },
+    async onReopenItem (item) {
+      if (!this.canDecideItem(item)) return
+      this.$delete(this.localReviewedTimestamps, item.id)
+      if (item.rawCommentId) {
+        await this.setCommentResolved(item.rawCommentId, false, 'pending')
+      } else {
+        /* eslint-disable-next-line vue/custom-event-name-casing */
+        this.$emit('suggestion-decision', { item, decision: 'pending' })
+      }
     },
     async reopenCommentItem (item) {
-      if (!item.rawCommentId) return
-      await this.setCommentResolved(item.rawCommentId, false)
+      await this.onReopenItem(item)
     },
-    async setCommentResolved (commentId, resolved) {
+    async setCommentResolved (commentId, resolved, decision = 'accepted') {
       if (!commentId) return
       this.resolvingId = commentId
       try {
         const result = await this.$apollo.mutate({
           mutation: gql`
-            mutation ($id: Int!, $resolved: Boolean!) {
+            mutation ($id: Int!, $resolved: Boolean!, $decision: String) {
               workflow {
-                resolveComment(id: $id, resolved: $resolved) {
-                  succeeded
-                  message
+                resolveComment(id: $id, resolved: $resolved, decision: $decision) {
+                  responseResult {
+                    succeeded
+                    message
+                  }
                 }
               }
             }
           `,
           variables: {
             id: commentId,
-            resolved
+            resolved,
+            decision
           }
         })
         const res = result && result.data && result.data.workflow && result.data.workflow.resolveComment
-        if (res && res.succeeded) {
+        if (res && res.responseResult && res.responseResult.succeeded) {
           /* eslint-disable-next-line vue/custom-event-name-casing */
-          this.$emit('comment-resolved', { id: commentId, resolved })
+          this.$emit('comment-resolved', { id: commentId, resolved, decision })
         }
       } catch (err) {
         this.$store.commit('showNotification', {
@@ -594,10 +698,40 @@ export default {
 }
 
 .detran-rc-badge {
-  padding: 2px 10px;
+  padding: 4px 12px;
   border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 700;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  line-height: 1.15;
+  min-width: 76px;
+
+  &__count {
+    font-size: 0.8125rem;
+    font-weight: 800;
+    line-height: 1;
+    text-align: center;
+    display: block;
+    width: 100%;
+  }
+
+  &__label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1;
+    text-align: center;
+    margin-top: 1px;
+    display: block;
+    width: 100%;
+  }
+
+  &__done {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-align: center;
+  }
 
   &.is-amber {
     background-color: #dcfce7;
@@ -630,6 +764,10 @@ export default {
   color: $slate-600;
   cursor: pointer;
   transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 
   &:hover {
     color: $slate-900;
@@ -1038,6 +1176,20 @@ export default {
   border-radius: 4px;
 }
 
+.detran-rc-section-divider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  margin-top: 4px;
+  border-radius: 0.5rem;
+  background: $slate-100;
+  color: $slate-600;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
 .detran-rc-status-chip {
   padding: 2px 6px;
   border-radius: 4px;
@@ -1052,6 +1204,14 @@ export default {
   &.is-red {
     background: #fee2e2;
     color: #991b1b;
+  }
+
+  &.is-amber {
+    background: #fef3c7;
+    color: #92400e;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
   }
 }
 

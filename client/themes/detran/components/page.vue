@@ -51,13 +51,16 @@
             )
               v-icon mdi-menu
 
-            //- Barra de busca glassmorphism com previsão e busca em tempo real
+            //- Barra de busca glassmorphism com previsão e busca em tempo real (recolhível no scroll)
             .detran-search(
               role='search'
-              :class='{ "is-focused": searchIsFocused }'
+              :class='{ "is-focused": searchIsFocused, "is-collapsed": searchIsCollapsed }'
+              :title='searchIsCollapsed ? "Pesquisar (clique para expandir)" : null'
+              @click='onSearchClick'
             )
               v-icon.detran-search__icon(size='18' color='#94a3b8') mdi-magnify
               input.detran-search__input(
+                ref='searchInput'
                 v-model='search'
                 type='search'
                 :placeholder='searchPlaceholder'
@@ -80,7 +83,7 @@
               button.detran-search__clear-btn(
                 v-else-if='search && search.length > 0'
                 type='button'
-                @click='searchClose'
+                @click.stop='searchClose'
                 aria-label='Limpar pesquisa'
               )
                 v-icon(size='16' color='#94a3b8') mdi-close-circle
@@ -93,17 +96,17 @@
                   v-progress-circular(indeterminate, size='11', width='2', color='#f59e0b', v-if='isSavingDraft')
                   span.detran-sync-pill__dot(
                     v-else
-                    :class='transparentChangeCount > 0 ? "is-amber" : "is-emerald"'
+                    :class='(transparentChangeCount > 0 || hasPendingDraftToSubmit) ? "is-amber" : "is-emerald"'
                   )
                   span.detran-sync-pill__text {{ isSavingDraft ? "Salvando em tempo real..." : (isAwaitingValidation ? "Aguardando validação" : (lastSavedTime ? "Rascunho salvo" : "Edição contínua ativa")) }}
                   button.detran-sync-pill__btn(
-                    v-if='transparentChangeCount > 0'
+                    v-if='transparentChangeCount > 0 || hasPendingDraftToSubmit'
                     type='button'
                     @click='dialogValidation = true'
                   )
                     v-icon(size='13' color='#ffffff') mdi-send
                     span Submeter Validação
-                    span.detran-sync-pill__counter {{ transparentChangeCount }}
+                    span.detran-sync-pill__counter(v-if='transparentChangeCount > 0') {{ transparentChangeCount }}
 
               //- Central de Notificações ("Novidades da Intranet")
               v-menu(
@@ -151,17 +154,17 @@
                         v-list-item(
                           v-for='task in filteredNotificationTasks'
                           :key='task.id'
-                          :href='"/w/review/" + task.id'
+                          :href='"/w/review/" + task.id + (task.state === "changes_requested" ? "?edit=1" : "")'
                           class='py-2 px-3'
                         )
-                          v-list-item-avatar.mr-3(size='32', color='#eff6ff')
-                            v-icon(size='18', color='#2563eb') mdi-shield-check
+                          v-list-item-avatar.mr-3(size='32', :color='task.state === "changes_requested" ? "#fff7ed" : "#eff6ff"')
+                            v-icon(size='18', :color='task.state === "changes_requested" ? "#d97706" : "#2563eb"') {{ task.state === "changes_requested" ? "mdi-undo-variant" : "mdi-shield-check" }}
                           v-list-item-content
                             .d-flex.align-center.justify-space-between
-                              span.text-caption.font-weight-bold.blue--text.text--darken-3.text-uppercase Validação Pendente
-                              span.text-caption.grey--text Pendente
+                              span.text-caption.font-weight-bold.text-uppercase(:class='task.state === "changes_requested" ? "amber--text text--darken-4" : "blue--text text--darken-3"') {{ task.state === "changes_requested" ? "Devolvido para Ajustes" : "Validação Pendente" }}
+                              span.text-caption(:class='task.state === "changes_requested" ? "amber--text text--darken-4 font-weight-bold" : "grey--text"') {{ task.state === "changes_requested" ? "Ajustar" : "Pendente" }}
                             .caption.font-weight-bold.text-truncate {{ task.title || task.path }}
-                            .text-caption.grey--text.text--darken-1.text-truncate Autor: {{ task.authorName || "Servidor" }}
+                            .text-caption.grey--text.text--darken-1.text-truncate {{ task.state === "changes_requested" ? (task.lastComment ? "Motivo: " + task.lastComment : "Revisor solicitou ajustes") : ("Autor: " + (task.authorName || "Servidor")) }}
                     template(v-else)
                       .pa-6.text-center.grey--text
                         v-icon.mb-2(size='36', color='grey lighten-2') mdi-bell-check-outline
@@ -171,10 +174,11 @@
                     v-btn(text, small, color='#1b6535', href='/w', class='caption font-weight-bold text-none')
                       span Ver painel completo de governança
                       v-icon(x-small, right) mdi-arrow-right
-              //- App Launcher / Sistemas Satélites Integrados (Entra ID Hub)
+              //- App Launcher / Sistemas Satélites Integrados (anterior ao botão de usuário)
               v-menu(
                 offset-y
                 bottom
+                left
                 transition='slide-y-transition'
                 content-class='detran-apps-popover-menu'
                 max-width='340'
@@ -227,41 +231,100 @@
                       v-chip(:color='lc.code === locale ? "#288b4a" : "grey"' small label dark) {{ lc.code.toUpperCase() }}
                     v-list-item-title {{ lc.name }}
 
-              //- Botão Nova Página (apenas quando tem permissão)
-              button.detran-header__new-page-btn(
-                v-if='canCreate'
-                @click='newPage'
-                :title='$t("common:header.newPage", "Nova Página")'
-                type='button'
-              )
-                v-icon(size='16') mdi-plus
-                span Nova Página
-
-              //- Botão Entrar (quando NÃO autenticado)
-              a.detran-header__login-btn(
+              //- Botão de Usuário (somente Avatar com Dropdown estilizado)
+              a.detran-header__avatar-btn.is-login(
                 v-if='!isAuthenticated'
                 href='/login'
-                :title='$t("common:header.login", "Entrar")'
+                title='Fazer Login'
+                aria-label='Fazer Login'
               )
-                v-icon(size='16') mdi-login
-                span Entrar
+                v-icon(size='20' color='#288b4a') mdi-login
 
-              //- Botão Perfil / Usuário (quando AUTENTICADO)
-              button.detran-header__user-btn(
+              v-menu(
                 v-else
-                @click='openUserModal'
-                :title='userName'
-                aria-label='Acessar menu do usuário'
-                type='button'
+                offset-y
+                bottom
+                left
+                transition='slide-y-transition'
+                content-class='detran-user-dropdown-menu'
+                min-width='300'
+                max-width='330'
+                :close-on-content-click='true'
               )
-                img.detran-header__user-avatar(
-                  v-if='hasUserAvatar || userAvatar'
-                  :src='userAvatar'
-                  :alt='userName'
-                  @error='avatarFailed = true'
-                  loading='lazy'
-                )
-                .detran-header__user-initials(v-else) {{ userInitials }}
+                template(v-slot:activator='{ on }')
+                  button.detran-header__avatar-btn(
+                    v-on='on'
+                    :title='userName'
+                    aria-label='Abrir menu do usuário'
+                    type='button'
+                  )
+                    img.detran-header__user-avatar(
+                      v-if='hasUserAvatar'
+                      :src='userAvatar'
+                      :alt='userName'
+                      @error='avatarFailed = true'
+                      loading='lazy'
+                    )
+                    .detran-header__user-initials(v-else) {{ userInitials }}
+
+                v-card.detran-user-dropdown(flat)
+                  .detran-user-dropdown__header
+                    .detran-user-dropdown__avatar-wrap
+                      img.detran-user-dropdown__avatar(
+                        v-if='hasUserAvatar'
+                        :src='userAvatar'
+                        :alt='userName'
+                      )
+                      .detran-user-dropdown__avatar-initials(v-else) {{ userInitials }}
+                    .detran-user-dropdown__info
+                      h3.detran-user-dropdown__name {{ userName }}
+                      p.detran-user-dropdown__email {{ userEmail }}
+
+                  .detran-user-dropdown__body
+                    a.detran-user-dropdown__item(
+                      href='/p'
+                      @click.prevent='goToProfile'
+                    )
+                      .detran-user-dropdown__item-icon
+                        v-icon(size='18' color='#288b4a') mdi-account-circle-outline
+                      .detran-user-dropdown__item-text
+                        span.detran-user-dropdown__item-title Meu Perfil
+                        span.detran-user-dropdown__item-desc Informações e preferências
+                      v-icon(size='16' color='#94a3b8') mdi-chevron-right
+
+                    a.detran-user-dropdown__item(
+                      href='/w'
+                    )
+                      .detran-user-dropdown__item-icon
+                        v-icon(size='18' color='#288b4a') mdi-clipboard-check-outline
+                      .detran-user-dropdown__item-text
+                        span.detran-user-dropdown__item-title Governança &amp; Revisões
+                        span.detran-user-dropdown__item-desc Rascunhos e aprovações
+                      v-icon(size='16' color='#94a3b8') mdi-chevron-right
+
+                    a.detran-user-dropdown__item(
+                      href='/a'
+                      @click.prevent='goToAdmin'
+                    )
+                      .detran-user-dropdown__item-icon
+                        v-icon(size='18' color='#288b4a') mdi-cog-outline
+                      .detran-user-dropdown__item-text
+                        span.detran-user-dropdown__item-title Configurações
+                        span.detran-user-dropdown__item-desc Administração e ajustes do sistema
+                      v-icon(size='16' color='#94a3b8') mdi-chevron-right
+
+                    hr.detran-user-dropdown__divider
+
+                    button.detran-user-dropdown__item.detran-user-dropdown__item--logout(
+                      type='button'
+                      @click='doLogout'
+                    )
+                      .detran-user-dropdown__item-icon.detran-user-dropdown__item-icon--danger
+                        v-icon(size='18' color='#ef4444') mdi-logout
+                      .detran-user-dropdown__item-text
+                        span.detran-user-dropdown__item-title Sair
+                        span.detran-user-dropdown__item-desc Encerrar sessão com segurança
+                      v-icon(size='16' color='#ef4444') mdi-chevron-right
 
         //- Resultados de busca e sugestões preditivas do Wiki.js
         search-results
@@ -304,19 +367,17 @@
 
               .detran-page-header__row
                 .detran-page-header__title-group
+                  button.detran-back-btn.detran-back-btn--icon-only(
+                    type='button'
+                    @click='goBack'
+                    :title='$t("common:page.goBack", "Voltar à página anterior")'
+                    aria-label='Voltar à página anterior'
+                  )
+                    v-icon.detran-back-btn__icon(size='18') mdi-arrow-left
                   h2.detran-page-title {{ title }}
                   span.detran-notion-mode-badge(v-if='isTransparentEditActive')
                     v-icon(size='13' color='#1b6535') mdi-auto-fix
                     span Modo Notion Ativo: Clique em qualquer texto para editar
-
-                //- Botão Editar (inline — aparece também no header, antes do FAB)
-                button.detran-edit-inline-btn(
-                  v-if='canEdit'
-                  @click='editPage'
-                  :title='$t("common:header.editPage", "Editar Página")'
-                )
-                  v-icon(size='14') {{ isTransparentEditActive ? 'mdi-eye-outline' : 'mdi-pencil' }}
-                  span {{ isTransparentEditActive ? 'Modo Leitura' : $t('common:header.editPage', 'Editar Página') }}
 
             //- ----------------------------------------------------------------
             //- Wrapper flex: artigo + TOC
@@ -365,15 +426,15 @@
                           :title='"Filtrar páginas pela tag #" + tag'
                         ) {{ '#' + tag }}
 
-                  //- Ações do Artigo (Botão Voltar)
-                  .detran-article__actions
-                    button.detran-back-btn(
+                  //- Ações do Artigo (Botão Editar Página)
+                  .detran-article__actions(v-if='canEdit')
+                    button.detran-edit-inline-btn(
                       type='button'
-                      @click='goBack'
-                      :title='$t("common:page.goBack", "Voltar à página anterior")'
+                      @click='editPage'
+                      :title='$t("common:header.editPage", "Editar Página")'
                     )
-                      v-icon.detran-back-btn__icon(size='16') mdi-arrow-left
-                      span {{ $t('common:page.back', 'Voltar') }}
+                      v-icon(size='14') {{ isTransparentEditActive ? 'mdi-eye-outline' : 'mdi-pencil' }}
+                      span {{ isTransparentEditActive ? 'Modo Leitura' : $t('common:header.editPage', 'Editar Página') }}
 
                 //- Conteúdo renderizado (page.render — HTML do Wiki.js)
                 .detran-contents(ref='container' v-show='!isTransparentEditActive')
@@ -382,11 +443,13 @@
                 //- Editor Transparente Notion-like (Detran-MG)
                 transparent-editor(
                   v-if='isTransparentEditActive'
+                  ref='transparentEditor'
                   :initial-markdown='pageRawMarkdown'
                   :page-id='pageId'
                   :page-path='path'
                   :page-title='title'
                   @change='onTransparentEditorChange'
+                  @save-draft='onTransparentEditorSaveDraft'
                 )
 
                 validation-modal(
@@ -435,8 +498,8 @@
                           .detran-toc__dot(aria-hidden='true')
                           | {{ item.title }}
 
-        //- Rodapé fixado na parte inferior da tela
-        nav-footer
+            //- Rodapé institucional posicionado ao final do conteúdo do documento
+            nav-footer
 
         //- ==================================================================
         //- SPEED DIAL — Menu Flutuante de Ações
@@ -498,14 +561,14 @@
             )
               v-icon(size='15' color='#334155') mdi-history
 
-          //- Botão principal (Editar)
+          //- Botão principal (Criar nova)
           button.detran-speed-dial__main(
-            @click='editPage'
-            :title='$t("common:header.editPage", "Editar Página")'
-            :aria-label='$t("common:header.editPage", "Editar Página")'
+            @click='newPage'
+            :title='$t("common:header.newPage", "Criar nova")'
+            :aria-label='$t("common:header.newPage", "Criar nova")'
           )
-            v-icon.detran-speed-dial__main-icon(size='20' color='white') mdi-pencil
-            span.detran-speed-dial__tooltip Editar página
+            v-icon.detran-speed-dial__main-icon(size='22' color='white') mdi-plus
+            span.detran-speed-dial__tooltip Criar nova
 
     page-selector(
       mode='create'
@@ -555,7 +618,8 @@ import {
   filterNotificationTasks,
   loadTransparentPageSource,
   saveTransparentDraft,
-  submitTransparentValidation
+  submitTransparentValidation,
+  computeSearchCollapseOnScroll
 } from '../../default/components/transparent-editor/utils/editor-controller'
 
 /* global siteLangs */
@@ -657,11 +721,16 @@ export default {
       isSavingDraft: false,
       isSubmittingValidation: false,
       activeDraftId: null,
+      hasPendingDraftToSubmit: false,
       lastSavedTime: '',
       workflowPendingCount: 0,
       workflowPendingTasks: [],
       notifTab: 0,
       isAwaitingValidation: false,
+      searchIsCollapsed: false,
+      lastScrollY: 0,
+      scrollDownDistance: 0,
+      scrollUpDistance: 0,
       detranToastVisible: false,
       detranToastMessage: '',
       detranToastType: 'success',
@@ -693,6 +762,15 @@ export default {
         return this.rawUserName
       }
       return 'Danilo Santana'
+    },
+    userEmail () {
+      if (this.rawJobTitle && this.rawJobTitle.trim().length > 0) {
+        return this.rawJobTitle
+      }
+      if (this.rawUserEmail && this.rawUserEmail.trim().length > 0 && !this.rawUserEmail.includes('guest')) {
+        return this.rawUserEmail
+      }
+      return 'Analista de Sistemas'
     },
     userInitials () {
       const name = this.userName || ''
@@ -805,7 +883,7 @@ export default {
       return !!(p.system && p.system.manage)
     },
     showSpeedDial () {
-      return this.canEdit || this.canDelete || this.canReadSource || this.canReadHistory
+      return this.canCreate || this.canEdit || this.canDelete || this.canReadSource || this.canReadHistory
     },
 
     // -------------------------------------------------------------------------
@@ -1039,7 +1117,14 @@ export default {
         this.fetchWorkflowPendingCount()
       }
       if (this.canEdit) {
-        this.loadPageSourceForTransparentEdit()
+        const shouldAutoEdit = typeof window !== 'undefined' &&
+          window.location &&
+          new URLSearchParams(window.location.search).get('edit')
+        this.loadPageSourceForTransparentEdit().then(() => {
+          if (shouldAutoEdit === '1' || shouldAutoEdit === 'true') {
+            this.isTransparentEditActive = true
+          }
+        })
       }
       this.$root.$on('workflowRefreshTasks', () => {
         if (this.isAuthenticated) {
@@ -1050,10 +1135,23 @@ export default {
 
     // Atalho de teclado ⌘K / Ctrl+K para focar na busca
     window.addEventListener('keydown', this.handleGlobalKeydown)
+
+    // Recolhimento automático da barra de pesquisa ao scrollar
+    this.$nextTick(() => {
+      this.scrollContainer = this.$el && this.$el.querySelector('.detran-content')
+      if (this.scrollContainer) {
+        this.scrollContainer.addEventListener('scroll', this.handleScroll, { passive: true })
+      }
+      window.addEventListener('scroll', this.handleScroll, { passive: true, capture: true })
+    })
   },
 
   beforeDestroy () {
     window.removeEventListener('keydown', this.handleGlobalKeydown)
+    if (this.scrollContainer) {
+      this.scrollContainer.removeEventListener('scroll', this.handleScroll)
+    }
+    window.removeEventListener('scroll', this.handleScroll, { capture: true })
     if (this._tocObserver) this._tocObserver.disconnect()
     if (this._scrollRafId) cancelAnimationFrame(this._scrollRafId)
     if (this._scrollCleanup) this._scrollCleanup()
@@ -1063,6 +1161,58 @@ export default {
     // -------------------------------------------------------------------------
     // Busca e Previsão de Texto (conecta com search-results do Wiki.js)
     // -------------------------------------------------------------------------
+    onSearchClick () {
+      if (this.searchIsCollapsed) {
+        this.searchIsCollapsed = false
+        this.$nextTick(() => {
+          const input = this.$refs.searchInput || (this.$el && this.$el.querySelector('.detran-search__input'))
+          if (input && typeof input.focus === 'function') {
+            input.focus()
+            this.searchFocus()
+          }
+        })
+      }
+    },
+
+    handleScroll (event) {
+      const target = event && event.target
+      const isPageScroller =
+        !target ||
+        target === this.scrollContainer ||
+        target === document ||
+        target === document.documentElement ||
+        target === document.body ||
+        target === window
+
+      if (!isPageScroller) {
+        return
+      }
+
+      const contentY = this.scrollContainer ? this.scrollContainer.scrollTop : 0
+      const winY = (typeof window !== 'undefined' ?
+        (window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0) :
+        0)
+      const currentY = Math.max(contentY, winY)
+
+      if (currentY === this.lastScrollY && currentY > 24) {
+        return
+      }
+
+      const next = computeSearchCollapseOnScroll({
+        currentY,
+        lastScrollY: this.lastScrollY,
+        downDistance: this.scrollDownDistance,
+        upDistance: this.scrollUpDistance,
+        isCollapsed: this.searchIsCollapsed,
+        isFocused: this.searchIsFocused,
+        hasQuery: Boolean(this.search && this.search.trim().length > 0)
+      })
+      this.searchIsCollapsed = next.isCollapsed
+      this.lastScrollY = next.lastScrollY
+      this.scrollDownDistance = next.downDistance
+      this.scrollUpDistance = next.upDistance
+    },
+
     searchFocus () {
       this.searchIsFocused = true
     },
@@ -1092,11 +1242,14 @@ export default {
       // ⌘K ou Ctrl+K
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault()
-        const input = this.$el.querySelector('.detran-search__input')
-        if (input) {
-          input.focus()
-          this.searchFocus()
-        }
+        this.searchIsCollapsed = false
+        this.$nextTick(() => {
+          const input = this.$refs.searchInput || (this.$el && this.$el.querySelector('.detran-search__input'))
+          if (input) {
+            input.focus()
+            this.searchFocus()
+          }
+        })
       }
     },
 
@@ -1198,6 +1351,13 @@ export default {
       if (!this.isTransparentEditActive && !this.pageRawMarkdown) {
         await this.loadPageSourceForTransparentEdit()
       }
+      if (!this.isTransparentEditActive && this.isAwaitingValidation && this.activeDraftId) {
+        this.showDetranToast(
+          `Esta página já está em revisão (#${this.activeDraftId}). Puxe de volta no Painel de Revisão antes de editar.`,
+          'error'
+        )
+        return
+      }
       this.isTransparentEditActive = !this.isTransparentEditActive
     },
 
@@ -1222,13 +1382,27 @@ export default {
         this.pageRawMarkdown = res.markdown
         if (res.draftId) {
           this.activeDraftId = res.draftId
+          const isSubmitted = res.draftState === 'in_review' ||
+            res.draftState === 'awaiting_approval' ||
+            res.draftState === 'in_approval_step2'
+          this.isAwaitingValidation = isSubmitted
+          this.hasPendingDraftToSubmit = !isSubmitted
         }
       } catch (err) {
         console.error('Erro ao carregar conteúdo para edição transparente:', err)
       }
     },
 
+    async onTransparentEditorSaveDraft (payload) {
+      if (payload) {
+        await this.onTransparentEditorChange(payload)
+      }
+    },
+
     async onTransparentEditorChange ({ markdown, toc }) {
+      if (!this.isTransparentEditActive || this.isAwaitingValidation || this.isSubmittingValidation) {
+        return
+      }
       this.transparentToc = toc
       this.transparentChangeCount++
       this.isAwaitingValidation = false
@@ -1248,11 +1422,19 @@ export default {
           markdown,
           tags: this.tagsArray || []
         })
-        if (res.draftId) {
-          this.activeDraftId = res.draftId
+        if (res && res.succeeded) {
+          if (res.draftId) {
+            this.activeDraftId = res.draftId
+          }
+          this.hasPendingDraftToSubmit = true
+          this.lastSavedTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+        } else {
+          this.lastSavedTime = ''
+          this.showDetranToast((res && res.message) || 'Não foi possível salvar o rascunho automaticamente.', 'error')
         }
-        this.lastSavedTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
       } catch (err) {
+        this.lastSavedTime = ''
+        this.showDetranToast('Erro ao salvar rascunho: ' + (err.message || 'Falha na comunicação.'), 'error')
         console.error('Erro ao salvar rascunho transparente:', err)
       } finally {
         this.isSavingDraft = false
@@ -1270,6 +1452,9 @@ export default {
     },
 
     async onSubmitValidation ({ comment }) {
+      if (this.$refs.transparentEditor && typeof this.$refs.transparentEditor.clearPendingSave === 'function') {
+        this.$refs.transparentEditor.clearPendingSave()
+      }
       this.isSubmittingValidation = true
       try {
         if (this.pageRawMarkdown || !this.activeDraftId || this.isSavingDraft) {
@@ -1285,6 +1470,10 @@ export default {
             markdown: this.pageRawMarkdown,
             tags: this.tagsArray || []
           })
+          if (saved && !saved.succeeded) {
+            this.showDetranToast(saved.message || 'Não foi possível salvar antes de enviar.', 'error')
+            return
+          }
           if (saved && saved.draftId) {
             this.activeDraftId = saved.draftId
           }
@@ -1298,6 +1487,7 @@ export default {
         if (result.succeeded) {
           this.dialogValidation = false
           this.transparentChangeCount = 0
+          this.hasPendingDraftToSubmit = false
           this.isAwaitingValidation = true
           this.$root.$emit('workflowRefreshTasks')
           this.fetchWorkflowPendingCount()
@@ -1327,8 +1517,11 @@ export default {
                   id
                   title
                   path
+                  state
                   authorName
+                  lastComment
                   createdAt
+                  updatedAt
                 }
               }
             }
@@ -1678,6 +1871,22 @@ export default {
       if (this.$refs.sidebar && typeof this.$refs.sidebar.openUserModal === 'function') {
         this.$refs.sidebar.openUserModal()
       }
+    },
+
+    goToProfile () {
+      window.location.assign('/p')
+    },
+
+    goToAdmin () {
+      window.location.assign('/a')
+    },
+
+    doLogout () {
+      if (this.$refs.sidebar && typeof this.$refs.sidebar.doLogout === 'function') {
+        this.$refs.sidebar.doLogout()
+        return
+      }
+      window.location.assign('/logout')
     }
   }
 }
@@ -1725,6 +1934,9 @@ export default {
 .detran-layout {
   display: flex;
   height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
   overflow: hidden;
   position: relative;
 }
@@ -1817,6 +2029,11 @@ export default {
   pointer-events: none;
   padding: 0 2rem;
 
+  @include medium-screens {
+    padding: 0 1.25rem;
+    top: 16px;
+  }
+
   @include mobile {
     top: 0;
     left: 0;
@@ -1885,6 +2102,11 @@ export default {
     gap: 1rem;
     flex-shrink: 0;
     margin-left: 1rem;
+
+    @include medium-screens {
+      gap: 0.5rem;
+      margin-left: 0.5rem;
+    }
 
     @include mobile {
       gap: 0.375rem;
@@ -1991,28 +2213,35 @@ export default {
     }
   }
 
-  &__user-btn {
-    display: none;
-    width: 38px;
-    height: 38px;
+  &__avatar-btn {
+    @include glass-panel;
+    width: 42px;
+    height: 42px;
+    padding: 3px;
     border-radius: $radius-full !important;
-    padding: 0;
-    border: none !important;
-    background: transparent;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: $shadow-float;
+    border: 1px solid rgba(226, 232, 240, 0.9);
     cursor: pointer;
-    overflow: hidden;
-    flex-shrink: 0;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    text-decoration: none !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 
     &:hover {
-      transform: scale(1.05);
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      border-color: $detran-400;
+      box-shadow: 0 4px 12px rgba(40, 139, 74, 0.18);
+      transform: translateY(-1px);
+    }
+
+    &.is-login {
+      background: rgba(255, 255, 255, 0.95);
     }
 
     @include mobile {
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      width: 36px;
+      height: 36px;
+      padding: 2px;
     }
   }
 
@@ -2022,6 +2251,7 @@ export default {
     border-radius: $radius-full !important;
     object-fit: cover;
     display: block;
+    flex-shrink: 0;
   }
 
   &__user-initials {
@@ -2032,9 +2262,163 @@ export default {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
     font-weight: 700;
     color: white;
+    flex-shrink: 0;
+
+    @include mobile {
+      font-size: 0.6875rem;
+    }
+  }
+}
+
+.detran-user-dropdown-menu {
+  border-radius: 1rem !important;
+  box-shadow: 0 18px 40px -10px rgba(15, 23, 42, 0.22), 0 4px 14px rgba(15, 23, 42, 0.08) !important;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  overflow: hidden !important;
+  margin-top: 8px;
+}
+
+.detran-user-dropdown {
+  background: #ffffff !important;
+  border-radius: 1rem !important;
+  overflow: hidden;
+  font-family: $font-family-base;
+
+  &__header {
+    background: linear-gradient(135deg, $detran-600 0%, $detran-800 100%);
+    padding: 1rem 1.125rem;
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+  }
+
+  &__avatar-wrap {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    overflow: hidden;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.14);
+  }
+
+  &__avatar {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  &__avatar-initials {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #ffffff;
+  }
+
+  &__info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__name {
+    font-size: 0.9375rem;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__email {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.8);
+    margin: 0.2rem 0 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__body {
+    padding: 0.625rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  &__divider {
+    border: none;
+    border-top: 1px solid #e2e8f0;
+    margin: 0.25rem 0.375rem;
+  }
+
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.625rem 0.75rem;
+    border-radius: 0.625rem;
+    text-decoration: none !important;
+    background: transparent;
+    border: 1px solid transparent;
+    transition: all 0.18s ease;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+
+    &:hover {
+      background: #f8fafc;
+      border-color: #e2e8f0;
+    }
+
+    &--logout:hover {
+      background: #fef2f2;
+      border-color: #fecaca;
+    }
+  }
+
+  &__item-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 0.5rem;
+    background: rgba($detran-500, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    &--danger {
+      background: #fee2e2;
+    }
+  }
+
+  &__item-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  &__item-title {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #1e293b;
+    line-height: 1.2;
+  }
+
+  &__item-desc {
+    font-size: 0.6875rem;
+    color: #64748b;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 
@@ -2050,18 +2434,70 @@ export default {
   box-shadow: $shadow-float;
   display: flex;
   align-items: center;
-  padding: 0.75rem 1rem;
-  transition: $transition-base;
+  height: 46px;
+  box-sizing: border-box;
+  padding: 0 1rem;
+  transition: max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              padding 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              border-radius 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              background 0.25s ease,
+              border-color 0.25s ease,
+              box-shadow 0.25s ease;
   border: 1px solid rgba(226, 232, 240, 0.8);
   position: relative;
   z-index: 51;
 
+  &.is-collapsed {
+    flex: 0 0 46px;
+    max-width: 46px;
+    width: 46px;
+    padding: 0;
+    justify-content: center;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 0.75rem;
+
+    .detran-search__icon {
+      margin-right: 0 !important;
+      color: $slate-600 !important;
+      font-size: 20px !important;
+    }
+
+    .detran-search__input {
+      display: none !important;
+    }
+
+    .detran-search__clear-btn {
+      display: none !important;
+    }
+
+    &:hover {
+      background: #ffffff;
+      border-color: $detran-400;
+      box-shadow: 0 4px 12px rgba(40, 139, 74, 0.15);
+
+      .detran-search__icon {
+        color: $detran-700 !important;
+        transform: scale(1.1);
+      }
+    }
+  }
+
   @include mobile {
-    padding: 0.4375rem 0.625rem;
+    height: 38px;
+    padding: 0 0.625rem;
     border-radius: 0.625rem;
     background: white;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     border: 1px solid rgba(226, 232, 240, 0.9);
+
+    &.is-collapsed {
+      flex: 0 0 38px;
+      max-width: 38px;
+      width: 38px;
+      height: 38px;
+      padding: 0;
+    }
   }
 
   &.is-focused {
@@ -2129,9 +2565,12 @@ export default {
 // ---------------------------------------------------------------------------
 .detran-content {
   flex: 1;
-  min-height: 0; // Garante contenção no layout flex e rolagem interna
+  min-height: 0;
+  display: flex;
+  flex-direction: column; // Garante contenção no layout flex e rolagem interna
   overflow-y: auto;
   overflow-x: hidden;
+  overflow-anchor: none;
   padding-top: $header-height + 24px; // espaço para o header absoluto
   padding-bottom: 2.5rem;
   padding-left: 2rem;
@@ -2140,6 +2579,11 @@ export default {
   scroll-padding-top: calc(#{$header-height} + 36px);
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
+
+  @include medium-screens {
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+  }
 
   @include mobile {
     padding-top: 66px; // exatamente abaixo do header mobile dockado (56px) + respiro
@@ -2157,6 +2601,8 @@ export default {
     display: flex;
     flex-direction: column;
     gap: 0;
+    min-height: 100%;
+    flex: 1 0 auto;
   }
 }
 
@@ -2202,13 +2648,43 @@ export default {
   display: inline-flex;
   align-items: center;
   gap: 0.625rem;
-  padding: 0.45rem 0.875rem;
+  height: 46px;
+  box-sizing: border-box;
+  padding: 0 0.875rem;
   background-color: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(8px);
-  border-radius: 0.75rem;
+  border-radius: $radius-lg;
   border: 1px solid rgba(226, 232, 240, 0.85);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow: $shadow-float;
   margin-right: 0.25rem;
+
+  @include medium-screens {
+    gap: 0.375rem;
+    padding: 0 0.625rem;
+
+    .detran-sync-pill__text {
+      max-width: 130px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .detran-sync-pill__btn {
+      padding: 0.2rem 0.5rem;
+      font-size: 0.7rem;
+    }
+  }
+
+  @include mobile {
+    height: 38px;
+    gap: 0.35rem;
+    padding: 0 0.5rem;
+    border-radius: 0.625rem;
+
+    .detran-sync-pill__text {
+      display: none;
+    }
+  }
 
   &__dot {
     width: 8px;
@@ -2398,7 +2874,10 @@ export default {
   gap: 2.5rem;
   align-items: flex-start;
 
-  @include tablet { flex-direction: column; }
+  @include screen-compact {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
   @include mobile { flex-direction: column; }
 }
 
@@ -2414,20 +2893,26 @@ export default {
   padding: 2rem 2.5rem 3rem;
   width: 100%;
 
+  @include medium-screens {
+    padding: 1.75rem 1.75rem 2.5rem;
+  }
+
   @include mobile { padding: 1.25rem 1rem; }
 
   &__header {
     display: flex;
-    flex-direction: column;
-    gap: 1rem;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.25rem;
     margin-bottom: 2rem;
     padding-bottom: 1.5rem;
     border-bottom: 1px solid $slate-100;
 
-    @include tablet-up {
-      flex-direction: row;
-      align-items: center;
-      justify-content: space-between;
+    @include mobile-sm {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 1rem;
     }
   }
 
@@ -2435,6 +2920,8 @@ export default {
     display: flex;
     align-items: center;
     gap: 1rem;
+    flex: 1;
+    min-width: 0;
   }
 
   &__icon {
@@ -2452,6 +2939,8 @@ export default {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    flex: 1;
+    min-width: 0;
   }
 
   &__category {
@@ -2459,6 +2948,9 @@ export default {
     font-weight: 500;
     color: $slate-800;
     margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   &__meta-row {
@@ -2466,6 +2958,7 @@ export default {
     flex-wrap: wrap;
     align-items: center;
     gap: 0.375rem 0.75rem;
+    min-width: 0;
   }
 
   &__meta-item {
@@ -2474,16 +2967,20 @@ export default {
     gap: 0.25rem;
     font-size: 0.75rem;
     color: $slate-500;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   &__meta-sep {
     color: $slate-300;
     font-size: 0.625rem;
+    user-select: none;
   }
 
   &__tags {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 6px;
     margin-top: 0.5rem;
   }
@@ -2493,11 +2990,13 @@ export default {
     align-items: center;
     gap: 0.5rem;
     flex-shrink: 0;
+    margin-left: auto;
 
-    @include mobile {
+    @include mobile-sm {
       width: 100%;
       justify-content: flex-start;
       margin-top: 0.25rem;
+      margin-left: 0;
     }
   }
 
@@ -2553,6 +3052,14 @@ export default {
   &:active {
     transform: scale(0.98) !important;
   }
+
+  &--icon-only {
+    width: 36px !important;
+    height: 36px !important;
+    padding: 0 !important;
+    justify-content: center !important;
+    border-radius: $radius-md !important;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2571,6 +3078,8 @@ export default {
   border-radius: $radius-sm;
   text-decoration: none;
   transition: $transition-fast;
+  white-space: nowrap;
+  flex-shrink: 0;
 
   &:hover {
     background: $detran-100;
@@ -2610,7 +3119,18 @@ export default {
   position: sticky;
   top: $header-height + 24px;
 
-  @include tablet { width: 100%; position: static; }
+  @include screen-compact {
+    width: 100%;
+    position: static;
+    margin-top: 1rem;
+
+    .detran-toc__list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 0.5rem 1rem;
+    }
+  }
+
   @include mobile { display: none; } // Oculto no mobile — acesso via heading links
 
   &__card {
@@ -2691,7 +3211,7 @@ export default {
 // ---------------------------------------------------------------------------
 .detran-speed-dial {
   position: fixed;
-  bottom: 3.5rem; // Espaçamento elegante acima do rodapé fixo
+  bottom: 2rem; // Espaçamento elegante acima do rodapé fixo
   right: 2rem;
   z-index: 50;
   display: flex;
@@ -2700,7 +3220,7 @@ export default {
   gap: 0.75rem;
 
   @include mobile {
-    bottom: 3.25rem;
+    bottom: 1.5rem;
     right: 1rem;
   }
 
@@ -2836,14 +3356,18 @@ export default {
 // BOTÃO DE IDIOMA NO CABEÇALHO
 // ---------------------------------------------------------------------------
 .detran-header__action-btn {
+  @include glass-panel;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.375rem;
-  padding: 0.375rem 0.75rem;
-  border-radius: $radius-md;
-  border: 1px solid #e2e8f0;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(8px);
+  height: 46px;
+  min-width: 46px;
+  box-sizing: border-box;
+  padding: 0 0.75rem;
+  border-radius: $radius-lg;
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  box-shadow: $shadow-float;
   font-size: 0.75rem;
   font-weight: 600;
   color: #475569;
@@ -2854,6 +3378,15 @@ export default {
     background: #ffffff;
     border-color: #cbd5e1;
     color: #1e293b;
+  }
+
+  @include mobile {
+    height: 38px;
+    min-width: 38px;
+    padding: 0 0.5rem;
+    border-radius: 0.625rem;
+    background: white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   }
 }
 

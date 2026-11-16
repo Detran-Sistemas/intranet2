@@ -36,7 +36,14 @@
       v-flex(md4, v-if='$vuetify.breakpoint.mdAndUp')
         v-toolbar.nav-header-inner(color='transparent', dark, flat)
           slot(name='mid')
-            transition(name='navHeaderSearch', v-if='searchIsShown')
+            v-btn(
+              v-if='!searchIsShown && !hideSearch'
+              icon
+              @click='searchToggle'
+              :aria-label='$t(`common:header.search`)'
+            )
+              v-icon(color='grey') mdi-magnify
+            transition(name='navHeaderSearch')
               v-text-field(
                 ref='searchField',
                 v-if='searchIsShown && $vuetify.breakpoint.mdAndUp',
@@ -221,17 +228,17 @@
                       v-list-item(
                         v-for='task in filteredNotificationTasks'
                         :key='task.id'
-                        :href='"/w/review/" + task.id'
+                        :href='"/w/review/" + task.id + (task.state === "changes_requested" ? "?edit=1" : "")'
                         class='py-2 px-3 border-b'
                       )
-                        v-list-item-avatar.mr-3(size='32', color='#eff6ff')
-                          v-icon(size='18', color='#2563eb') mdi-shield-check
+                        v-list-item-avatar.mr-3(size='32', :color='task.state === "changes_requested" ? "#fff7ed" : "#eff6ff"')
+                          v-icon(size='18', :color='task.state === "changes_requested" ? "#d97706" : "#2563eb"') {{ task.state === "changes_requested" ? "mdi-undo-variant" : "mdi-shield-check" }}
                         v-list-item-content
                           .d-flex.align-center.justify-space-between
-                            span.text-caption.font-weight-bold.blue--text.text--darken-3.text-uppercase Validação Pendente
-                            span.text-caption.grey--text Pendente
+                            span.text-caption.font-weight-bold.text-uppercase(:class='task.state === "changes_requested" ? "amber--text text--darken-4" : "blue--text text--darken-3"') {{ task.state === "changes_requested" ? "Devolvido para Ajustes" : "Validação Pendente" }}
+                            span.text-caption(:class='task.state === "changes_requested" ? "amber--text text--darken-4 font-weight-bold" : "grey--text"') {{ task.state === "changes_requested" ? "Ajustar" : "Pendente" }}
                           .caption.font-weight-bold.text-truncate {{ task.title || task.path }}
-                          .text-caption.grey--text.text--darken-1.text-truncate Autor: {{ task.authorName || "Servidor" }}
+                          .text-caption.grey--text.text--darken-1.text-truncate {{ task.state === "changes_requested" ? (task.lastComment ? "Motivo: " + task.lastComment : "Revisor solicitou ajustes") : ("Autor: " + (task.authorName || "Servidor")) }}
                   template(v-else)
                     .pa-6.text-center.grey--text
                       v-icon.mb-2(size='36', color='grey lighten-2') mdi-bell-check-outline
@@ -311,6 +318,7 @@ import gql from 'graphql-tag'
 
 import movePageMutation from 'gql/common/common-pages-mutation-move.gql'
 import { filterNotificationTasks } from '../../themes/default/components/transparent-editor/utils/editor-controller'
+import { broadcastLogout } from '../../modules/auth-sync'
 
 /* global siteConfig, siteLangs */
 
@@ -337,6 +345,7 @@ export default {
     return {
       menuIsShown: true,
       searchIsShown: true,
+      lastScrollY: 0,
       searchAdvMenuShown: false,
       newPageModal: false,
       movePageModal: false,
@@ -457,8 +466,37 @@ export default {
     this.$root.$on('workflowRefreshTasks', () => {
       this.fetchWorkflowPendingCount()
     })
+    window.addEventListener('scroll', this.handleScroll, { passive: true, capture: true })
+  },
+  beforeDestroy () {
+    window.removeEventListener('scroll', this.handleScroll, { capture: true })
   },
   methods: {
+    handleScroll (event) {
+      const target = (event && event.target && event.target.scrollTop !== undefined && event.target !== document && event.target !== document.body)
+        ? event.target
+        : null
+      const currentY = target ? target.scrollTop : (window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0)
+
+      // Não recolhe caso o campo de busca esteja em foco ou contenha texto digitado
+      if (this.searchIsFocused || (this.search && this.search.trim().length > 0)) {
+        this.lastScrollY = currentY
+        return
+      }
+
+      // Ao rolar para baixo além de 40px: recolhe a barra de pesquisa
+      if (currentY > 40 && currentY > this.lastScrollY + 5) {
+        if (this.searchIsShown) {
+          this.searchIsShown = false
+        }
+      } else if (currentY < this.lastScrollY - 10 || currentY <= 25) {
+        // Ao rolar para cima ou retornar ao topo: expande a barra de pesquisa no desktop
+        if (!this.searchIsShown && !this.hideSearch && !this.dense && this.$vuetify.breakpoint.mdAndUp) {
+          this.searchIsShown = true
+        }
+      }
+      this.lastScrollY = currentY
+    },
     searchFocus () {
       this.searchIsFocused = true
     },
@@ -472,9 +510,13 @@ export default {
     searchToggle () {
       this.searchIsShown = !this.searchIsShown
       if (this.searchIsShown) {
-        _.delay(() => {
-          this.$refs.searchFieldMobile.focus()
-        }, 200)
+        this.$nextTick(() => {
+          if (this.$refs.searchField) {
+            this.$refs.searchField.focus()
+          } else if (this.$refs.searchFieldMobile) {
+            this.$refs.searchFieldMobile.focus()
+          }
+        })
       }
     },
     /* eslint-disable vue/custom-event-name-casing */
@@ -566,6 +608,11 @@ export default {
       }
     },
     logout () {
+      const uid = (this.$store && this.$store.state && this.$store.state.user) ? this.$store.state.user.id : 0
+      broadcastLogout(uid)
+      if (this.$store) {
+        this.$store.commit('user/CLEAR_AUTH')
+      }
       window.location.assign('/logout')
     },
     goHome () {
@@ -588,8 +635,11 @@ export default {
                   id
                   title
                   path
+                  state
                   authorName
+                  lastComment
                   createdAt
+                  updatedAt
                 }
               }
             }

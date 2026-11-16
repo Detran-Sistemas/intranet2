@@ -1,4 +1,3 @@
-const _ = require('lodash')
 const DetranWfDraft = require('../../models/detranWfDraft')
 const stateMachine = require('./state-machine')
 const policiesService = require('./policies')
@@ -117,9 +116,9 @@ class PeriodicReviewJob {
           const policy = await policiesService.resolvePolicy(draft.path)
           const shouldArchive = Boolean(policy.autoArchiveOnExpire)
           const action = shouldArchive ? stateMachine.ACTIONS.ARCHIVE : stateMachine.ACTIONS.EXPIRE
-          const comment = shouldArchive
-            ? 'Vigência de 12 meses expirada. Documento arquivado automaticamente conforme política institucional.'
-            : 'Vigência periódica de 12 meses expirada. Documento transferido para o estado de revisão periódica para revalidação.'
+          const comment = shouldArchive ?
+            'Vigência de 12 meses expirada. Documento arquivado automaticamente conforme política institucional.' :
+            'Vigência periódica de 12 meses expirada. Documento transferido para o estado de revisão periódica para revalidação.'
 
           const transitionResult = await stateMachine.executeTransition(
             draft,

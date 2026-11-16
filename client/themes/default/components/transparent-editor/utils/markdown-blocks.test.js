@@ -3,6 +3,19 @@ import {
   inlineMarkdownToHtml,
   inlineHtmlToMarkdown,
   renderRawBlockHtml,
+  detectRawBlockKind,
+  parseRawCodeBlock,
+  serializeRawCodeBlock,
+  parseRawTable,
+  serializeRawTable,
+  insertTableRow,
+  removeTableRow,
+  insertTableColumn,
+  removeTableColumn,
+  parseRawList,
+  serializeRawList,
+  parseRawQuote,
+  serializeRawQuote,
   parseMarkdown,
   serializeBlocks,
   slugify
@@ -155,5 +168,90 @@ describe('transparent-editor/markdown-blocks', () => {
     )
 
     expect(renderRawBlockHtml('Texto avulso')).toBe('<p>Texto avulso</p>')
+
+    const sampleSvg = '<svg xmlns="http://www.w3.org/2000/svg"><text>Fluxo</text></svg>'
+    const b64Svg = Buffer.from(sampleSvg, 'utf8').toString('base64')
+    expect(renderRawBlockHtml('```diagram\n' + b64Svg + '\n```')).toBe(
+      '<div class="diagram">' + sampleSvg + '</div>'
+    )
+    expect(renderRawBlockHtml('```mermaid\ngraph TD\nA-->B\n```')).toBe(
+      '<div class="mermaid">graph TD\nA--&gt;B</div>'
+    )
+  })
+
+  it('parses HTML callout divs and GitHub alert directives into styled callout blocks', () => {
+    const htmlCallouts = [
+      '<div class="is-info"> <strong>Bloco Info:</strong> Usado para informações neutras. </div>',
+      '<div class="is-success"> <strong>Bloco Success:</strong> Ideal para mensagens de sucesso. </div>',
+      '> [!warning] Atenção aos prazos'
+    ].join('\n\n')
+
+    const parsed = parseMarkdown(htmlCallouts)
+    expect(parsed).toEqual([
+      { type: 'callout', variant: 'info', text: '**Bloco Info:** Usado para informações neutras.' },
+      { type: 'callout', variant: 'success', text: '**Bloco Success:** Ideal para mensagens de sucesso.' },
+      { type: 'callout', variant: 'warning', text: 'Atenção aos prazos' }
+    ])
+  })
+
+  it('detects and round-trips structured raw sub-blocks (code, table, list, task list, quote, mermaid, hr)', () => {
+    expect(detectRawBlockKind('---')).toBe('hr')
+    expect(detectRawBlockKind('```js\nconst x = 1\n```')).toBe('code')
+    expect(detectRawBlockKind('```mermaid\ngraph TD\nA-->B\n```')).toBe('mermaid')
+    expect(detectRawBlockKind('| Col 1 | Col 2 |\n|---|---|\n| A | B |')).toBe('table')
+    expect(detectRawBlockKind('- Item 1\n- Item 2')).toBe('list')
+    expect(detectRawBlockKind('> Citação 1\n> Citação 2')).toBe('quote')
+
+    // Code block structured parse/serialize
+    const codeParsed = parseRawCodeBlock('```sql\nSELECT 1;\n\nSELECT 2;\n```')
+    expect(codeParsed).toEqual({
+      fence: '```',
+      lang: 'sql',
+      code: 'SELECT 1;\n\nSELECT 2;'
+    })
+    expect(serializeRawCodeBlock({ ...codeParsed, lang: 'postgres', code: 'SELECT 42;' })).toBe(
+      '```postgres\nSELECT 42;\n```'
+    )
+
+    // Table structured parse/serialize + cell pipe escaping + mutations
+    const tblMd = '| Nome | Regra \\| Obs |\n|:---|---:|\n| **João** | Ativo |'
+    const tbl = parseRawTable(tblMd)
+    expect(tbl).toEqual({
+      headers: ['Nome', 'Regra | Obs'],
+      alignments: [':---', '---:'],
+      rows: [['**João**', 'Ativo']]
+    })
+    const tblSerialized = serializeRawTable(tbl)
+    expect(tblSerialized).toBe('| Nome | Regra \\| Obs |\n| :--- | ---: |\n| **João** | Ativo |')
+
+    const tblWithRow = insertTableRow(tbl, 0)
+    expect(tblWithRow.rows).toEqual([['**João**', 'Ativo'], ['', '']])
+    expect(removeTableRow(tblWithRow, 1).rows).toEqual([['**João**', 'Ativo']])
+
+    const tblWithCol = insertTableColumn(tbl, 1)
+    expect(tblWithCol.headers).toEqual(['Nome', 'Regra | Obs', 'Nova Coluna'])
+    expect(tblWithCol.rows).toEqual([['**João**', 'Ativo', '']])
+    expect(removeTableColumn(tblWithCol, 2).headers).toEqual(['Nome', 'Regra | Obs'])
+
+    // List + Task list structured parse/serialize
+    const ulParsed = parseRawList('- [x] Concluído\n  - [ ] Subtarefa\n- Item normal')
+    expect(ulParsed).toEqual({
+      ordered: false,
+      items: [
+        { indent: '', marker: '-', checked: true, text: 'Concluído' },
+        { indent: '  ', marker: '-', checked: false, text: 'Subtarefa' },
+        { indent: '', marker: '-', checked: null, text: 'Item normal' }
+      ]
+    })
+    expect(serializeRawList(ulParsed)).toBe('- [x] Concluído\n  - [ ] Subtarefa\n- Item normal')
+
+    const olParsed = parseRawList('1. Passo 1\n2. Passo 2')
+    expect(olParsed.ordered).toBe(true)
+    expect(serializeRawList(olParsed)).toBe('1. Passo 1\n2. Passo 2')
+
+    // Quote structured parse/serialize
+    const qText = parseRawQuote('> Primeira linha\n> Segunda linha')
+    expect(qText).toBe('Primeira linha\nSegunda linha')
+    expect(serializeRawQuote('Primeira linha\nSegunda linha')).toBe('> Primeira linha\n> Segunda linha')
   })
 })

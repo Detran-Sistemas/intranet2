@@ -10,6 +10,11 @@ const {
   serializeBlocks,
   slugify
 } = require('../../../../client/themes/default/components/transparent-editor/utils/markdown-blocks')
+const {
+  loadTransparentPageSource,
+  saveTransparentDraft,
+  computeSearchCollapseOnScroll
+} = require('../../../../client/themes/default/components/transparent-editor/utils/editor-controller')
 
 jest.setTimeout(15000)
 
@@ -258,7 +263,7 @@ describe('Detran Intranet - Edição Transparente & Workflow Integration', () =>
     expect(submitted.draft.state).toBe('in_review')
   })
 
-  test('6. Allows continuous inline editing and resubmission when draft is already in_review', async () => {
+  test('6. Blocks author inline mutation while in_review and supports retract -> edit -> resubmit', async () => {
     const draft = await DetranWfDraft.query().insert({
       path: 'guia/markdown-styles',
       locale: 'pt-br',
@@ -272,6 +277,46 @@ describe('Detran Intranet - Edição Transparente & Workflow Integration', () =>
       currentLevel: 1
     })
 
+    // Author cannot save edits directly while submitted in_review
+    const blockedSave = await resolvers.Mutation.workflowSaveDraft(
+      null,
+      {
+        id: draft.id,
+        path: draft.path,
+        locale: draft.locale,
+        title: draft.title,
+        content: 'Tentativa sem retratar'
+      },
+      { req: { user: userAuthor } }
+    )
+    expect(blockedSave.responseResult.succeeded).toBe(false)
+    expect(blockedSave.responseResult.slug).toBe('PermissionDeniedError')
+
+    // Double submit while in_review is rejected
+    const blockedSubmit = await resolvers.Mutation.workflowSubmit(
+      null,
+      {
+        id: draft.id,
+        comment: 'Reenvio direto bloqueado'
+      },
+      { req: { user: userAuthor } }
+    )
+    expect(blockedSubmit.responseResult.succeeded).toBe(false)
+    expect(blockedSubmit.responseResult.slug).toBe('InvalidTransitionError')
+
+    // Author retracts back to draft
+    const retracted = await resolvers.Mutation.workflowRetract(
+      null,
+      {
+        id: draft.id,
+        comment: 'Puxando para ajuste antes da revisão'
+      },
+      { req: { user: userAuthor } }
+    )
+    expect(retracted.responseResult.succeeded).toBe(true)
+    expect(retracted.draft.state).toBe('draft')
+
+    // Now author can edit and resubmit
     const updated = await resolvers.Mutation.workflowSaveDraft(
       null,
       {
@@ -279,18 +324,18 @@ describe('Detran Intranet - Edição Transparente & Workflow Integration', () =>
         path: draft.path,
         locale: draft.locale,
         title: draft.title,
-        content: 'Conteúdo atualizado continuamente em in_review'
+        content: 'Conteúdo atualizado após retratação'
       },
       { req: { user: userAuthor } }
     )
     expect(updated.responseResult.succeeded).toBe(true)
-    expect(updated.draft.content).toBe('Conteúdo atualizado continuamente em in_review')
+    expect(updated.draft.content).toBe('Conteúdo atualizado após retratação')
 
     const resubmitted = await resolvers.Mutation.workflowSubmit(
       null,
       {
         id: draft.id,
-        comment: 'teste'
+        comment: 'Reenvio após ajuste'
       },
       { req: { user: userAuthor } }
     )
@@ -510,5 +555,98 @@ describe('Detran Intranet - Edição Transparente & Workflow Integration', () =>
     // 6. Live page content in database is updated
     const liveHome = await knex('pages').where({ id: 501 }).first()
     expect(liveHome.content).toBe('Conteúdo editado pelo Admin v2 final')
+  })
+
+  test('11. saveTransparentDraft e loadTransparentPageSource propagam status real do rascunho e erro quando bloqueado', async () => {
+    const mockApolloReview = {
+      query: async () => ({
+        data: {
+          workflow: {
+            draftByPath: {
+              id: 888,
+              content: 'Em revisão',
+              state: 'in_review'
+            }
+          }
+        }
+      }),
+      mutate: async () => ({
+        data: {
+          workflow: {
+            saveDraft: {
+              responseResult: {
+                succeeded: false,
+                message: 'Rascunho já está em revisão. Utilize Puxar de Volta antes de editar.'
+              },
+              draft: null
+            }
+          }
+        }
+      })
+    }
+
+    const loaded = await loadTransparentPageSource({
+      apollo: mockApolloReview,
+      queryDraftAndPolicy: {},
+      pageSingleQuery: {},
+      path: 'norma-teste',
+      locale: 'pt-br',
+      pageId: 501
+    })
+    expect(loaded.draftId).toBe(888)
+    expect(loaded.draftState).toBe('in_review')
+
+    const failedSave = await saveTransparentDraft({
+      apollo: mockApolloReview,
+      mutationSaveDraft: {},
+      activeDraftId: 888,
+      markdown: 'Alteração bloqueada'
+    })
+    expect(failedSave.succeeded).toBe(false)
+    expect(failedSave.message).toContain('revisão')
+  })
+
+  test('12. computeSearchCollapseOnScroll recolhe barra de pesquisa mesmo com incrementos suaves (1-4px) ao rolar para baixo e expande ao subir', () => {
+    let state = { isCollapsed: false, lastScrollY: 0, downDistance: 0, upDistance: 0 }
+
+    // Simula scroll suave em pequenos incrementos (3px por frame até 90px)
+    for (let y = 3; y <= 90; y += 3) {
+      state = computeSearchCollapseOnScroll({
+        currentY: y,
+        lastScrollY: state.lastScrollY,
+        downDistance: state.downDistance,
+        upDistance: state.upDistance,
+        isCollapsed: state.isCollapsed,
+        isFocused: false,
+        hasQuery: false
+      })
+    }
+    expect(state.isCollapsed).toBe(true)
+
+    // Não altera se estiver com foco ou texto pesquisado
+    const lockedByFocus = computeSearchCollapseOnScroll({
+      currentY: 200,
+      lastScrollY: 0,
+      downDistance: 0,
+      upDistance: 0,
+      isCollapsed: false,
+      isFocused: true,
+      hasQuery: false
+    })
+    expect(lockedByFocus.isCollapsed).toBe(false)
+
+    // Sobe suavemente 24px -> expande
+    for (let y = 87; y >= 60; y -= 3) {
+      state = computeSearchCollapseOnScroll({
+        currentY: y,
+        lastScrollY: state.lastScrollY,
+        downDistance: state.downDistance,
+        upDistance: state.upDistance,
+        isCollapsed: state.isCollapsed,
+        isFocused: false,
+        hasQuery: false
+      })
+    }
+    expect(state.isCollapsed).toBe(false)
   })
 })

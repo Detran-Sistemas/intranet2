@@ -1,6 +1,7 @@
 const {
   InvalidTransitionError,
-  FourEyesViolationError
+  FourEyesViolationError,
+  PermissionDeniedError
 } = require('./errors')
 const conflictDetector = require('./conflict-detector')
 const policiesService = require('./policies')
@@ -21,6 +22,7 @@ const STATES = {
 const ACTIONS = {
   SAVE_DRAFT: 'save_draft',
   SUBMIT: 'submit',
+  RETRACT: 'retract',
   REQUEST_CHANGES: 'request_changes',
   APPROVE_STEP: 'approve_step',
   PUBLISH: 'publish',
@@ -33,9 +35,19 @@ const ACTIONS = {
  * State Machine Engine for Detran-MG Document Workflow
  */
 class WorkflowStateMachine {
-  constructor() {
+  constructor(options = {}) {
     this.STATES = STATES
     this.ACTIONS = ACTIONS
+    this.authChecker = typeof options.authChecker === 'function' ? options.authChecker : null
+  }
+
+  /**
+   * Set custom authorization checker port (Clean Architecture Dependency Inversion)
+   *
+   * @param {Function|null} checkerFn - (user, permissions) => boolean
+   */
+  setAuthChecker(checkerFn) {
+    this.authChecker = typeof checkerFn === 'function' ? checkerFn : null
   }
 
   /**
@@ -56,8 +68,10 @@ class WorkflowStateMachine {
           throw new InvalidTransitionError(currentState, action, 'Can only save edits on active drafts')
         }
         return {
-          targetState: currentState === STATES.CHANGES_REQUESTED ? STATES.CHANGES_REQUESTED : STATES.DRAFT,
-          currentLevel: 1
+          targetState: (currentState === STATES.CHANGES_REQUESTED || currentState === STATES.IN_REVIEW || currentState === STATES.AWAITING_APPROVAL) ?
+            currentState :
+            STATES.DRAFT,
+          currentLevel: draft.currentLevel || 1
         }
 
       case ACTIONS.SUBMIT:
@@ -65,6 +79,12 @@ class WorkflowStateMachine {
           throw new InvalidTransitionError(currentState, action, 'Can only submit from draft or changes requested')
         }
         return { targetState: STATES.IN_REVIEW, currentLevel: 1 }
+
+      case ACTIONS.RETRACT:
+        if (currentState !== STATES.IN_REVIEW && currentState !== STATES.AWAITING_APPROVAL) {
+          throw new InvalidTransitionError(currentState, action, 'Can only retract drafts currently in review or awaiting approval')
+        }
+        return { targetState: STATES.DRAFT, currentLevel: 1 }
 
       case ACTIONS.REQUEST_CHANGES:
         if (currentState !== STATES.IN_REVIEW && currentState !== STATES.AWAITING_APPROVAL) {
@@ -128,15 +148,38 @@ class WorkflowStateMachine {
    * @throws {FourEyesViolationError|ConcurrencyConflictError}
    */
   validateBusinessRules(draft, action, user, options = {}) {
-    const isApprovalAction = action === ACTIONS.APPROVE_STEP || action === ACTIONS.PUBLISH
+    const isSuperAdmin = typeof options.isSuperAdmin === 'boolean' ?
+      options.isSuperAdmin :
+      Boolean(
+        user && (
+          Number(user.id) === 1 ||
+          (Array.isArray(user.permissions) && user.permissions.includes('manage:system')) ||
+          (this.authChecker && this.authChecker(user, ['manage:system'])) ||
+          (typeof WIKI !== 'undefined' && WIKI.auth && typeof WIKI.auth.checkAccess === 'function' && WIKI.auth.checkAccess(user, ['manage:system']))
+        )
+      )
+    const isAuthor = Boolean(user && user.id && draft.authorId && Number(user.id) === Number(draft.authorId))
+    const currentState = draft.state || STATES.DRAFT
+
+    // Rule: Author cannot mutate their own submitted draft while in review/approval without retracting first
+    if (
+      action === ACTIONS.SAVE_DRAFT &&
+      isAuthor &&
+      (currentState === STATES.IN_REVIEW || currentState === STATES.AWAITING_APPROVAL)
+    ) {
+      throw new PermissionDeniedError('O rascunho está em revisão. Utilize "Puxar de Volta para Edição" antes de alterar o conteúdo.')
+    }
+
+    // Rule: Only the author (or superadmin) can retract a submitted draft back to editing
+    if (action === ACTIONS.RETRACT && !isAuthor && !isSuperAdmin) {
+      throw new PermissionDeniedError('Apenas o autor do rascunho ou um administrador pode puxar o documento de volta para edição.')
+    }
 
     // Rule: Four-Eyes Principle (Princípio dos 4 Olhos)
-    // The author cannot approve or publish their own document
-    if (isApprovalAction && user && user.id && draft.authorId) {
-      const isSuperAdmin = Number(user.id) === 1 || (typeof WIKI !== 'undefined' && WIKI.auth && typeof WIKI.auth.checkAccess === 'function' && WIKI.auth.checkAccess(user, ['manage:system']))
-      if (Number(user.id) === Number(draft.authorId) && !isSuperAdmin) {
-        throw new FourEyesViolationError()
-      }
+    // The author cannot request changes, approve, or publish their own document
+    const requiresThirdParty = action === ACTIONS.APPROVE_STEP || action === ACTIONS.PUBLISH || action === ACTIONS.REQUEST_CHANGES
+    if (requiresThirdParty && isAuthor && !isSuperAdmin) {
+      throw new FourEyesViolationError()
     }
 
     // Rule: Concurrency Conflict Detection on Publication
@@ -186,6 +229,10 @@ class WorkflowStateMachine {
       currentLevel
     }
 
+    if (action === ACTIONS.RETRACT) {
+      patchData.decisions = '{}'
+    }
+
     // When publishing or revalidating, calculate new review due date
     if (targetState === STATES.PUBLISHED) {
       const intervalDays = options.reviewIntervalDays || 365
@@ -193,10 +240,14 @@ class WorkflowStateMachine {
     }
 
     // 3. Update database if draft is an Objection Model instance
+    const trx = options.trx || undefined
     let updatedDraft = draft
     if (draft.$query && typeof draft.$query === 'function') {
-      await draft.$query().patch(patchData)
-      updatedDraft = await draft.$query()
+      await draft.$query(trx).patch(patchData)
+      updatedDraft = await draft.$query(trx)
+      if (updatedDraft) {
+        Object.assign(draft, updatedDraft)
+      }
     } else {
       Object.assign(draft, patchData)
     }
@@ -206,7 +257,7 @@ class WorkflowStateMachine {
     const shouldRecordEvent = action !== ACTIONS.SAVE_DRAFT // save_draft is autosave/edit; all other actions are state transitions
     if (shouldRecordEvent && user && user.id && draft.id) {
       try {
-        event = await DetranWfEvent.query().insert({
+        event = await DetranWfEvent.query(trx).insert({
           draftId: draft.id,
           action,
           fromState,

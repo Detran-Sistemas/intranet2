@@ -3,13 +3,19 @@
     .detran-footer__content
       template(v-if='footerOverride')
         span.detran-footer__override(v-html='footerOverrideRender')
+        span.detran-footer__sep(aria-hidden='true') •
+        span.detran-footer__innovation Coordenadoria de Inovação
         span.detran-footer__sep(aria-hidden='true') |
       template(v-else-if='company && company.length > 0 && contentLicense')
         span.detran-footer__copy(v-if='contentLicense === "alr"') {{ $t('common:footer.copyright', { company: company, year: currentYear, interpolation: { escapeValue: false } }) }}
         span.detran-footer__copy(v-else) {{ $t('common:footer.license', { company: company, license: $t('common:license.' + contentLicense), interpolation: { escapeValue: false } }) }}
+        span.detran-footer__sep(aria-hidden='true') •
+        span.detran-footer__innovation Coordenadoria de Inovação
         span.detran-footer__sep(aria-hidden='true') |
       template(v-else)
         span.detran-footer__copy © {{ currentYear }} Detran-MG. Todos os direitos reservados.
+        span.detran-footer__sep(aria-hidden='true') •
+        span.detran-footer__innovation Coordenadoria de Inovação
         span.detran-footer__sep(aria-hidden='true') |
       span.detran-footer__powered {{ $t('common:footer.poweredBy', 'Desenvolvido com') }} #[a.detran-footer__link(href='https://wiki.js.org' rel='nofollow noopener' target='_blank') Wiki.js]
 </template>
@@ -55,15 +61,13 @@ export default {
   justify-content: center;
   flex-shrink: 0;
   width: 100%;
-  padding: 0.625rem 1.5rem;
-  background: rgba(255, 255, 255, 0.90);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  padding: 1.5rem 1.5rem 0.5rem;
+  background: transparent;
   border-top: 1px solid rgba(226, 232, 240, 0.85);
-  margin-top: 0;
+  margin-top: auto;
   z-index: 25;
   font-family: $font-family-base;
-  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.02);
+  box-shadow: none;
 
   &__content {
     display: flex;
@@ -81,8 +85,13 @@ export default {
     color: $slate-300;
   }
 
-  &__copy, &__override, &__powered {
+  &__copy, &__override, &__powered, &__innovation {
     color: $slate-500;
+  }
+
+  &__innovation {
+    font-weight: 600;
+    color: $detran-700;
   }
 
   &__link, a {

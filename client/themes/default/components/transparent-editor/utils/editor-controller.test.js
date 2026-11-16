@@ -1,3 +1,5 @@
+import fs from 'fs'
+import path from 'path'
 import {
   SLASH_MENU_ITEMS,
   DEFAULT_LINK_ITEMS,
@@ -11,6 +13,7 @@ import {
   buildReactiveToc,
   buildEditorChangePayload,
   detectSlashTrigger,
+  getCaretTriggerRect,
   computeSlashMenuPosition,
   computeFloatingToolbarPosition,
   canInsertMedia,
@@ -19,8 +22,17 @@ import {
   filterNotificationTasks,
   loadTransparentPageSource,
   saveTransparentDraft,
-  submitTransparentValidation
+  submitTransparentValidation,
+  transformBlockHeading,
+  transformBlockParagraph,
+  handleMarkdownPrefixTrigger,
+  pushHistorySnapshot,
+  undoHistory,
+  redoHistory,
+  clearOrDeleteBlockAt,
+  reorderBlocks
 } from './editor-controller'
+import { inlineMarkdownToHtml, inlineHtmlToMarkdown } from './markdown-blocks'
 
 describe('transparent-editor/editor-controller', () => {
   it('exports SLASH_MENU_ITEMS and DEFAULT_LINK_ITEMS constants', () => {
@@ -253,6 +265,39 @@ describe('transparent-editor/editor-controller', () => {
         left: '16px',
         zIndex: 9999
       })
+
+      // When slash trigger is near viewport bottom, menu flips above caret instead of overlapping text
+      const flippedSlash = computeSlashMenuPosition({ top: 680, left: 200 }, { width: 1280, height: 800 })
+      expect(parseInt(flippedSlash.top, 10)).toBeLessThan(680 - 280)
+
+      // When selection is near top edge, floating toolbar flips below selection instead of covering text
+      const flippedToolbar = computeFloatingToolbarPosition({ top: 24, bottom: 44, left: 200 }, { width: 1280, height: 800 })
+      expect(flippedToolbar.top).toBe('52px')
+
+      // getCaretTriggerRect prefers caret rect over full multi-line block bounding rect
+      const fakeEl = {
+        getBoundingClientRect: () => ({ top: 100, left: 40, bottom: 220, width: 500, height: 120 }),
+        contains: () => true
+      }
+      const fakeWin = {
+        getSelection: () => ({
+          rangeCount: 1,
+          getRangeAt: () => ({
+            anchorOffset: 0,
+            startContainer: fakeEl,
+            startOffset: 0,
+            getBoundingClientRect: () => ({ top: 184, left: 210, bottom: 204, width: 8, height: 20 }),
+            getClientRects: () => [{ top: 184, left: 210, bottom: 204, width: 8, height: 20 }]
+          })
+        })
+      }
+      expect(getCaretTriggerRect(fakeEl, fakeWin)).toEqual({
+        top: 184,
+        left: 210,
+        bottom: 204,
+        width: 8,
+        height: 20
+      })
     })
 
     it('validates media insertion and resolves media uploads (direct URL, upload success, fallback)', async () => {
@@ -349,6 +394,7 @@ describe('transparent-editor/editor-controller', () => {
       expect(resDraft).toEqual({
         markdown: '# Rascunho Ativo',
         draftId: 42,
+        draftState: 'draft',
         source: 'draft'
       })
 
@@ -368,6 +414,7 @@ describe('transparent-editor/editor-controller', () => {
       expect(resPage).toEqual({
         markdown: '# Página Publicada',
         draftId: null,
+        draftState: null,
         source: 'page'
       })
     })
@@ -401,6 +448,7 @@ describe('transparent-editor/editor-controller', () => {
       })
       expect(res).toEqual({
         succeeded: true,
+        message: '',
         draftId: 99,
         draft: { id: 99, state: 'draft' }
       })
@@ -437,6 +485,198 @@ describe('transparent-editor/editor-controller', () => {
         message: 'Enviado',
         draft: { id: 99, state: 'in_review' }
       })
+    })
+  })
+  describe('Keyboard shortcuts and block transforms', () => {
+    it('transforms block into heading with specified level', () => {
+      const block = { id: 'blk-1', type: 'paragraph', text: 'Meu Título' }
+      const h1 = transformBlockHeading(block, 1)
+      expect(h1.type).toBe('heading')
+      expect(h1.level).toBe(1)
+      expect(h1.anchor).toBe('meu-titulo')
+
+      const h3 = transformBlockHeading(block, 3)
+      expect(h3.level).toBe(3)
+    })
+
+    it('transforms heading or callout back into paragraph', () => {
+      const h2 = { id: 'blk-1', type: 'heading', level: 2, text: 'Texto', anchor: 'texto' }
+      const p = transformBlockParagraph(h2)
+      expect(p.type).toBe('paragraph')
+      expect(p.level).toBeUndefined()
+      expect(p.anchor).toBeUndefined()
+    })
+
+    it('handles markdown prefix triggers (#, ##, ###, -, *, 1., >)', () => {
+      const blk = { id: 'b-0', type: 'paragraph', text: '' }
+
+      const resH1 = handleMarkdownPrefixTrigger('# Introdução', blk)
+      expect(resH1.triggered).toBe(true)
+      expect(resH1.block.type).toBe('heading')
+      expect(resH1.block.level).toBe(1)
+      expect(resH1.block.text).toBe('Introdução')
+
+      const resH2 = handleMarkdownPrefixTrigger('## Seção 2', blk)
+      expect(resH2.triggered).toBe(true)
+      expect(resH2.block.level).toBe(2)
+
+      const resH3 = handleMarkdownPrefixTrigger('### Subseção', blk)
+      expect(resH3.triggered).toBe(true)
+      expect(resH3.block.level).toBe(3)
+
+      const resList = handleMarkdownPrefixTrigger('- Item 1', blk)
+      expect(resList.triggered).toBe(true)
+      expect(resList.block.type).toBe('raw')
+      expect(resList.block.text).toBe('- Item 1')
+
+      const resNum = handleMarkdownPrefixTrigger('1. Primeiro item', blk)
+      expect(resNum.triggered).toBe(true)
+      expect(resNum.block.type).toBe('raw')
+
+      const resCallout = handleMarkdownPrefixTrigger('> Nota importante', blk)
+      expect(resCallout.triggered).toBe(true)
+      expect(resCallout.block.type).toBe('callout')
+      expect(resCallout.block.variant).toBe('info')
+      expect(resCallout.block.text).toBe('Nota importante')
+
+      const resCode = handleMarkdownPrefixTrigger('```js ', blk)
+      expect(resCode.triggered).toBe(true)
+      expect(resCode.block.type).toBe('raw')
+      expect(resCode.block.text).toBe('```js\n\n```')
+
+      const resTask = handleMarkdownPrefixTrigger('[ ] Conferir prazo', blk)
+      expect(resTask.triggered).toBe(true)
+      expect(resTask.block.type).toBe('raw')
+      expect(resTask.block.text).toBe('- [ ] Conferir prazo')
+
+      const resNone = handleMarkdownPrefixTrigger('Texto normal sem prefixo', blk)
+      expect(resNone.triggered).toBe(false)
+    })
+
+    it('manages undo and redo history snapshots correctly', () => {
+      let stack = []
+      let idx = -1
+
+      const state0 = [{ id: '1', text: 'Init' }]
+      const snap0 = pushHistorySnapshot(stack, idx, state0)
+      stack = snap0.historyStack
+      idx = snap0.historyIndex
+      expect(idx).toBe(0)
+      expect(stack.length).toBe(1)
+
+      const state1 = [{ id: '1', text: 'Modificado' }]
+      const snap1 = pushHistorySnapshot(stack, idx, state1)
+      stack = snap1.historyStack
+      idx = snap1.historyIndex
+      expect(idx).toBe(1)
+
+      // Undo
+      const undoRes = undoHistory(stack, idx)
+      expect(undoRes.canUndo).toBe(true)
+      expect(undoRes.blocks[0].text).toBe('Init')
+      expect(undoRes.newIndex).toBe(0)
+      idx = undoRes.newIndex
+
+      // Cannot undo further
+      expect(undoHistory(stack, idx).canUndo).toBe(false)
+
+      // Redo
+      const redoRes = redoHistory(stack, idx)
+      expect(redoRes.canRedo).toBe(true)
+      expect(redoRes.blocks[0].text).toBe('Modificado')
+      expect(redoRes.newIndex).toBe(1)
+      idx = redoRes.newIndex
+
+      // Cannot redo beyond latest
+      expect(redoHistory(stack, idx).canRedo).toBe(false)
+    })
+  })
+
+  describe('Block reordering (drag & drop) and deletion', () => {
+    it('reorders blocks correctly when moving up or down', () => {
+      const list = [
+        { id: 'b0', type: 'paragraph', text: 'Zero' },
+        { id: 'b1', type: 'paragraph', text: 'Um' },
+        { id: 'b2', type: 'paragraph', text: 'Dois' },
+        { id: 'b3', type: 'paragraph', text: 'Três' }
+      ]
+
+      const downRes = reorderBlocks(list, 0, 2)
+      expect(downRes.moved).toBe(true)
+      expect(downRes.blocks.map(b => b.id)).toEqual(['b1', 'b2', 'b0', 'b3'])
+
+      const upRes = reorderBlocks(list, 3, 1)
+      expect(upRes.moved).toBe(true)
+      expect(upRes.blocks.map(b => b.id)).toEqual(['b0', 'b3', 'b1', 'b2'])
+
+      expect(reorderBlocks(list, 1, 1).moved).toBe(false)
+      expect(reorderBlocks(list, -1, 2).moved).toBe(false)
+      expect(reorderBlocks(list, 0, 10).moved).toBe(false)
+    })
+
+    it('clears single remaining block to empty paragraph and deletes any block when length > 1', () => {
+      const single = [{ id: 'b0', type: 'heading', level: 2, text: 'Título' }]
+      const cleared = clearOrDeleteBlockAt(single, 0)
+      expect(cleared.deleted).toBe(true)
+      expect(cleared.focusIndex).toBe(0)
+      expect(cleared.blocks).toEqual([{ id: 'b0', type: 'paragraph', text: '' }])
+
+      // Does nothing if already a single empty paragraph
+      expect(clearOrDeleteBlockAt(cleared.blocks, 0).deleted).toBe(false)
+
+      // Deletes block 0 when multiple blocks exist
+      const multi = [
+        { id: 'b0', type: 'paragraph', text: 'Primeiro' },
+        { id: 'b1', type: 'paragraph', text: 'Segundo' }
+      ]
+      const delFirst = clearOrDeleteBlockAt(multi, 0)
+      expect(delFirst.deleted).toBe(true)
+      expect(delFirst.focusIndex).toBe(0)
+      expect(delFirst.blocks).toEqual([{ id: 'b1', type: 'paragraph', text: 'Segundo' }])
+    })
+  })
+
+  describe('Markdown inline underline and empty contenteditable cleanup', () => {
+    it('preserves <u>text</u> roundtrip cleanly without losing text', () => {
+      expect(inlineMarkdownToHtml('Texto <u>sublinhado</u> fim')).toBe('Texto <u>sublinhado</u> fim')
+      expect(inlineHtmlToMarkdown('Texto <u>sublinhado</u> fim')).toBe('Texto <u>sublinhado</u> fim')
+    })
+
+    it('treats ghost <br> in empty contenteditable as empty string', () => {
+      expect(inlineHtmlToMarkdown('<br>')).toBe('')
+      expect(inlineHtmlToMarkdown('&nbsp;<br/>')).toBe('')
+    })
+  })
+
+  describe('Callout variant switcher and block action layout without text overlap', () => {
+    it('places .callout-variant-switcher after p.editable-field and avoids position: absolute over block text', () => {
+      const blockItemSrc = fs.readFileSync(path.resolve(__dirname, '../block-item.vue'), 'utf8')
+      const calloutSectionMatch = blockItemSrc.match(/blockquote\.detran-live-callout[\s\S]*?(?=\/\/- 3\.)/)
+      expect(calloutSectionMatch).not.toBeNull()
+      const calloutSection = calloutSectionMatch[0]
+
+      const editableIdx = calloutSection.indexOf('p.editable-field')
+      const switcherIdx = calloutSection.indexOf('.callout-variant-switcher')
+      expect(editableIdx).toBeGreaterThan(-1)
+      expect(switcherIdx).toBeGreaterThan(editableIdx)
+
+      const switcherCssMatch = blockItemSrc.match(/\.callout-variant-switcher\s*\{[\s\S]*?\n\}/)
+      expect(switcherCssMatch).not.toBeNull()
+      expect(switcherCssMatch[0]).not.toMatch(/position:\s*absolute/)
+
+      const deleteBtnCssMatch = blockItemSrc.match(/\.block-delete-btn\s*\{[\s\S]*?\n\}/)
+      expect(deleteBtnCssMatch).not.toBeNull()
+      expect(deleteBtnCssMatch[0]).not.toMatch(/position:\s*absolute/)
+    })
+
+    it('renders inline transparent editors directly for code, tables, lists, and quotes instead of raw textarea modal', () => {
+      const blockItemSrc = fs.readFileSync(path.resolve(__dirname, '../block-item.vue'), 'utf8')
+      expect(blockItemSrc).toContain('detran-live-code__textarea')
+      expect(blockItemSrc).toContain('detran-live-table')
+      expect(blockItemSrc).toContain('table-cell-editable')
+      expect(blockItemSrc).toContain('detran-live-list')
+      expect(blockItemSrc).toContain('list-item-editable')
+      expect(blockItemSrc).toContain('detran-live-quote')
     })
   })
 })

@@ -2,7 +2,9 @@ const knex = require('knex')
 const {
   getUrgencyLevel,
   getDraftActionRoute,
-  calculateDashboardStats
+  calculateDashboardStats,
+  partitionDashboardDrafts,
+  getTab2DraftActions
 } = require('../../../../client/store/detran-workflow-dashboard')
 const DraftModel = require('../../../models/detranWfDraft')
 const CommentModel = require('../../../models/detranWfComment')
@@ -118,14 +120,14 @@ describe('Etapa 3.2: Central de Tarefas (/w) e Notificador no Cabeçalho', () =>
     })
 
     it('deve determinar a rota correta para cada estado do documento', () => {
-      // Ajustes solicitados -> Editor
+      // Ajustes solicitados -> Revisão com Edição Integrada (?edit=1)
       const routeChanges = getDraftActionRoute({ id: 1, path: 'normas/doc', locale: 'pt-br', state: 'changes_requested' })
-      expect(routeChanges.route).toBe('/e/pt-br/normas/doc')
-      expect(routeChanges.label).toContain('Editor')
+      expect(routeChanges.route).toBe('/w/review/1?edit=1')
+      expect(routeChanges.label).toContain('Editar')
 
-      // Rascunho -> Editor
+      // Rascunho -> Revisão com Edição Integrada (?edit=1)
       const routeDraft = getDraftActionRoute({ id: 2, path: 'normas/doc2', locale: 'pt-br', state: 'draft' })
-      expect(routeDraft.route).toBe('/e/pt-br/normas/doc2')
+      expect(routeDraft.route).toBe('/w/review/2?edit=1')
 
       // Em revisão -> Tela de Revisão
       const routeReview = getDraftActionRoute({ id: 3, path: 'normas/doc3', locale: 'pt-br', state: 'in_review' })
@@ -222,8 +224,8 @@ describe('Etapa 3.2: Central de Tarefas (/w) e Notificador no Cabeçalho', () =>
     })
 
     it('deve retornar tarefas pendentes em pendingTasks respeitando regra dos 4 olhos', async () => {
-      // Usuário 100 (autor do draft 101): não deve ver o 101 nas suas pendências de aprovação
-      const user100 = { id: 100, name: 'Servidor Autor' }
+      // Usuário 100 (autor do draft 101, com perfil de revisor para avaliar terceiros): não deve ver o 101 nas suas pendências de aprovação
+      const user100 = { id: 100, name: 'Servidor Autor', permissions: ['read:pages', 'write:drafts', 'review:pages'] }
       const resUser100 = await workflowResolvers.DetranWorkflowQuery.pendingTasks(
         null,
         {},
@@ -232,9 +234,11 @@ describe('Etapa 3.2: Central de Tarefas (/w) e Notificador no Cabeçalho', () =>
       const idsUser100 = resUser100.map((d) => d.id)
       expect(idsUser100).not.toContain(101)
       expect(idsUser100).toContain(102)
+      // O autor do documento 103 (em changes_requested) deve ser notificado em pendingTasks
+      expect(idsUser100).toContain(103)
 
       // Usuário 200 (revisor chefe, não é autor do 101 nem do 102): vê ambos
-      const user200 = { id: 200, name: 'Revisor Chefe' }
+      const user200 = { id: 200, name: 'Revisor Chefe', permissions: ['read:pages', 'review:pages', 'approve:pages'] }
       const resUser200 = await workflowResolvers.DetranWorkflowQuery.pendingTasks(
         null,
         {},
@@ -243,6 +247,16 @@ describe('Etapa 3.2: Central de Tarefas (/w) e Notificador no Cabeçalho', () =>
       const idsUser200 = resUser200.map((d) => d.id)
       expect(idsUser200).toContain(101)
       expect(idsUser200).toContain(102)
+      // Usuário 200 não é o autor de 103, logo não vê 103 como pendência de aprovação
+      expect(idsUser200).not.toContain(103)
+
+      // Usuário Editor (sem review:pages nem approve:pages): não deve ver pendências de terceiros
+      const userEditor = { id: 300, name: 'Editor Detran', permissions: ['read:pages', 'write:pages', 'write:drafts'] }
+      const resEditor = await workflowResolvers.DetranWorkflowQuery.pendingTasks(null, {}, { user: userEditor })
+      const idsEditor = resEditor.map((d) => d.id)
+      expect(idsEditor).not.toContain(101)
+      expect(idsEditor).not.toContain(102)
+      expect(idsEditor).not.toContain(103)
     })
 
     it('deve retornar rascunhos filtrados por autor em drafts(authorId)', async () => {
@@ -257,6 +271,45 @@ describe('Etapa 3.2: Central de Tarefas (/w) e Notificador no Cabeçalho', () =>
       expect(ids).toContain(101)
       expect(ids).toContain(103)
       expect(ids).not.toContain(102)
+
+      // Testar fallback automático para o autor autenticado quando não for superadmin e sem args.authorId
+      const resSelf = await workflowResolvers.DetranWorkflowQuery.drafts(
+        null,
+        {},
+        { user: { id: 100, permissions: ['read:pages', 'write:pages'] } }
+      )
+      expect(resSelf.length).toBe(2)
+      expect(resSelf.map((d) => d.id)).toContain(101)
+    })
+
+    it('deve preencher baseContent a partir da página publicada correspondente', async () => {
+      // Inserir uma página publicada no banco
+      await db('pages').insert({
+        id: 999,
+        path: 'transito/regras',
+        localeCode: 'pt-BR',
+        title: 'Regras de Trânsito',
+        content: 'Conteúdo original publicado de referência'
+      })
+
+      // Criar rascunho vinculado à página 999
+      await DraftModel.query().insert({
+        id: 999,
+        pageId: 999,
+        path: 'transito/regras',
+        locale: 'pt-BR',
+        title: 'Regras de Trânsito Alteradas',
+        content: 'Conteúdo novo com modificações',
+        state: 'in_review',
+        approvalMode: '1_level',
+        currentLevel: 1,
+        authorId: 100
+      })
+
+      const draftResult = await workflowResolvers.DetranWorkflowQuery.draft(null, { id: 999 })
+      expect(draftResult).toBeDefined()
+      expect(draftResult.baseContent).toBe('Conteúdo original publicado de referência')
+      expect(draftResult.content).toBe('Conteúdo novo com modificações')
     })
 
     it('deve listar normativos em revisão periódica em drafts(state: "periodic_review")', async () => {
@@ -290,6 +343,60 @@ describe('Etapa 3.2: Central de Tarefas (/w) e Notificador no Cabeçalho', () =>
       const prevDate = new Date('2026-10-30T00:00:00Z').getTime()
       const newDate = new Date(res.draft.reviewDueDate).getTime()
       expect(newDate).toBeGreaterThan(prevDate)
+    })
+  })
+
+  describe('Etapa 2: Separação de Abas e Ações de Retração na Central', () => {
+    it('partitionDashboardDrafts separa pendências, documentos ativos em tramitação e histórico publicado/arquivado', () => {
+      const partitioned = partitionDashboardDrafts({
+        currentUserId: 10,
+        pendingTasks: [
+          { id: 1, state: 'changes_requested', authorId: 10 },
+          { id: 2, state: 'in_review', authorId: 10 }, // próprio documento não deve ir para Aguardando Minha Ação se estiver em revisão
+          { id: 3, state: 'in_review', authorId: 20 }
+        ],
+        myDrafts: [
+          { id: 1, state: 'changes_requested', authorId: 10, updatedAt: '2026-11-01T10:00:00Z' },
+          { id: 2, state: 'in_review', authorId: 10, updatedAt: '2026-11-02T10:00:00Z' },
+          { id: 4, state: 'draft', authorId: 10, updatedAt: '2026-11-03T10:00:00Z' },
+          { id: 5, state: 'published', authorId: 10, updatedAt: '2026-10-10T10:00:00Z' },
+          { id: 6, state: 'archived', authorId: 10, updatedAt: '2026-10-20T10:00:00Z' }
+        ],
+        expiringNorms: [
+          { id: 99, state: 'periodic_review', authorId: 30 }
+        ]
+      })
+
+      expect(partitioned.pendingTasks.map((d) => d.id)).toEqual([1, 3])
+      expect(partitioned.activeDrafts.map((d) => d.id)).toEqual([1, 2, 4])
+      expect(partitioned.historyDrafts.map((d) => d.id)).toEqual([6, 5])
+      expect(partitioned.expiringNorms.map((d) => d.id)).toEqual([99])
+    })
+
+    it('getTab2DraftActions substitui ?edit=1 por Acompanhar Revisão e Puxar de Volta quando em análise', () => {
+      const inReviewActions = getTab2DraftActions({ id: 42, state: 'in_review', path: 'teste', locale: 'pt-br' })
+      expect(inReviewActions.canEdit).toBe(false)
+      expect(inReviewActions.editRoute).toBeNull()
+      expect(inReviewActions.canRetract).toBe(true)
+      expect(inReviewActions.retractLabel).toBe('Puxar de Volta para Edição')
+      expect(inReviewActions.canTrack).toBe(true)
+      expect(inReviewActions.trackRoute).toBe('/review/42')
+      expect(inReviewActions.trackRoute).not.toContain('edit=1')
+
+      const awaitingActions = getTab2DraftActions({ id: 43, state: 'awaiting_approval', path: 'teste', locale: 'pt-br' })
+      expect(awaitingActions.canEdit).toBe(false)
+      expect(awaitingActions.canRetract).toBe(true)
+
+      const draftActions = getTab2DraftActions({ id: 44, state: 'draft', path: 'teste', locale: 'pt-br' })
+      expect(draftActions.canEdit).toBe(true)
+      expect(draftActions.editRoute).toBe('/review/44?edit=1')
+      expect(draftActions.canRetract).toBe(false)
+
+      const changesActions = getTab2DraftActions({ id: 45, state: 'changes_requested', path: 'teste', locale: 'pt-br' })
+      expect(changesActions.canEdit).toBe(true)
+      expect(changesActions.editRoute).toBe('/review/45?edit=1')
+      expect(changesActions.editLabel).toBe('Editar e Corrigir')
+      expect(changesActions.canRetract).toBe(false)
     })
   })
 })

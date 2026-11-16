@@ -72,7 +72,7 @@
 
         //- Rodapé Institucional
         .detran-feedback-footer
-          span Governo do Estado de Minas Gerais • Departamento de Trânsito
+          span Governo do Estado de Minas Gerais • Departamento de Trânsito • Coordenadoria de Inovação
 
       //- Componente de resultados globais de busca
       search-results

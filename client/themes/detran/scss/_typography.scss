@@ -11,7 +11,8 @@
 // para SCSS puro (linhas 429-447 do protótipo).
 // =============================================================================
 
-.detran-contents {
+.detran-contents,
+.transparent-editor-shell {
   font-family: $font-family-base;
   font-size: $font-size-base;
   line-height: $line-height-base;
@@ -447,35 +448,43 @@
   }
 
   // Info (Azul)
-  .is-info {
-    background-color: #eff6ff;
-    border-left: 4px solid $color-info;
+  .is-info,
+  blockquote.is-info {
+    background-color: #eff6ff !important;
+    border-left: 4px solid $color-info !important;
     &::before { content: '\F02FD'; color: $color-info; } // mdi-information
     strong { color: #1d4ed8; }
+    p { margin-bottom: 0 !important; }
   }
 
   // Warning (Laranja/Âmbar)
-  .is-warning {
-    background-color: #fffbeb;
-    border-left: 4px solid $color-warning;
+  .is-warning,
+  blockquote.is-warning {
+    background-color: #fffbeb !important;
+    border-left: 4px solid $color-warning !important;
     &::before { content: '\F0026'; color: $color-warning; } // mdi-alert
     strong { color: #b45309; }
+    p { margin-bottom: 0 !important; }
   }
 
   // Danger (Vermelho)
-  .is-danger {
-    background-color: #fef2f2;
-    border-left: 4px solid $color-error;
+  .is-danger,
+  blockquote.is-danger {
+    background-color: #fef2f2 !important;
+    border-left: 4px solid $color-error !important;
     &::before { content: '\F028C'; color: $color-error; } // mdi-alert-circle
     strong { color: #b91c1c; }
+    p { margin-bottom: 0 !important; }
   }
 
   // Success (Verde Detran)
-  .is-success {
-    background-color: $detran-50;
-    border-left: 4px solid $detran-500;
+  .is-success,
+  blockquote.is-success {
+    background-color: $detran-50 !important;
+    border-left: 4px solid $detran-500 !important;
     &::before { content: '\F05E0'; color: $detran-500; } // mdi-check-circle
     strong { color: $detran-700; }
+    p { margin-bottom: 0 !important; }
   }
 
   // ---------------------------------------------------------------------------

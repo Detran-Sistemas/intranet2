@@ -4,8 +4,10 @@
       template(v-if='footerOverride')
         span(v-html='footerOverrideRender + ` |&nbsp;`')
       template(v-else-if='company && company.length > 0 && contentLicense !== ``')
-        span(v-if='contentLicense === `alr`') {{ $t('common:footer.copyright', { company: company, year: currentYear, interpolation: { escapeValue: false } }) }} |&nbsp;
-        span(v-else) {{ $t('common:footer.license', { company: company, license: $t('common:license.' + contentLicense), interpolation: { escapeValue: false } }) }} |&nbsp;
+        span(v-if='contentLicense === `alr`') {{ $t('common:footer.copyright', { company: company, year: currentYear, interpolation: { escapeValue: false } }) }} • Coordenadoria de Inovação |&nbsp;
+        span(v-else) {{ $t('common:footer.license', { company: company, license: $t('common:license.' + contentLicense), interpolation: { escapeValue: false } }) }} • Coordenadoria de Inovação |&nbsp;
+      template(v-else)
+        span © {{ currentYear }} Detran-MG • Coordenadoria de Inovação |&nbsp;
       span {{ $t('common:footer.poweredBy') }} #[a(href='https://wiki.js.org', ref='nofollow') Wiki.js]
 </template>
 

@@ -1,4 +1,4 @@
-import { parseMarkdown, serializeBlocks, slugify } from './markdown-blocks'
+import { parseMarkdown, serializeBlocks, slugify, inlineHtmlToMarkdown } from './markdown-blocks'
 
 export const SLASH_MENU_ITEMS = [
   {
@@ -127,6 +127,81 @@ export function deleteBlockAt (blocks = [], index) {
 }
 
 /**
+ * Remove um bloco pelo índice ou limpa o bloco restante para parágrafo vazio quando for o único.
+ */
+export function clearOrDeleteBlockAt (blocks = [], index) {
+  if (!Array.isArray(blocks) || blocks.length === 0 || index < 0 || index >= blocks.length) {
+    return {
+      blocks: Array.isArray(blocks) ? [...blocks] : [],
+      deleted: false,
+      focusIndex: 0
+    }
+  }
+  if (blocks.length === 1) {
+    const current = blocks[0]
+    const isAlreadyEmptyParagraph = current.type === 'paragraph' && !String(current.text || '').trim()
+    if (isAlreadyEmptyParagraph) {
+      return {
+        blocks: [...blocks],
+        deleted: false,
+        focusIndex: 0
+      }
+    }
+    return {
+      blocks: [{
+        id: current.id || 'blk-0',
+        type: 'paragraph',
+        text: ''
+      }],
+      deleted: true,
+      focusIndex: 0
+    }
+  }
+  const next = [...blocks]
+  next.splice(index, 1)
+  return {
+    blocks: next,
+    deleted: true,
+    focusIndex: Math.min(Math.max(0, index - 1), next.length - 1)
+  }
+}
+
+/**
+ * Reordena um bloco movendo-o da posição fromIndex para toIndex.
+ */
+export function reorderBlocks (blocks = [], fromIndex, toIndex) {
+  if (!Array.isArray(blocks) || blocks.length <= 1) {
+    return {
+      blocks: Array.isArray(blocks) ? [...blocks] : [],
+      moved: false
+    }
+  }
+  const from = Number(fromIndex)
+  const to = Number(toIndex)
+  if (
+    !Number.isInteger(from) ||
+    !Number.isInteger(to) ||
+    from < 0 ||
+    from >= blocks.length ||
+    to < 0 ||
+    to >= blocks.length ||
+    from === to
+  ) {
+    return {
+      blocks: [...blocks],
+      moved: false
+    }
+  }
+  const next = [...blocks]
+  const [movedItem] = next.splice(from, 1)
+  next.splice(to, 0, movedItem)
+  return {
+    blocks: next,
+    moved: true
+  }
+}
+
+/**
  * Transforma um bloco de acordo com o comando selecionado no menu "/" ou barra flutuante.
  */
 export function applySlashCommandToBlock (block = {}, type = 'paragraph') {
@@ -250,27 +325,105 @@ export function detectSlashTrigger (text = '') {
 }
 
 /**
- * Calcula posição segura na tela para o menu "/" evitando corte nas bordas da janela.
+ * Obtém o retângulo âncora exato do cursor (caret) dentro de um elemento editável
+ * para posicionar o menu "/" na linha ativa, com fallback para o retângulo do bloco.
+ */
+export function getCaretTriggerRect (el, win = (typeof window !== 'undefined' ? window : null)) {
+  const fallback = el && typeof el.getBoundingClientRect === 'function' ?
+    el.getBoundingClientRect() :
+    { top: 0, left: 0, bottom: 0, width: 0, height: 0 }
+
+  if (!win || typeof win.getSelection !== 'function') {
+    return fallback
+  }
+
+  try {
+    const sel = win.getSelection()
+    if (!sel || sel.rangeCount < 1) {
+      return fallback
+    }
+    const range = sel.getRangeAt(0)
+    if (!range) {
+      return fallback
+    }
+    if (el && typeof el.contains === 'function' && range.startContainer && !el.contains(range.startContainer)) {
+      return fallback
+    }
+
+    const clientRects = typeof range.getClientRects === 'function' ? range.getClientRects() : null
+    const rawRect = (clientRects && clientRects.length > 0 && clientRects[0]) ||
+      (typeof range.getBoundingClientRect === 'function' ? range.getBoundingClientRect() : null)
+
+    if (rawRect && (rawRect.height > 0 || rawRect.width > 0 || rawRect.top > 0 || rawRect.left > 0)) {
+      return {
+        top: rawRect.top,
+        left: rawRect.left,
+        bottom: rawRect.bottom || (rawRect.top + (rawRect.height || 20)),
+        width: rawRect.width || 0,
+        height: rawRect.height || 20
+      }
+    }
+
+    if (range.startContainer && range.startContainer.nodeType === 3 && range.startOffset > 0 && typeof range.cloneRange === 'function') {
+      const charRange = range.cloneRange()
+      charRange.setStart(range.startContainer, range.startOffset - 1)
+      charRange.setEnd(range.startContainer, range.startOffset)
+      const charRect = charRange.getBoundingClientRect()
+      if (charRect && (charRect.height > 0 || charRect.top > 0 || charRect.left > 0)) {
+        return {
+          top: charRect.top,
+          left: charRect.right || charRect.left,
+          bottom: charRect.bottom || (charRect.top + (charRect.height || 20)),
+          width: charRect.width || 0,
+          height: charRect.height || 20
+        }
+      }
+    }
+  } catch (err) {}
+
+  return fallback
+}
+
+/**
+ * Calcula posição segura na tela para o menu "/" evitando corte nas bordas da janela
+ * e invertendo para cima do cursor quando próximo ao rodapé para não cobrir a linha digitada.
  */
 export function computeSlashMenuPosition (position = { top: 0, left: 0 }, viewport = { width: 1024, height: 768 }) {
-  const maxTop = Math.max(16, (viewport.height || 768) - 320)
-  const maxLeft = Math.max(16, (viewport.width || 1024) - 300)
+  const vpHeight = viewport.height || 768
+  const vpWidth = viewport.width || 1024
+  const caretTop = position.top || 0
+  const maxTop = Math.max(16, vpHeight - 320)
+  const maxLeft = Math.max(16, vpWidth - 300)
+  const belowTop = caretTop + 28
+  const shouldFlipAbove = vpHeight >= 400 && belowTop > maxTop && caretTop >= 320
+  const finalTop = shouldFlipAbove ? Math.max(16, caretTop - 310) : Math.min(belowTop, maxTop)
+
   return {
     position: 'fixed',
-    top: `${Math.min((position.top || 0) + 28, maxTop)}px`,
+    top: `${finalTop}px`,
     left: `${Math.min(position.left || 0, maxLeft)}px`,
     zIndex: 9999
   }
 }
 
 /**
- * Calcula posição segura na tela para a barra flutuante de formatação.
+ * Calcula posição segura na tela para a barra flutuante de formatação,
+ * invertendo para baixo da seleção quando próximo ao topo.
  */
-export function computeFloatingToolbarPosition (position = { top: 0, left: 0 }) {
+export function computeFloatingToolbarPosition (position = { top: 0, left: 0 }, viewport = { width: 1024, height: 768 }) {
+  const vpWidth = (typeof window !== 'undefined' ? window.innerWidth : viewport.width) || 1024
+  const vpHeight = (typeof window !== 'undefined' ? window.innerHeight : viewport.height) || 768
+  const maxLeft = Math.max(16, vpWidth - 340)
+  const rawTop = position.top || 0
+  const shouldFlipBelow = rawTop < 58 && typeof position.bottom === 'number'
+  const finalTop = shouldFlipBelow ?
+    Math.min(position.bottom + 8, Math.max(12, vpHeight - 56)) :
+    Math.max(rawTop - 46, 12)
+
   return {
     position: 'fixed',
-    top: `${Math.max((position.top || 0) - 46, 12)}px`,
-    left: `${Math.max(position.left || 0, 16)}px`,
+    top: `${finalTop}px`,
+    left: `${Math.min(Math.max(position.left || 0, 16), maxLeft)}px`,
     zIndex: 9999
   }
 }
@@ -388,7 +541,17 @@ export async function loadTransparentPageSource ({
     return {
       markdown: activeDraft.content,
       draftId: activeDraft.id,
+      draftState: activeDraft.state || 'draft',
       source: 'draft'
+    }
+  }
+
+  if (!pageId) {
+    return {
+      markdown: (activeDraft && typeof activeDraft.content === 'string') ? activeDraft.content : '',
+      draftId: activeDraft ? activeDraft.id : null,
+      draftState: activeDraft ? (activeDraft.state || 'draft') : null,
+      source: activeDraft ? 'draft' : 'page'
     }
   }
 
@@ -406,7 +569,8 @@ export async function loadTransparentPageSource ({
 
   return {
     markdown: pageContent,
-    draftId: null,
+    draftId: activeDraft ? activeDraft.id : null,
+    draftState: activeDraft ? (activeDraft.state || 'draft') : null,
     source: 'page'
   }
 }
@@ -456,8 +620,10 @@ export async function saveTransparentDraft ({
     res.data.workflow.saveDraft
 
   const draft = saveDraftResult && saveDraftResult.draft
+  const responseResult = saveDraftResult && saveDraftResult.responseResult
   return {
-    succeeded: Boolean(saveDraftResult && saveDraftResult.responseResult && saveDraftResult.responseResult.succeeded),
+    succeeded: Boolean(responseResult && responseResult.succeeded),
+    message: (responseResult && responseResult.message) || '',
     draftId: draft && draft.id ? draft.id : activeDraftId,
     draft: draft || null
   }
@@ -497,5 +663,279 @@ export async function submitTransparentValidation ({
     succeeded: Boolean(result && result.succeeded),
     message: (result && result.message) || '',
     draft: (submitData && submitData.draft) || null
+  }
+}
+
+/**
+ * Transforma um bloco em cabeçalho com o nível informado (1..6).
+ */
+export function transformBlockHeading (block = {}, level = 2) {
+  const clean = String(block.text || '').trim()
+  const lvl = Math.max(1, Math.min(6, parseInt(level, 10) || 2))
+  return {
+    ...block,
+    type: 'heading',
+    level: lvl,
+    anchor: slugify(clean),
+    text: clean
+  }
+}
+
+/**
+ * Transforma um bloco de volta em parágrafo normal.
+ */
+export function transformBlockParagraph (block = {}) {
+  const clean = String(block.text || '').trim()
+  const { level, anchor, variant, ...rest } = block
+  return {
+    ...rest,
+    type: 'paragraph',
+    text: clean
+  }
+}
+
+/**
+ * Detecta e aplica gatilhos Markdown digitados no início do bloco (#, ##, ###, -, *, 1., >).
+ */
+export function handleMarkdownPrefixTrigger (text = '', currentBlock = {}) {
+  const raw = String(text || '')
+
+  // Callout HTML completo (<div class="is-info">...</div>)
+  const htmlCallout = raw.match(/^\s*<(div|blockquote)\s+[^>]*class=["'][^"']*\bis-(info|success|warning|danger)\b[^"']*["'][^>]*>([\s\S]*?)<\/\1>\s*$/i)
+  if (htmlCallout) {
+    return {
+      triggered: true,
+      block: {
+        ...currentBlock,
+        type: 'callout',
+        variant: htmlCallout[2].toLowerCase(),
+        text: inlineHtmlToMarkdown(htmlCallout[3]).trim()
+      }
+    }
+  }
+
+  // Diretiva de Callout (> [!info] texto ou [!warning] texto)
+  const alertDirective = raw.match(/^(?:>\s*)?\[!(info|success|warning|danger|note|tip|important|caution)\]\s+(.*)$/i)
+  if (alertDirective) {
+    const rawVar = alertDirective[1].toLowerCase()
+    const variantMap = {
+      info: 'info',
+      note: 'info',
+      success: 'success',
+      tip: 'success',
+      warning: 'warning',
+      important: 'warning',
+      danger: 'danger',
+      caution: 'danger'
+    }
+    return {
+      triggered: true,
+      block: {
+        ...currentBlock,
+        type: 'callout',
+        variant: variantMap[rawVar] || 'info',
+        text: alertDirective[2]
+      }
+    }
+  }
+
+  // Sufixo {.is-info|success|warning|danger} digitado ao final do bloco
+  const classSuffix = raw.match(/^([\s\S]*?)\s*\{\.is-(info|success|warning|danger)\}\s*$/i)
+  if (classSuffix) {
+    const bodyText = classSuffix[1].replace(/^>\s?/, '').trim()
+    return {
+      triggered: true,
+      block: {
+        ...currentBlock,
+        type: 'callout',
+        variant: classSuffix[2].toLowerCase(),
+        text: bodyText
+      }
+    }
+  }
+
+  // ###### .. # Headings (1 a 6)
+  const headingMatch = raw.match(/^(#{1,6})\s+(.*)$/)
+  if (headingMatch) {
+    const level = headingMatch[1].length
+    const remaining = headingMatch[2]
+    return {
+      triggered: true,
+      block: transformBlockHeading({ ...currentBlock, text: remaining }, level)
+    }
+  }
+
+  // Bloco de código com crase ou til (```js , ``` , ~~~python )
+  const codeFenceMatch = raw.match(/^(```|~~~)([a-zA-Z0-9_-]*)\s$/)
+  if (codeFenceMatch) {
+    const fence = codeFenceMatch[1]
+    const lang = codeFenceMatch[2] || ''
+    return {
+      triggered: true,
+      block: {
+        ...currentBlock,
+        type: 'raw',
+        text: `${fence}${lang}\n\n${fence}`
+      }
+    }
+  }
+
+  // Checklist direta ([ ] tarefa ou [x] tarefa)
+  const taskPrefixMatch = raw.match(/^\[([ xX])\]\s(.*)$/)
+  if (taskPrefixMatch) {
+    const mark = taskPrefixMatch[1].toLowerCase() === 'x' ? 'x' : ' '
+    return {
+      triggered: true,
+      block: {
+        ...currentBlock,
+        type: 'raw',
+        text: `- [${mark}] ${taskPrefixMatch[2]}`
+      }
+    }
+  }
+
+  // Lista com Marcadores (- ou *)
+  if (raw.startsWith('- ') || raw.startsWith('* ')) {
+    return {
+      triggered: true,
+      block: {
+        ...currentBlock,
+        type: 'raw',
+        text: '- ' + raw.slice(2)
+      }
+    }
+  }
+  // Lista Numerada (1. )
+  if (/^\d+\.\s/.test(raw)) {
+    return {
+      triggered: true,
+      block: {
+        ...currentBlock,
+        type: 'raw',
+        text: raw
+      }
+    }
+  }
+  // Bloco de Destaque / Citação (> )
+  if (raw.startsWith('> ')) {
+    const remaining = raw.slice(2)
+    return {
+      triggered: true,
+      block: {
+        ...currentBlock,
+        type: 'callout',
+        variant: 'info',
+        text: remaining
+      }
+    }
+  }
+
+  return { triggered: false }
+}
+
+/**
+ * Registra um novo snapshot no histórico de blocos.
+ */
+export function pushHistorySnapshot (stack = [], currentIndex = -1, blocks = [], maxDepth = 30) {
+  const clone = JSON.parse(JSON.stringify(blocks || []))
+  const newStack = (Array.isArray(stack) ? stack : []).slice(0, currentIndex + 1)
+  newStack.push(clone)
+  if (newStack.length > maxDepth) {
+    newStack.shift()
+  }
+  return {
+    historyStack: newStack,
+    historyIndex: newStack.length - 1
+  }
+}
+
+/**
+ * Desfaz para o snapshot anterior da pilha de histórico.
+ */
+export function undoHistory (stack = [], currentIndex = 0) {
+  if (!Array.isArray(stack) || currentIndex <= 0 || !stack[currentIndex - 1]) {
+    return { canUndo: false, blocks: null, newIndex: currentIndex }
+  }
+  const newIndex = currentIndex - 1
+  return {
+    canUndo: true,
+    blocks: JSON.parse(JSON.stringify(stack[newIndex])),
+    newIndex
+  }
+}
+
+/**
+ * Refaz para o próximo snapshot da pilha de histórico.
+ */
+export function redoHistory (stack = [], currentIndex = -1) {
+  if (!Array.isArray(stack) || currentIndex >= stack.length - 1 || !stack[currentIndex + 1]) {
+    return { canRedo: false, blocks: null, newIndex: currentIndex }
+  }
+  const newIndex = currentIndex + 1
+  return {
+    canRedo: true,
+    blocks: JSON.parse(JSON.stringify(stack[newIndex])),
+    newIndex
+  }
+}
+
+/**
+ * Calcula estado de recolhimento da barra de pesquisa global durante scroll.
+ * Acumula deslocamento direcional para suportar scroll suave (incrementos de 1-4px/frame).
+ */
+export function computeSearchCollapseOnScroll ({
+  currentY = 0,
+  lastScrollY = 0,
+  downDistance = 0,
+  upDistance = 0,
+  isCollapsed = false,
+  isFocused = false,
+  hasQuery = false
+} = {}) {
+  const y = Math.max(0, Number(currentY) || 0)
+  const prevY = Math.max(0, Number(lastScrollY) || 0)
+
+  if (isFocused || hasQuery) {
+    return {
+      isCollapsed,
+      lastScrollY: y,
+      downDistance: 0,
+      upDistance: 0
+    }
+  }
+
+  if (y <= 24) {
+    return {
+      isCollapsed: false,
+      lastScrollY: y,
+      downDistance: 0,
+      upDistance: 0
+    }
+  }
+
+  let nextCollapsed = Boolean(isCollapsed)
+  let nextDown = Math.max(0, Number(downDistance) || 0)
+  let nextUp = Math.max(0, Number(upDistance) || 0)
+  const delta = y - prevY
+
+  if (delta > 0) {
+    nextDown += delta
+    nextUp = 0
+    if (y > 40 && nextDown >= 10) {
+      nextCollapsed = true
+    }
+  } else if (delta < 0) {
+    nextUp += Math.abs(delta)
+    nextDown = 0
+    if (nextUp >= 18) {
+      nextCollapsed = false
+    }
+  }
+
+  return {
+    isCollapsed: nextCollapsed,
+    lastScrollY: y,
+    downDistance: nextDown,
+    upDistance: nextUp
   }
 }

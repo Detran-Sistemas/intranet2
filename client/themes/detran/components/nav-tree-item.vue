@@ -358,6 +358,8 @@ export default {
 </script>
 
 <style lang="scss">
+@import '../scss/variables';
+
 .detran-tree-node {
   display: block;
   width: 100%;
@@ -388,6 +390,24 @@ export default {
   font-weight: 500;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 
+  @include v-compact {
+    padding: 4px 6px;
+    font-size: 0.78rem;
+    border-radius: 6px;
+  }
+
+  @include v-short {
+    padding: 3px 5px;
+    font-size: 0.73rem;
+    gap: 4px;
+  }
+
+  @include v-tiny {
+    padding: 2px 4px;
+    font-size: 0.68rem;
+    gap: 3px;
+  }
+
   &:hover {
     background: rgba(255, 255, 255, 0.09);
     color: #ffffff;
@@ -405,6 +425,15 @@ export default {
   transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s ease !important;
   flex-shrink: 0;
 
+  @include v-short {
+    width: 14px !important;
+    height: 14px !important;
+  }
+  @include v-tiny {
+    width: 12px !important;
+    height: 12px !important;
+  }
+
   &.is-expanded {
     transform: rotate(90deg) !important;
     color: rgba(255, 255, 255, 0.95) !important;
@@ -416,6 +445,15 @@ export default {
   height: 16px;
   flex-shrink: 0;
   display: inline-block;
+
+  @include v-short {
+    width: 14px;
+    height: 14px;
+  }
+  @include v-tiny {
+    width: 12px;
+    height: 12px;
+  }
 }
 
 .detran-tree__folder-icon {
@@ -423,6 +461,15 @@ export default {
   height: 18px !important;
   flex-shrink: 0;
   transition: transform 0.2s ease !important;
+
+  @include v-short {
+    width: 15px !important;
+    height: 15px !important;
+  }
+  @include v-tiny {
+    width: 13px !important;
+    height: 13px !important;
+  }
 }
 
 .detran-tree__folder-title {
@@ -484,6 +531,24 @@ export default {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   border: 1px solid transparent;
 
+  @include v-compact {
+    padding: 4px 6px;
+    font-size: 0.78rem;
+    border-radius: 6px;
+  }
+
+  @include v-short {
+    padding: 3px 5px;
+    font-size: 0.73rem;
+    gap: 4px;
+  }
+
+  @include v-tiny {
+    padding: 2px 4px;
+    font-size: 0.68rem;
+    gap: 3px;
+  }
+
   &:hover {
     background: rgba(255, 255, 255, 0.09);
     color: #ffffff !important;
@@ -517,6 +582,15 @@ export default {
   height: 18px !important;
   flex-shrink: 0;
   transition: transform 0.2s ease, color 0.2s ease !important;
+
+  @include v-short {
+    width: 15px !important;
+    height: 15px !important;
+  }
+  @include v-tiny {
+    width: 13px !important;
+    height: 13px !important;
+  }
 }
 
 .detran-tree__page-title {
@@ -539,6 +613,22 @@ export default {
   gap: 2px;
   will-change: height, opacity;
   transition: border-color 0.2s ease;
+
+  @include v-compact {
+    margin-left: 12px;
+    padding-left: 6px;
+    gap: 1px;
+  }
+  @include v-short {
+    margin-left: 10px;
+    padding-left: 5px;
+    gap: 1px;
+  }
+  @include v-tiny {
+    margin-left: 8px;
+    padding-left: 4px;
+    gap: 0;
+  }
 
   &:hover {
     border-left-color: rgba(255, 255, 255, 0.24);

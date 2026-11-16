@@ -2,6 +2,7 @@
 .transparent-editor-shell.detran-contents.contents
   //- Barra Flutuante de Seleção
   floating-toolbar(
+    ref='floatingToolbar'
     :visible='toolbarVisible'
     :position='toolbarPosition'
     @transform='transformActiveBlock'
@@ -34,12 +35,18 @@
       :key='block.id || bIdx'
       :block='block'
       :index='bIdx'
+      :dragging-index='draggingBlockIndex'
       ref='blockItems'
       @update-block='onUpdateBlock'
       @insert-below='onInsertBelow'
       @delete-block='onDeleteBlock'
       @slash-command='onSlashTriggered'
       @smart-paste='onSmartPaste'
+      @transform-block='onTransformBlock'
+      @open-link-popover='onOpenLinkPopover'
+      @drag-start='onBlockDragStart'
+      @drop-block='onBlockDrop'
+      @drag-end='onBlockDragEnd'
     )
 
   //- Linha para Adicionar Novo Bloco Rapidamente (Fiel ao Protótipo: linhas 488-491)
@@ -78,10 +85,16 @@ import {
   initEditorBlocks,
   updateBlockAt,
   insertBlockBelow,
-  deleteBlockAt,
+  clearOrDeleteBlockAt,
+  reorderBlocks,
   applySlashCommandToBlock,
   insertMediaBlock,
-  buildEditorChangePayload
+  buildEditorChangePayload,
+  transformBlockHeading,
+  transformBlockParagraph,
+  pushHistorySnapshot,
+  undoHistory,
+  redoHistory
 } from './utils/editor-controller'
 import { processSmartPastePayload } from './utils/smart-paste'
 
@@ -114,6 +127,10 @@ export default {
   data () {
     return {
       blocks: [],
+      historyStack: [],
+      historyIndex: -1,
+      isApplyingHistory: false,
+      draggingBlockIndex: null,
       slashMenuVisible: false,
       slashMenuPosition: { top: 0, left: 0 },
       slashBlockIndex: null,
@@ -145,9 +162,11 @@ export default {
   },
   mounted () {
     document.addEventListener('selectionchange', this.onSelectionChange)
+    window.addEventListener('keydown', this.onGlobalKeydown)
   },
   beforeDestroy () {
     document.removeEventListener('selectionchange', this.onSelectionChange)
+    window.removeEventListener('keydown', this.onGlobalKeydown)
     if (this.debounceTimer) clearTimeout(this.debounceTimer)
     if (this.smartPasteToast.timer) clearTimeout(this.smartPasteToast.timer)
   },
@@ -155,10 +174,40 @@ export default {
     initBlocks (md) {
       this.lastEmittedMarkdown = md || ''
       this.blocks = initEditorBlocks(md || '', `${Date.now()}`)
+      this.historyStack = [JSON.parse(JSON.stringify(this.blocks))]
+      this.historyIndex = 0
+    },
+    getScrollContainer () {
+      return this.$el && this.$el.closest ? this.$el.closest('.detran-content') : null
+    },
+    getBlockComponentByIndex (targetIndex) {
+      const targetBlock = this.blocks[targetIndex]
+      if (!Array.isArray(this.$refs.blockItems)) return null
+      if (targetBlock && targetBlock.id) {
+        const byId = this.$refs.blockItems.find(c => c && c.block && c.block.id === targetBlock.id)
+        if (byId) return byId
+      }
+      return this.$refs.blockItems.find(c => c && c.index === targetIndex) || null
+    },
+    recordHistory () {
+      if (this.isApplyingHistory) return
+      const res = pushHistorySnapshot(this.historyStack, this.historyIndex, this.blocks)
+      this.historyStack = res.historyStack
+      this.historyIndex = res.historyIndex
     },
     onUpdateBlock ({ index, block }) {
+      const scrollContainer = this.getScrollContainer()
+      const savedTop = scrollContainer ? scrollContainer.scrollTop : null
       this.blocks = updateBlockAt(this.blocks, index, block)
+      this.recordHistory()
       this.triggerChange()
+      if (scrollContainer !== null && savedTop !== null) {
+        this.$nextTick(() => {
+          if (Math.abs(scrollContainer.scrollTop - savedTop) > 20 && !this.isApplyingHistory) {
+            scrollContainer.scrollTop = savedTop
+          }
+        })
+      }
     },
     onInsertBelow (index) {
       const { blocks, insertedIndex } = insertBlockBelow(
@@ -167,24 +216,71 @@ export default {
         `${Date.now()}-${Math.random()}`
       )
       this.blocks = blocks
+      this.recordHistory()
       this.triggerChange()
 
       this.$nextTick(() => {
-        const item = this.$refs.blockItems && this.$refs.blockItems[insertedIndex]
+        const item = this.getBlockComponentByIndex(insertedIndex)
         if (item) item.focus()
       })
     },
     onDeleteBlock (index) {
-      const { blocks, deleted, focusIndex } = deleteBlockAt(this.blocks, index)
+      const scrollContainer = this.getScrollContainer()
+      const savedTop = scrollContainer ? scrollContainer.scrollTop : null
+      const { blocks, deleted, focusIndex } = clearOrDeleteBlockAt(this.blocks, index)
       if (deleted) {
         this.blocks = blocks
+        this.recordHistory()
         this.triggerChange()
 
         this.$nextTick(() => {
-          const prevItem = this.$refs.blockItems && this.$refs.blockItems[focusIndex]
-          if (prevItem) prevItem.focus()
+          const targetItem = this.getBlockComponentByIndex(focusIndex)
+          if (targetItem) {
+            if (typeof targetItem.syncEditableDom === 'function') {
+              targetItem.syncEditableDom()
+            }
+            targetItem.focus({ caretAtEnd: true })
+          }
+          if (scrollContainer !== null && savedTop !== null) {
+            const maxTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight)
+            scrollContainer.scrollTop = Math.min(savedTop, maxTop)
+          }
         })
       }
+    },
+    onBlockDragStart (index) {
+      this.draggingBlockIndex = index
+    },
+    onBlockDragEnd () {
+      this.draggingBlockIndex = null
+    },
+    onBlockDrop ({ fromIndex, targetIndex, position }) {
+      this.draggingBlockIndex = null
+      let toIndex = targetIndex
+      if (fromIndex < targetIndex) {
+        toIndex = position === 'top' ? targetIndex - 1 : targetIndex
+      } else if (fromIndex > targetIndex) {
+        toIndex = position === 'top' ? targetIndex : targetIndex + 1
+      }
+      const { blocks, moved } = reorderBlocks(this.blocks, fromIndex, toIndex)
+      if (!moved) return
+      const scrollContainer = this.getScrollContainer()
+      const savedTop = scrollContainer ? scrollContainer.scrollTop : null
+      this.blocks = blocks
+      this.recordHistory()
+      this.triggerChange()
+      this.$nextTick(() => {
+        if (Array.isArray(this.$refs.blockItems)) {
+          this.$refs.blockItems.forEach(item => {
+            if (item && typeof item.syncEditableDom === 'function') {
+              item.syncEditableDom()
+            }
+          })
+        }
+        if (scrollContainer !== null && savedTop !== null) {
+          scrollContainer.scrollTop = savedTop
+        }
+      })
     },
     appendNewParagraph () {
       this.onInsertBelow(this.blocks.length - 1)
@@ -210,10 +306,11 @@ export default {
       }
 
       this.slashMenuVisible = false
+      this.recordHistory()
       this.triggerChange()
 
       this.$nextTick(() => {
-        const item = this.$refs.blockItems && this.$refs.blockItems[index]
+        const item = this.getBlockComponentByIndex(index)
         if (item) item.focus()
       })
     },
@@ -226,6 +323,7 @@ export default {
         `${Date.now()}-${Math.random()}`
       )
       this.blocks = blocks
+      this.recordHistory()
       this.triggerChange()
     },
     async onSmartPaste ({ index, event }) {
@@ -307,6 +405,7 @@ export default {
           })
         }
 
+        this.recordHistory()
         this.triggerChange()
 
         if (result.origin === 'image') {
@@ -345,6 +444,7 @@ export default {
       this.blocks = restored
       this.prePasteSnapshot = null
       this.smartPasteToast.visible = false
+      this.recordHistory()
       this.$nextTick(() => {
         if (Array.isArray(this.$refs.blockItems)) {
           this.$refs.blockItems.forEach(item => {
@@ -385,6 +485,7 @@ export default {
       const rect = range.getBoundingClientRect()
       this.toolbarPosition = {
         top: rect.top,
+        bottom: rect.bottom,
         left: rect.left
       }
       this.toolbarVisible = true
@@ -400,7 +501,7 @@ export default {
       const blockEls = Array.from(this.$el.querySelectorAll('.notion-block'))
       const idx = blockEls.indexOf(blockEl)
 
-      if (idx !== -1) {
+      if (idx !== -1 && this.blocks[idx] && this.blocks[idx].type !== 'raw') {
         this.slashBlockIndex = idx
         this.applySlashCommand(type)
       }
@@ -416,9 +517,130 @@ export default {
       }
       this.triggerChange()
     },
+    handleUndo () {
+      const res = undoHistory(this.historyStack, this.historyIndex)
+      if (!res.canUndo || !res.blocks) return
+      const scrollContainer = this.getScrollContainer()
+      const savedTop = scrollContainer ? scrollContainer.scrollTop : null
+      this.historyIndex = res.newIndex
+      this.isApplyingHistory = true
+      this.blocks = res.blocks
+      this.$nextTick(() => {
+        if (Array.isArray(this.$refs.blockItems)) {
+          this.$refs.blockItems.forEach(item => {
+            if (item && typeof item.syncEditableDom === 'function') {
+              item.syncEditableDom()
+            }
+          })
+        }
+        this.isApplyingHistory = false
+        this.triggerChange()
+        if (scrollContainer !== null && savedTop !== null) {
+          scrollContainer.scrollTop = Math.min(savedTop, Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight))
+        }
+      })
+    },
+    handleRedo () {
+      const res = redoHistory(this.historyStack, this.historyIndex)
+      if (!res.canRedo || !res.blocks) return
+      const scrollContainer = this.getScrollContainer()
+      const savedTop = scrollContainer ? scrollContainer.scrollTop : null
+      this.historyIndex = res.newIndex
+      this.isApplyingHistory = true
+      this.blocks = res.blocks
+      this.$nextTick(() => {
+        if (Array.isArray(this.$refs.blockItems)) {
+          this.$refs.blockItems.forEach(item => {
+            if (item && typeof item.syncEditableDom === 'function') {
+              item.syncEditableDom()
+            }
+          })
+        }
+        this.isApplyingHistory = false
+        this.triggerChange()
+        if (scrollContainer !== null && savedTop !== null) {
+          scrollContainer.scrollTop = Math.min(savedTop, Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight))
+        }
+      })
+    },
+    handleManualSave () {
+      clearTimeout(this.debounceTimer)
+      const payload = buildEditorChangePayload(this.blocks)
+      this.lastEmittedMarkdown = payload.markdown
+      /* eslint-disable-next-line vue/custom-event-name-casing */
+      this.$emit('change', payload)
+      /* eslint-disable-next-line vue/custom-event-name-casing */
+      this.$emit('save-draft', payload)
+    },
+    onTransformBlock ({ index, type, level }) {
+      if (index === null || !this.blocks[index]) return
+      const targetBlock = this.blocks[index]
+      let transformed = targetBlock
+      if (type === 'heading') {
+        transformed = transformBlockHeading(targetBlock, level || 2)
+      } else if (type === 'paragraph') {
+        transformed = transformBlockParagraph(targetBlock)
+      }
+      this.blocks = updateBlockAt(this.blocks, index, transformed)
+      this.recordHistory()
+      this.triggerChange()
+      this.$nextTick(() => {
+        const item = this.getBlockComponentByIndex(index)
+        if (item) {
+          if (typeof item.syncEditableDom === 'function') item.syncEditableDom()
+          item.focus()
+        }
+      })
+    },
+    onOpenLinkPopover () {
+      if (this.$refs.floatingToolbar && typeof this.$refs.floatingToolbar.openLinkInput === 'function') {
+        this.toolbarVisible = true
+        this.$refs.floatingToolbar.openLinkInput()
+      }
+    },
+    onGlobalKeydown (e) {
+      const isMod = Boolean(e.ctrlKey || e.metaKey)
+      if (!isMod) return
+
+      const key = (e.key || '').toLowerCase()
+
+      // Ctrl+S / Cmd+S: Salvar Rascunho Manual Imediato
+      if (key === 's' && !e.altKey && !e.shiftKey) {
+        e.preventDefault()
+        e.stopPropagation()
+        this.handleManualSave()
+        return
+      }
+
+      // Em inputs/textareas nativos (ex: popover de link ou editor raw), preserva o desfazer nativo
+      const tag = e.target && e.target.tagName ? e.target.tagName.toLowerCase() : ''
+      if (tag === 'input' || tag === 'textarea') return
+
+      // Ctrl+Z / Cmd+Z (sem shift): Desfazer histórico
+      if (key === 'z' && !e.shiftKey && !e.altKey) {
+        e.preventDefault()
+        e.stopPropagation()
+        this.handleUndo()
+        return
+      }
+
+      // Ctrl+Y / Cmd+Y ou Ctrl+Shift+Z / Cmd+Shift+Z: Refazer histórico
+      if ((key === 'y' && !e.shiftKey && !e.altKey) || (key === 'z' && e.shiftKey && !e.altKey)) {
+        e.preventDefault()
+        e.stopPropagation()
+        this.handleRedo()
+      }
+    },
+    clearPendingSave () {
+      if (this.debounceTimer) {
+        clearTimeout(this.debounceTimer)
+        this.debounceTimer = null
+      }
+    },
     triggerChange () {
       clearTimeout(this.debounceTimer)
       this.debounceTimer = setTimeout(() => {
+        this.debounceTimer = null
         const payload = buildEditorChangePayload(this.blocks)
         this.lastEmittedMarkdown = payload.markdown
         this.$emit('change', payload)
@@ -429,9 +651,13 @@ export default {
 </script>
 
 <style lang="scss">
+@import '../../../detran/scss/variables';
+@import '../../../detran/scss/typography';
+
 .transparent-editor-shell {
   position: relative;
   width: 100%;
+  overflow-anchor: none;
 
   .editor-blocks-container {
     margin-top: -6px;

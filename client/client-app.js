@@ -26,6 +26,7 @@ import Cookies from 'js-cookie'
 
 import boot from './modules/boot'
 import localization from './modules/localization'
+import { createSessionGuard, isAuthFailureMessage } from './modules/auth-sync'
 
 // ====================================
 // Load Helpers
@@ -45,6 +46,8 @@ moment.locale(siteConfig.lang)
 
 store.commit('user/REFRESH_AUTH')
 
+const sessionGuard = createSessionGuard({ store })
+
 // ====================================
 // Initialize Apollo Client (GraphQL)
 // ====================================
@@ -57,19 +60,29 @@ const graphQLLink = ApolloLink.from([
     if (graphQLErrors) {
       let isAuthError = false
       graphQLErrors.map(({ message, locations, path }) => {
-        if (message === `Forbidden`) {
+        if (isAuthFailureMessage(message)) {
           isAuthError = true
         }
         console.error(`[GraphQL error]: Message: ${message}, Location: ${locations}, Path: ${path}`)
       })
+      if (isAuthError) {
+        sessionGuard.checkSession()
+      }
       store.commit('showNotification', {
         style: 'red',
-        message: isAuthError ? `You are not authorized to access this resource.` : `An unexpected error occurred.`,
+        message: isAuthError ? `Sua sessão expirou ou você não tem autorização para acessar este recurso.` : `An unexpected error occurred.`,
         icon: 'alert'
       })
     }
     if (networkError) {
       console.error(networkError)
+      if (networkError.isSessionInvalidated) {
+        return
+      }
+      if (networkError.statusCode === 401) {
+        sessionGuard.invalidate('http_401')
+        return
+      }
       store.commit('showNotification', {
         style: 'red',
         message: `Network Error: ${networkError.message}`,
@@ -82,6 +95,9 @@ const graphQLLink = ApolloLink.from([
     uri: graphQLEndpoint,
     credentials: 'include',
     fetch: async (uri, options) => {
+      // Abort GraphQL request immediately if tab session is out of sync or expired
+      sessionGuard.assertRequestSession()
+
       // Strip __typename fields from variables
       let body = JSON.parse(options.body)
       body = body.map(bd => {
@@ -95,15 +111,24 @@ const graphQLLink = ApolloLink.from([
       // Inject authentication token
       const jwtToken = Cookies.get('jwt')
       if (jwtToken) {
+        options.headers = options.headers || {}
         options.headers.Authorization = `Bearer ${jwtToken}`
       }
 
       const resp = await fetch(uri, options)
 
+      if (resp && resp.status === 401) {
+        sessionGuard.invalidate('http_401')
+        const err = new Error('Sessão não autorizada ou expirada. Faça login novamente.')
+        err.isSessionInvalidated = true
+        throw err
+      }
+
       // Handle renewed JWT
       const newJWT = resp.headers.get('new-jwt')
       if (newJWT) {
         Cookies.set('jwt', newJWT, { expires: 365, secure: window.location.protocol === 'https:' })
+        store.commit('user/REFRESH_AUTH')
       }
       return resp
     }

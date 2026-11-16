@@ -47,13 +47,16 @@
             )
               v-icon mdi-menu
 
-            //- Barra de busca glassmorphism
+            //- Barra de busca glassmorphism (recolhível no scroll)
             .detran-search(
               role='search'
-              :class='{ "is-focused": searchIsFocused }'
+              :class='{ "is-focused": searchIsFocused, "is-collapsed": searchIsCollapsed }'
+              :title='searchIsCollapsed ? "Pesquisar (clique para expandir)" : null'
+              @click='onSearchClick'
             )
               v-icon.detran-search__icon(size='18' color='#94a3b8') mdi-magnify
               input.detran-search__input(
+                ref='searchInput'
                 v-model='search'
                 type='search'
                 placeholder='Pesquisar procedimentos, manuais, sistemas...'
@@ -74,7 +77,7 @@
               button.detran-search__clear-btn(
                 v-else-if='search && search.length > 0'
                 type='button'
-                @click='searchClose'
+                @click.stop='searchClose'
                 aria-label='Limpar pesquisa'
               )
                 v-icon(size='16' color='#94a3b8') mdi-close-circle
@@ -130,17 +133,17 @@
                         v-list-item(
                           v-for='task in workflowPendingTasks'
                           :key='task.id'
-                          :to='`/review/${task.id}`'
+                          :to='"/review/" + task.id + (task.state === "changes_requested" ? "?edit=1" : "")'
                           class='py-2 px-3'
                         )
-                          v-list-item-avatar.mr-3(size='32', color='#eff6ff')
-                            v-icon(size='18', color='#2563eb') mdi-shield-check
+                          v-list-item-avatar.mr-3(size='32', :color='task.state === "changes_requested" ? "#fff7ed" : "#eff6ff"')
+                            v-icon(size='18', :color='task.state === "changes_requested" ? "#d97706" : "#2563eb"') {{ task.state === "changes_requested" ? "mdi-undo-variant" : "mdi-shield-check" }}
                           v-list-item-content
                             .d-flex.align-center.justify-space-between
-                              span.text-caption.font-weight-bold.blue--text.text--darken-3.text-uppercase Validação Pendente
-                              span.text-caption.grey--text Pendente
+                              span.text-caption.font-weight-bold.text-uppercase(:class='task.state === "changes_requested" ? "amber--text text--darken-4" : "blue--text text--darken-3"') {{ task.state === "changes_requested" ? "Devolvido para Ajustes" : "Validação Pendente" }}
+                              span.text-caption(:class='task.state === "changes_requested" ? "amber--text text--darken-4 font-weight-bold" : "grey--text"') {{ task.state === "changes_requested" ? "Ajustar" : "Pendente" }}
                             .caption.font-weight-bold.text-truncate {{ task.title || task.path }}
-                            .text-caption.grey--text.text--darken-1.text-truncate Autor: {{ task.authorName || 'Servidor' }}
+                            .text-caption.grey--text.text--darken-1.text-truncate {{ task.state === "changes_requested" ? (task.lastComment ? "Motivo: " + task.lastComment : "Revisor solicitou ajustes") : ("Autor: " + (task.authorName || "Servidor")) }}
                     template(v-else)
                       .pa-6.text-center.grey--text
                         v-icon.mb-2(size='36', color='grey lighten-2') mdi-bell-check-outline
@@ -151,10 +154,11 @@
                       span Ver fila completa de governança
                       v-icon(x-small, right) mdi-arrow-right
 
-              //- App Launcher / Sistemas Satélites Integrados (Entra ID Hub)
+              //- App Launcher / Sistemas Satélites Integrados (anterior ao botão de usuário)
               v-menu(
                 offset-y
                 bottom
+                left
                 transition='slide-y-transition'
                 content-class='detran-apps-popover-menu'
                 max-width='340'
@@ -190,15 +194,100 @@
                     v-btn(text x-small color='primary' href='/apps')
                       | Abrir Hub de Aplicações
 
-              //- Botão Perfil / Usuário
-              button.detran-header__user-btn(
-                v-if='isAuthenticated'
-                @click='openUserModal'
-                :title='userName'
-                aria-label='Acessar menu do usuário'
-                type='button'
+              //- Botão de Usuário (somente Avatar com Dropdown estilizado)
+              a.detran-header__avatar-btn.is-login(
+                v-if='!isAuthenticated'
+                href='/login'
+                title='Fazer Login'
+                aria-label='Fazer Login'
               )
-                .detran-header__user-initials {{ userInitials }}
+                v-icon(size='20' color='#288b4a') mdi-login
+
+              v-menu(
+                v-else
+                offset-y
+                bottom
+                left
+                transition='slide-y-transition'
+                content-class='detran-user-dropdown-menu'
+                min-width='300'
+                max-width='330'
+                :close-on-content-click='true'
+              )
+                template(v-slot:activator='{ on }')
+                  button.detran-header__avatar-btn(
+                    v-on='on'
+                    :title='userName'
+                    aria-label='Abrir menu do usuário'
+                    type='button'
+                  )
+                    img.detran-header__user-avatar(
+                      v-if='hasUserAvatar'
+                      :src='userAvatar'
+                      :alt='userName'
+                      @error='avatarFailed = true'
+                      loading='lazy'
+                    )
+                    .detran-header__user-initials(v-else) {{ userInitials }}
+
+                v-card.detran-user-dropdown(flat)
+                  .detran-user-dropdown__header
+                    .detran-user-dropdown__avatar-wrap
+                      img.detran-user-dropdown__avatar(
+                        v-if='hasUserAvatar'
+                        :src='userAvatar'
+                        :alt='userName'
+                      )
+                      .detran-user-dropdown__avatar-initials(v-else) {{ userInitials }}
+                    .detran-user-dropdown__info
+                      h3.detran-user-dropdown__name {{ userName }}
+                      p.detran-user-dropdown__email {{ userEmail }}
+
+                  .detran-user-dropdown__body
+                    a.detran-user-dropdown__item(
+                      href='/p'
+                      @click.prevent='goToProfile'
+                    )
+                      .detran-user-dropdown__item-icon
+                        v-icon(size='18' color='#288b4a') mdi-account-circle-outline
+                      .detran-user-dropdown__item-text
+                        span.detran-user-dropdown__item-title Meu Perfil
+                        span.detran-user-dropdown__item-desc Informações e preferências
+                      v-icon(size='16' color='#94a3b8') mdi-chevron-right
+
+                    a.detran-user-dropdown__item(
+                      href='/w'
+                    )
+                      .detran-user-dropdown__item-icon
+                        v-icon(size='18' color='#288b4a') mdi-clipboard-check-outline
+                      .detran-user-dropdown__item-text
+                        span.detran-user-dropdown__item-title Governança &amp; Revisões
+                        span.detran-user-dropdown__item-desc Rascunhos e aprovações
+                      v-icon(size='16' color='#94a3b8') mdi-chevron-right
+
+                    a.detran-user-dropdown__item(
+                      href='/a'
+                      @click.prevent='goToAdmin'
+                    )
+                      .detran-user-dropdown__item-icon
+                        v-icon(size='18' color='#288b4a') mdi-cog-outline
+                      .detran-user-dropdown__item-text
+                        span.detran-user-dropdown__item-title Configurações
+                        span.detran-user-dropdown__item-desc Administração e ajustes do sistema
+                      v-icon(size='16' color='#94a3b8') mdi-chevron-right
+
+                    hr.detran-user-dropdown__divider
+
+                    button.detran-user-dropdown__item.detran-user-dropdown__item--logout(
+                      type='button'
+                      @click='doLogout'
+                    )
+                      .detran-user-dropdown__item-icon.detran-user-dropdown__item-icon--danger
+                        v-icon(size='18' color='#ef4444') mdi-logout
+                      .detran-user-dropdown__item-text
+                        span.detran-user-dropdown__item-title Sair
+                        span.detran-user-dropdown__item-desc Encerrar sessão com segurança
+                      v-icon(size='16' color='#ef4444') mdi-chevron-right
 
         search-results
 
@@ -207,8 +296,8 @@
           .detran-content__inner
             transition(name='workflow-router' mode='out-in')
               router-view
-
-        nav-footer
+            //- Rodapé institucional posicionado ao final do documento
+            nav-footer
 
     notify
 </template>
@@ -257,15 +346,21 @@ export default {
   data () {
     return {
       mobileSidebarOpen: false,
+      avatarFailed: false,
       internalApps: [],
       workflowPendingCount: 0,
-      workflowPendingTasks: []
+      workflowPendingTasks: [],
+      searchIsCollapsed: false,
+      lastScrollY: 0
     }
   },
   computed: {
     userId: get('user/id'),
     isAuthenticated: get('user/authenticated'),
     rawUserName: get('user/name'),
+    rawUserEmail: get('user/email'),
+    rawJobTitle: get('user/jobTitle'),
+    rawPictureUrl: get('user/pictureUrl'),
     search: sync('site/search'),
     searchIsFocused: sync('site/searchIsFocused'),
     searchIsLoading: sync('site/searchIsLoading'),
@@ -276,12 +371,31 @@ export default {
       }
       return 'Administrador'
     },
+    userEmail () {
+      if (this.rawJobTitle && this.rawJobTitle.trim().length > 0) {
+        return this.rawJobTitle
+      }
+      if (this.rawUserEmail && this.rawUserEmail.trim().length > 0 && !this.rawUserEmail.includes('guest')) {
+        return this.rawUserEmail
+      }
+      return 'Servidor Detran-MG'
+    },
     userInitials () {
       const name = this.userName || ''
       const parts = name.trim().split(/\s+/).filter(Boolean)
       if (parts.length === 0) return 'A'
       if (parts.length === 1) return parts[0].charAt(0).toUpperCase()
       return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase()
+    },
+    hasUserAvatar () {
+      if (this.avatarFailed) return false
+      return !!(this.rawPictureUrl && this.rawPictureUrl.length > 1 && !this.rawPictureUrl.includes('pravatar.cc'))
+    },
+    userAvatar () {
+      if (this.rawPictureUrl && this.rawPictureUrl.length > 1 && !this.rawPictureUrl.includes('pravatar.cc')) {
+        return (this.rawPictureUrl === 'internal') ? `/_userav/${this.userId}` : this.rawPictureUrl
+      }
+      return ''
     },
     canManageSystem () {
       return Number(this.userId) === 1
@@ -316,8 +430,60 @@ export default {
     this.$root.$on('workflowRefreshTasks', () => {
       this.fetchWorkflowPendingCount()
     })
+
+    // Recolhimento automático da barra de pesquisa ao scrollar
+    this.$nextTick(() => {
+      this.scrollContainer = this.$el && this.$el.querySelector('.detran-content')
+      if (this.scrollContainer) {
+        this.scrollContainer.addEventListener('scroll', this.handleScroll, { passive: true })
+      }
+      window.addEventListener('scroll', this.handleScroll, { passive: true, capture: true })
+    })
+  },
+  beforeDestroy () {
+    if (this.scrollContainer) {
+      this.scrollContainer.removeEventListener('scroll', this.handleScroll)
+    }
+    window.removeEventListener('scroll', this.handleScroll, { capture: true })
   },
   methods: {
+    onSearchClick () {
+      if (this.searchIsCollapsed) {
+        this.searchIsCollapsed = false
+        this.$nextTick(() => {
+          const input = this.$refs.searchInput || (this.$el && this.$el.querySelector('.detran-search__input'))
+          if (input && typeof input.focus === 'function') {
+            input.focus()
+            this.searchFocus()
+          }
+        })
+      }
+    },
+    handleScroll (event) {
+      const target = (event && event.target && event.target.scrollTop !== undefined && event.target !== document && event.target !== document.body) ?
+        event.target :
+        (this.scrollContainer || null)
+      const currentY = target ? target.scrollTop : (window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0)
+
+      // Se o campo de busca estiver focado ou contiver texto digitado, não recolhe
+      if (this.searchIsFocused || (this.search && this.search.trim().length > 0)) {
+        this.lastScrollY = currentY
+        return
+      }
+
+      // Ao rolar para baixo além de 40px: recolhe a barra de pesquisa
+      if (currentY > 40 && currentY > this.lastScrollY + 5) {
+        if (!this.searchIsCollapsed) {
+          this.searchIsCollapsed = true
+        }
+      } else if (currentY < this.lastScrollY - 10 || currentY <= 25) {
+        // Ao rolar para cima ou retornar próximo ao topo: expande a barra
+        if (this.searchIsCollapsed) {
+          this.searchIsCollapsed = false
+        }
+      }
+      this.lastScrollY = currentY
+    },
     async fetchWorkflowPendingCount () {
       try {
         const result = await this.$apollo.query({
@@ -328,8 +494,11 @@ export default {
                   id
                   title
                   path
+                  state
                   authorName
+                  lastComment
                   createdAt
+                  updatedAt
                 }
               }
             }
@@ -361,6 +530,19 @@ export default {
       if (this.$refs.sidebar && typeof this.$refs.sidebar.openUserModal === 'function') {
         this.$refs.sidebar.openUserModal()
       }
+    },
+    goToProfile () {
+      window.location.assign('/p')
+    },
+    goToAdmin () {
+      window.location.assign('/a')
+    },
+    doLogout () {
+      if (this.$refs.sidebar && typeof this.$refs.sidebar.doLogout === 'function') {
+        this.$refs.sidebar.doLogout()
+        return
+      }
+      window.location.assign('/logout')
     }
   }
 }
@@ -377,6 +559,28 @@ export default {
     .v-application--wrap {
       min-height: 100vh;
       display: block;
+    }
+  }
+
+  .detran-content {
+    min-height: calc(100vh - #{$header-height});
+    display: flex;
+    flex-direction: column;
+
+    &__inner {
+      width: 100%;
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 100%;
+    }
+
+    @include medium-screens {
+      padding-left: 1.25rem;
+      padding-right: 1.25rem;
+      padding-top: 5rem;
     }
   }
 }
@@ -422,6 +626,55 @@ export default {
   }
 }
 
+.detran-header__avatar-btn {
+  @include glass-panel;
+  width: 42px;
+  height: 42px;
+  padding: 3px;
+  border-radius: $radius-full !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: $shadow-float;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  cursor: pointer;
+  text-decoration: none !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover {
+    border-color: $detran-400;
+    box-shadow: 0 4px 12px rgba(40, 139, 74, 0.18);
+    transform: translateY(-1px);
+  }
+
+  &.is-login {
+    background: rgba(255, 255, 255, 0.95);
+  }
+
+  .detran-header__user-avatar {
+    width: 100%;
+    height: 100%;
+    border-radius: $radius-full !important;
+    object-fit: cover;
+    display: block;
+    flex-shrink: 0;
+  }
+
+  .detran-header__user-initials {
+    width: 100%;
+    height: 100%;
+    border-radius: $radius-full !important;
+    background: linear-gradient(135deg, $detran-500, $detran-700);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: white;
+    flex-shrink: 0;
+  }
+}
+
 .workflow-router {
   &-enter-active, &-leave-active {
     transition: opacity .2s ease;
@@ -429,6 +682,229 @@ export default {
   }
   &-enter, &-leave-to {
     opacity: 0;
+  }
+}
+
+.detran-search {
+  @include glass-panel;
+  flex: 1;
+  max-width: 672px;
+  min-width: 0;
+  border-radius: 1rem;
+  box-shadow: $shadow-float;
+  display: flex;
+  align-items: center;
+  height: 46px;
+  box-sizing: border-box;
+  padding: 0 1rem;
+  transition: max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              padding 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              border-radius 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              background 0.25s ease,
+              border-color 0.25s ease,
+              box-shadow 0.25s ease;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  position: relative;
+  z-index: 51;
+
+  &.is-collapsed {
+    max-width: 46px;
+    width: 46px;
+    padding: 0;
+    justify-content: center;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 0.75rem;
+
+    .detran-search__icon {
+      margin-right: 0 !important;
+      color: $slate-600 !important;
+      font-size: 20px !important;
+    }
+
+    .detran-search__input {
+      display: none !important;
+    }
+
+    .detran-search__clear-btn {
+      display: none !important;
+    }
+
+    &:hover {
+      background: #ffffff;
+      border-color: $detran-400;
+      box-shadow: 0 4px 12px rgba(40, 139, 74, 0.15);
+
+      .detran-search__icon {
+        color: $detran-700 !important;
+        transform: scale(1.1);
+      }
+    }
+  }
+
+  @include mobile {
+    height: 38px;
+    padding: 0 0.625rem;
+    border-radius: 0.625rem;
+    background: white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(226, 232, 240, 0.9);
+
+    &.is-collapsed {
+      max-width: 38px;
+      width: 38px;
+      height: 38px;
+      padding: 0;
+    }
+  }
+}
+
+.detran-user-dropdown-menu {
+  border-radius: 1rem !important;
+  box-shadow: 0 18px 40px -10px rgba(15, 23, 42, 0.22), 0 4px 14px rgba(15, 23, 42, 0.08) !important;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  overflow: hidden !important;
+  margin-top: 8px;
+}
+
+.detran-user-dropdown {
+  background: #ffffff !important;
+  border-radius: 1rem !important;
+  overflow: hidden;
+  font-family: $font-family-base;
+
+  &__header {
+    background: linear-gradient(135deg, $detran-600 0%, $detran-800 100%);
+    padding: 1rem 1.125rem;
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+  }
+
+  &__avatar-wrap {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    overflow: hidden;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.14);
+  }
+
+  &__avatar {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  &__avatar-initials {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #ffffff;
+  }
+
+  &__info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__name {
+    font-size: 0.9375rem;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__email {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.8);
+    margin: 0.2rem 0 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__body {
+    padding: 0.625rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  &__divider {
+    border: none;
+    border-top: 1px solid #e2e8f0;
+    margin: 0.25rem 0.375rem;
+  }
+
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.625rem 0.75rem;
+    border-radius: 0.625rem;
+    text-decoration: none !important;
+    background: transparent;
+    border: 1px solid transparent;
+    transition: all 0.18s ease;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+
+    &:hover {
+      background: #f8fafc;
+      border-color: #e2e8f0;
+    }
+
+    &--logout:hover {
+      background: #fef2f2;
+      border-color: #fecaca;
+    }
+  }
+
+  &__item-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 0.5rem;
+    background: rgba($detran-500, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    &--danger {
+      background: #fee2e2;
+    }
+  }
+
+  &__item-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  &__item-title {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #1e293b;
+    line-height: 1.2;
+  }
+
+  &__item-desc {
+    font-size: 0.6875rem;
+    color: #64748b;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 </style>
