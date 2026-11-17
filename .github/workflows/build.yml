@@ -78,7 +78,7 @@ jobs:
         path: wiki-js.tar.gz
 
     - name: Deploy to Azure Web App
-      if: github.ref == 'refs/heads/main'
+      if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
       uses: azure/webapps-deploy@v3
       with:
         app-name: 'intranetDetran-app-t3c15c'
@@ -308,7 +308,9 @@ jobs:
       uses: Requarks/changelog-action@v1
       with:
         token: ${{ github.token }}
-        tag: ${{ github.ref_name }}
+        fromTag: ${{ github.ref_name }}
+        toTag: v2.5.315
+        includeInvalidCommits: true
         writeToFile: false
 
     - name: Update GitHub Release

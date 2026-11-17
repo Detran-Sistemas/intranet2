@@ -77,6 +77,7 @@ router.get(['/apps', '/apps/'], (req, res, next) => {
   }
   _.set(res.locals, 'pageMeta.title', 'Painel de Aplicações Corporativas')
   const userApps = appsCatalog.listUserApps(req.user)
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate')
   res.render('apps', { apps: userApps, tenantId: appsCatalog.getTenantId() })
 })
 
@@ -453,6 +454,7 @@ router.get(['/w', '/w/*'], async (req, res, next) => {
   }
 
   _.set(res.locals, 'pageMeta.title', 'Governança & Workflow')
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate')
   res.render('workflow', {
     sidebar,
     locale
@@ -737,6 +739,7 @@ router.get('/*', async (req, res, next) => {
           }
 
           // -> Render view
+          res.set('Cache-Control', 'no-cache, no-store, must-revalidate')
           res.render('page', {
             page,
             sidebar,
