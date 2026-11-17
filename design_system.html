@@ -432,37 +432,190 @@
             </a>
         </nav>
 
-        <div class="sidebar-px p-3 border-t border-white/10 bg-white/5 flex items-center justify-between gap-2">
-            <button class="nav-link flex-1 flex items-center p-2 rounded-xl glass-hover text-left overflow-hidden min-w-0" title="Acessar Meu Perfil">
-                <img src="https://i.pravatar.cc/150?img=11" alt="Danilo Santana" class="w-10 h-10 rounded-full border-2 border-white/20 shrink-0">
-                <div class="flex-1 overflow-hidden sidebar-text ml-3">
-                    <p class="text-sm font-semibold text-white truncate">Danilo Santana</p>
-                    <p class="text-xs text-white/70 truncate">Analista de Sistemas</p>
-                </div>
-            </button>
-            
-            <a href="#" class="w-10 h-10 rounded-xl flex items-center justify-center text-white/50 glass-hover shrink-0 sidebar-text" title="Configurações Gerais (Admin)">
-                <i class="fa-solid fa-gear text-sm"></i>
-            </a>
+        <!-- Rodapé Institucional Simplificado (Menu de Usuário migrado para o Header) -->
+        <div class="sidebar-px p-3 border-t border-white/10 bg-white/5 flex items-center justify-between gap-2 text-xs text-white/60">
+            <div class="sidebar-text flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span class="font-medium text-white/80">Intranet Detran-MG</span>
+            </div>
+            <span class="px-2 py-0.5 rounded bg-white/10 text-[10px] font-mono text-white/70 sidebar-text">v2.5.315</span>
         </div>
     </aside>
 
-    <!-- ÁREA PRINCIPAL (Agora possui fundo branco/cinza e bordas retas na esquerda) -->
+    <!-- ÁREA PRINCIPAL -->
     <main class="flex-1 flex flex-col relative w-full h-full bg-surface z-20 shadow-[-10px_0_30px_rgba(0,0,0,0.2)] overflow-hidden">
         
-        <header class="absolute top-6 left-0 right-0 z-20 flex justify-center px-8 pointer-events-none opacity-0 animate-fade-in-up stagger-1">
-            <div class="w-full max-w-7xl flex justify-between items-center">
-                <div class="glass-panel w-full max-w-2xl rounded-2xl shadow-float flex items-center px-4 py-3 pointer-events-auto transition-all focus-within:ring-2 focus-within:ring-detran-500 focus-within:bg-white">
-                    <i class="fa-solid fa-magnifying-glass text-slate-400 mr-3"></i>
-                    <input type="text" placeholder="Pesquisar procedimentos, manuais, sistemas..." 
+        <!-- CABEÇALHO PADRONIZADO (Alinhado com a Home e o Painel de Revisão) -->
+        <header class="absolute top-5 left-0 right-0 z-30 flex justify-center px-8 pointer-events-none opacity-0 animate-fade-in-up stagger-1">
+            <div class="w-full max-w-7xl flex justify-between items-center gap-4">
+                
+                <!-- Barra de Pesquisa Centralizada com Microcopy Acolhedor -->
+                <div class="glass-panel flex-1 max-w-2xl rounded-2xl shadow-float flex items-center px-4 py-3 pointer-events-auto transition-all focus-within:ring-2 focus-within:ring-detran-500 focus-within:bg-white border border-slate-200/60">
+                    <i class="fa-solid fa-magnifying-glass text-slate-400 mr-3 text-sm"></i>
+                    <input type="text" placeholder="O que você precisa encontrar hoje? Busque manuais, rotinas, sistemas..." 
                            class="bg-transparent border-none outline-none flex-1 text-slate-700 placeholder-slate-400 text-sm font-medium">
+                    <kbd class="hidden sm:inline-block px-2 py-0.5 text-[10px] font-semibold text-slate-400 bg-slate-100 border border-slate-200 rounded">Ctrl+K</kbd>
                 </div>
 
-                <div class="flex items-center gap-4 pointer-events-auto ml-4">
-                    <button class="glass-panel px-5 py-3 rounded-xl flex items-center gap-2 text-sm font-semibold text-detran-700 hover:bg-detran-700 hover:text-white transition-all shadow-float group">
-                        <i class="fa-solid fa-plus transition-transform group-hover:rotate-90"></i>
-                        Nova Página
-                    </button>
+                <!-- Ações do Cabeçalho: Portal, Notificações, Hub de Apps e Avatar Dropdown -->
+                <div class="flex items-center gap-3 pointer-events-auto ml-2 relative">
+                    
+                    <!-- Botão: Portal Intranet -->
+                    <a href="#" class="hidden md:flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/80 hover:bg-white text-slate-700 hover:text-detran-700 text-xs font-semibold shadow-soft hover:shadow-md transition-all border border-slate-200/60">
+                        <i class="fa-solid fa-house text-detran-600"></i>
+                        <span>Portal Intranet</span>
+                    </a>
+
+                    <!-- Botão: Notificações (Sino com Badge) -->
+                    <div class="relative">
+                        <button id="header-notif-btn" class="w-10 h-10 rounded-xl bg-white/80 hover:bg-white text-slate-600 hover:text-detran-700 flex items-center justify-center shadow-soft hover:shadow-md transition-all border border-slate-200/60 relative" title="Notificações e Revisões">
+                            <i class="fa-regular fa-bell text-sm"></i>
+                            <span class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white shadow-sm">2</span>
+                        </button>
+                        
+                        <!-- Popover de Notificações -->
+                        <div id="header-notif-menu" class="hidden absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-float border border-slate-200/80 p-0 overflow-hidden z-50">
+                            <div class="px-4 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                                <span class="text-xs font-bold text-slate-700 uppercase tracking-wider">Nossas Atualizações</span>
+                                <span class="text-[10px] font-bold px-2 py-0.5 bg-rose-50 text-rose-600 rounded-full">2 pendentes</span>
+                            </div>
+                            <div class="divide-y divide-slate-100 max-h-64 overflow-y-auto">
+                                <div class="p-3 hover:bg-slate-50/80 transition-colors cursor-pointer flex gap-3">
+                                    <div class="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                                        <i class="fa-solid fa-rotate-left text-xs"></i>
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-xs font-semibold text-slate-800 truncate">Manual de Procedimentos CNH</p>
+                                        <p class="text-[11px] text-slate-500 truncate">Revisor solicitou ajustes na seção 2</p>
+                                    </div>
+                                </div>
+                                <div class="p-3 hover:bg-slate-50/80 transition-colors cursor-pointer flex gap-3">
+                                    <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                                        <i class="fa-solid fa-shield-halved text-xs"></i>
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-xs font-semibold text-slate-800 truncate">Diretrizes de Segurança da Informação</p>
+                                        <p class="text-[11px] text-slate-500 truncate">Aguardando validação do setor</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <a href="#" class="block py-2.5 text-center text-xs font-semibold text-detran-700 bg-detran-50/50 hover:bg-detran-50 border-t border-slate-100 transition-colors">
+                                Ir para nossa Central de Colaboração &rarr;
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Botão: Hub de Aplicativos (Unificado: Imediatamente antes do Avatar) -->
+                    <div class="relative">
+                        <button id="header-apps-btn" class="w-10 h-10 rounded-xl bg-white/80 hover:bg-white text-slate-700 hover:text-detran-700 flex items-center justify-center shadow-soft hover:shadow-md transition-all border border-slate-200/60" title="Aplicações e Sistemas Satélites">
+                            <i class="fa-solid fa-grip text-base text-detran-700"></i>
+                        </button>
+
+                        <!-- Popover Hub de Aplicativos -->
+                        <div id="header-apps-menu" class="hidden absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-float border border-slate-200/80 p-0 overflow-hidden z-50">
+                            <div class="p-4 bg-slate-50/80 border-b border-slate-100">
+                                <span class="text-[10px] font-bold text-detran-600 uppercase tracking-widest block">NOSSAS FERRAMENTAS</span>
+                                <h4 class="text-sm font-bold text-slate-800">Sistemas do Nosso Dia a Dia</h4>
+                            </div>
+                            <div class="p-2 grid grid-cols-2 gap-2">
+                                <a href="#" class="p-3 rounded-xl hover:bg-slate-50 transition-colors flex flex-col items-center text-center group border border-transparent hover:border-slate-100">
+                                    <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-lg mb-2 group-hover:scale-105 transition-transform">
+                                        <i class="fa-solid fa-headset"></i>
+                                    </div>
+                                    <span class="text-xs font-bold text-slate-800">Service Desk</span>
+                                    <span class="text-[10px] text-slate-400">Chamados e Suporte</span>
+                                </a>
+                                <a href="#" class="p-3 rounded-xl hover:bg-slate-50 transition-colors flex flex-col items-center text-center group border border-transparent hover:border-slate-100">
+                                    <div class="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-lg mb-2 group-hover:scale-105 transition-transform">
+                                        <i class="fa-solid fa-folder-open"></i>
+                                    </div>
+                                    <span class="text-xs font-bold text-slate-800">SEI MG</span>
+                                    <span class="text-[10px] text-slate-400">Processos Eletrônicos</span>
+                                </a>
+                                <a href="#" class="p-3 rounded-xl hover:bg-slate-50 transition-colors flex flex-col items-center text-center group border border-transparent hover:border-slate-100">
+                                    <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-lg mb-2 group-hover:scale-105 transition-transform">
+                                        <i class="fa-solid fa-id-card"></i>
+                                    </div>
+                                    <span class="text-xs font-bold text-slate-800">DetranNet</span>
+                                    <span class="text-[10px] text-slate-400">Consultas CNH / Veículos</span>
+                                </a>
+                                <a href="#" class="p-3 rounded-xl hover:bg-slate-50 transition-colors flex flex-col items-center text-center group border border-transparent hover:border-slate-100">
+                                    <div class="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center text-lg mb-2 group-hover:scale-105 transition-transform">
+                                        <i class="fa-solid fa-key"></i>
+                                    </div>
+                                    <span class="text-xs font-bold text-slate-800">Entra ID</span>
+                                    <span class="text-[10px] text-slate-400">Acesso Unificado</span>
+                                </a>
+                            </div>
+                            <a href="#" class="block py-2.5 text-center text-xs font-semibold text-detran-700 bg-slate-50/50 hover:bg-slate-50 border-t border-slate-100 transition-colors">
+                                Ver todas as nossas aplicações &rarr;
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Botão: Avatar do Usuário (Somente Avatar que abre Dropdown Estilizado) -->
+                    <div class="relative">
+                        <button id="header-user-btn" class="w-10 h-10 rounded-full border-2 border-emerald-500/50 hover:border-emerald-600 shadow-soft hover:shadow-md transition-all overflow-hidden flex items-center justify-center group focus:outline-none focus:ring-2 focus:ring-detran-500/40" title="Danilo Santana (Menu do Usuário)">
+                            <img src="https://i.pravatar.cc/150?img=11" alt="Danilo Santana" class="w-full h-full object-cover group-hover:scale-105 transition-transform">
+                        </button>
+
+                        <!-- Menu Dropdown do Usuário (.detran-user-dropdown-menu) -->
+                        <div id="header-user-menu" class="hidden absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-float border border-slate-200/90 p-0 overflow-hidden z-50 animate-fade-in-up">
+                            
+                            <!-- Header do Dropdown com Gradiente Institucional Detran-MG -->
+                            <div class="bg-gradient-to-br from-detran-700 to-detran-900 p-4 flex items-center gap-3.5 text-white">
+                                <img src="https://i.pravatar.cc/150?img=11" alt="Danilo Santana" class="w-12 h-12 rounded-full border-2 border-white/30 shrink-0 shadow">
+                                <div class="overflow-hidden min-w-0">
+                                    <h4 class="text-sm font-bold truncate leading-tight">Danilo Santana</h4>
+                                    <p class="text-xs text-detran-200 truncate mt-0.5 opacity-90">danilo.santana@detran.mg.gov.br</p>
+                                    <span class="inline-block px-2 py-0.5 mt-1.5 text-[9px] font-bold uppercase tracking-wider rounded bg-white/15 text-white/90">Analista de Sistemas</span>
+                                </div>
+                            </div>
+
+                            <!-- Itens do Menu do Usuário -->
+                            <div class="p-2 space-y-1">
+                                <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 transition-colors group">
+                                    <div class="w-8 h-8 rounded-lg bg-emerald-50 text-detran-600 flex items-center justify-center shrink-0 text-sm group-hover:scale-105 transition-transform">
+                                        <i class="fa-regular fa-user"></i>
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-xs font-bold text-slate-800">Meu Espaço / Perfil</p>
+                                        <p class="text-[11px] text-slate-400">Informações e preferências</p>
+                                    </div>
+                                    <i class="fa-solid fa-chevron-right text-[10px] text-slate-300 group-hover:text-detran-500 transition-colors"></i>
+                                </a>
+
+                                <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 transition-colors group">
+                                    <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 text-sm group-hover:scale-105 transition-transform">
+                                        <i class="fa-solid fa-clipboard-check"></i>
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-xs font-bold text-slate-800">Governança & Revisões</p>
+                                        <p class="text-[11px] text-slate-400">Nossa central de colaboração</p>
+                                    </div>
+                                    <i class="fa-solid fa-chevron-right text-[10px] text-slate-300 group-hover:text-detran-500 transition-colors"></i>
+                                </a>
+
+                                <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 transition-colors group">
+                                    <div class="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center shrink-0 text-sm group-hover:scale-105 transition-transform">
+                                        <i class="fa-solid fa-sliders"></i>
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-xs font-bold text-slate-800">Configurações do Sistema</p>
+                                        <p class="text-[11px] text-slate-400">Painel administrativo</p>
+                                    </div>
+                                    <i class="fa-solid fa-chevron-right text-[10px] text-slate-300 group-hover:text-detran-500 transition-colors"></i>
+                                </a>
+
+                                <div class="border-t border-slate-100 my-1"></div>
+
+                                <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-xl text-rose-600 hover:bg-rose-50 transition-colors text-xs font-bold">
+                                    <i class="fa-solid fa-arrow-right-from-bracket text-sm ml-1.5"></i>
+                                    <span class="ml-1">Sair da Conta</span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </header>
@@ -664,6 +817,95 @@ module.exports = {
                                 <li><a href="#">Base de Conhecimento TI</a> <em>Tutoriais técnicos, abertura de chamados e acessos internos</em></li>
                             </ul>
 
+                            <h2 id="sec-9">9. Edição Transparente & Blocos Dinâmicos (Notion-like)</h2>
+                            <p>O paradigma de <strong>Edição Transparente</strong> permite aos servidores editar o conteúdo diretamente no fluxo de leitura da página, sem trocar para um editor modal ou formulário externo. Cada parágrafo, callout, tabela ou diagrama funciona como um bloco interativo autônomo:</p>
+
+                            <!-- Bloco Demonstrativo de Edição Transparente (Hover + Handle + Seletor de Tipo Superior) -->
+                            <div class="relative group/block my-6 p-4 rounded-xl border border-dashed border-detran-500/50 bg-detran-50/20 transition-all hover:bg-detran-50/40">
+                                
+                                <!-- Alça de arrasto lateral (Drag Handle) -->
+                                <div class="absolute -left-6 top-1/2 -translate-y-1/2 text-slate-300 hover:text-detran-600 cursor-grab opacity-0 group-hover/block:opacity-100 transition-opacity flex items-center justify-center p-1" title="Arrastar bloco">
+                                    <i class="fa-solid fa-grip-vertical text-xs"></i>
+                                </div>
+
+                                <!-- Seletor de Variante Superior Flutuante (Sem sobreposição de texto) -->
+                                <div class="absolute -top-3.5 right-4 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white shadow-sm border border-slate-200 text-xs font-semibold">
+                                    <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+                                    <span class="text-blue-700 text-[11px] font-bold">Info</span>
+                                    <span class="text-slate-300 mx-0.5">&bull;</span>
+                                    <button class="text-slate-400 hover:text-emerald-600 text-[10px] flex items-center gap-1 transition-colors"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>Sucesso</button>
+                                    <button class="text-slate-400 hover:text-amber-600 text-[10px] flex items-center gap-1 transition-colors"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>Aviso</button>
+                                    <button class="text-slate-400 hover:text-rose-600 text-[10px] flex items-center gap-1 transition-colors"><span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>Perigo</button>
+                                </div>
+
+                                <div class="is-info m-0 border-l-4 border-blue-500 bg-blue-50/40 text-blue-950 p-3.5 rounded-r-lg">
+                                    <strong>Bloco em Edição em Tempo Real:</strong> Clique em qualquer texto para alterar a redação. A pílula de seleção de variante fica suspensa acima da margem, garantindo leitura desobstruída durante a digitação.
+                                </div>
+                            </div>
+
+                            <h2 id="sec-10">10. Diagramas Integrados (Draw.io & Mermaid)</h2>
+                            <p>Tanto na visualização da página quanto na <strong>tela de revisão comparativa de alterações</strong>, diagramas gerados no Draw.io (vetorizados em SVG Base64) ou codificados em Mermaid são renderizados diretamente no navegador com suporte a zoom, contraste de cores e legibilidade:</p>
+
+                            <!-- Container de Diagrama Demonstrativo -->
+                            <div class="my-6 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-soft">
+                                <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
+                                    <div class="flex items-center gap-2">
+                                        <span class="px-2.5 py-1 rounded-lg bg-emerald-50 text-detran-700 font-bold text-[11px] uppercase tracking-wider flex items-center gap-1.5">
+                                            <i class="fa-solid fa-project-diagram"></i> Draw.io / Mermaid SVG
+                                        </span>
+                                        <span class="text-xs text-slate-500 font-medium">Fluxo de Validação & Homologação</span>
+                                    </div>
+                                    <button class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold transition-colors flex items-center gap-1.5" title="Expandir visualização">
+                                        <i class="fa-solid fa-expand text-[10px]"></i> Tela Cheia
+                                    </button>
+                                </div>
+
+                                <!-- Renderização Visual Vetorial do Diagrama (SVG) -->
+                                <div class="flex justify-center p-4 bg-slate-50/60 rounded-xl overflow-x-auto">
+                                    <svg viewBox="0 0 680 120" class="w-full max-w-2xl h-auto" xmlns="http://www.w3.org/2000/svg">
+                                        <!-- Estilos do Diagrama -->
+                                        <defs>
+                                            <linearGradient id="grad-author" x1="0%" y1="0%" x2="100%" y2="100%">
+                                                <stop offset="0%" stop-color="#33a65b" />
+                                                <stop offset="100%" stop-color="#1b5830" />
+                                            </linearGradient>
+                                            <linearGradient id="grad-review" x1="0%" y1="0%" x2="100%" y2="100%">
+                                                <stop offset="0%" stop-color="#0284c7" />
+                                                <stop offset="100%" stop-color="#0369a1" />
+                                            </linearGradient>
+                                            <linearGradient id="grad-publish" x1="0%" y1="0%" x2="100%" y2="100%">
+                                                <stop offset="0%" stop-color="#059669" />
+                                                <stop offset="100%" stop-color="#047857" />
+                                            </linearGradient>
+                                            <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                                <path d="M 0 1 L 8 5 L 0 9 z" fill="#94a3b8" />
+                                            </marker>
+                                        </defs>
+
+                                        <!-- Nó 1: Servidor Autor -->
+                                        <rect x="20" y="30" width="160" height="60" rx="12" fill="url(#grad-author)" filter="drop-shadow(0 4px 6px rgba(0,0,0,0.08))" />
+                                        <text x="100" y="58" fill="#ffffff" font-family="Inter, sans-serif" font-size="12" font-weight="700" text-anchor="middle">1. Servidor Autor</text>
+                                        <text x="100" y="74" fill="#c3ebce" font-family="Inter, sans-serif" font-size="10" text-anchor="middle">Edição Transparente</text>
+
+                                        <!-- Linha 1 -> 2 -->
+                                        <line x1="180" y1="60" x2="250" y2="60" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)" />
+
+                                        <!-- Nó 2: Revisão Técnica -->
+                                        <rect x="260" y="30" width="160" height="60" rx="12" fill="url(#grad-review)" filter="drop-shadow(0 4px 6px rgba(0,0,0,0.08))" />
+                                        <text x="340" y="58" fill="#ffffff" font-family="Inter, sans-serif" font-size="12" font-weight="700" text-anchor="middle">2. Revisor Técnico</text>
+                                        <text x="340" y="74" fill="#bae6fd" font-family="Inter, sans-serif" font-size="10" text-anchor="middle">Diff Visual & Diálogo</text>
+
+                                        <!-- Linha 2 -> 3 -->
+                                        <line x1="420" y1="60" x2="490" y2="60" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)" />
+
+                                        <!-- Nó 3: Publicação Homologada -->
+                                        <rect x="500" y="30" width="160" height="60" rx="12" fill="url(#grad-publish)" filter="drop-shadow(0 4px 6px rgba(0,0,0,0.08))" />
+                                        <text x="580" y="58" fill="#ffffff" font-family="Inter, sans-serif" font-size="12" font-weight="700" text-anchor="middle">3. Publicado</text>
+                                        <text x="580" y="74" fill="#a7f3d0" font-family="Inter, sans-serif" font-size="10" text-anchor="middle">Disponível a Todos</text>
+                                    </svg>
+                                </div>
+                            </div>
+
                         </div>
                     </article>
                 </div>
@@ -679,6 +921,8 @@ module.exports = {
                             <li><a href="#sec-5" class="toc-link flex items-center text-slate-500 hover:text-slate-800 transition-all duration-200 hover:translate-x-1"><div class="toc-dot w-1.5 h-1.5 rounded-full bg-slate-300 mr-2 transition-all duration-200"></div>5. Código</a></li>
                             <li><a href="#sec-6" class="toc-link flex items-center text-slate-500 hover:text-slate-800 transition-all duration-200 hover:translate-x-1"><div class="toc-dot w-1.5 h-1.5 rounded-full bg-slate-300 mr-2 transition-all duration-200"></div>6. Tabelas e Imagens</a></li>
                             <li><a href="#sec-8" class="toc-link flex items-center text-slate-500 hover:text-slate-800 transition-all duration-200 hover:translate-x-1"><div class="toc-dot w-1.5 h-1.5 rounded-full bg-slate-300 mr-2 transition-all duration-200"></div>8. Blocos Especiais Wiki.js</a></li>
+                            <li><a href="#sec-9" class="toc-link flex items-center text-slate-500 hover:text-slate-800 transition-all duration-200 hover:translate-x-1"><div class="toc-dot w-1.5 h-1.5 rounded-full bg-slate-300 mr-2 transition-all duration-200"></div>9. Edição Transparente</a></li>
+                            <li><a href="#sec-10" class="toc-link flex items-center text-slate-500 hover:text-slate-800 transition-all duration-200 hover:translate-x-1"><div class="toc-dot w-1.5 h-1.5 rounded-full bg-slate-300 mr-2 transition-all duration-200"></div>10. Diagramas Integrados</a></li>
                         </ul>
                     </div>
                 </aside>
@@ -847,6 +1091,54 @@ module.exports = {
 
                 observedHeadings.forEach(h => tocObserver.observe(h));
             }
+
+            // Interatividade dos Menus Dropdown do Cabeçalho (Notificações, Hub de Apps e Usuário)
+            const headerNotifBtn = document.getElementById('header-notif-btn');
+            const headerNotifMenu = document.getElementById('header-notif-menu');
+            const headerAppsBtn = document.getElementById('header-apps-btn');
+            const headerAppsMenu = document.getElementById('header-apps-menu');
+            const headerUserBtn = document.getElementById('header-user-btn');
+            const headerUserMenu = document.getElementById('header-user-menu');
+
+            function closeAllHeaderMenus() {
+                if (headerNotifMenu) headerNotifMenu.classList.add('hidden');
+                if (headerAppsMenu) headerAppsMenu.classList.add('hidden');
+                if (headerUserMenu) headerUserMenu.classList.add('hidden');
+            }
+
+            if (headerNotifBtn && headerNotifMenu) {
+                headerNotifBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const isClosed = headerNotifMenu.classList.contains('hidden');
+                    closeAllHeaderMenus();
+                    if (isClosed) headerNotifMenu.classList.remove('hidden');
+                });
+            }
+
+            if (headerAppsBtn && headerAppsMenu) {
+                headerAppsBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const isClosed = headerAppsMenu.classList.contains('hidden');
+                    closeAllHeaderMenus();
+                    if (isClosed) headerAppsMenu.classList.remove('hidden');
+                });
+            }
+
+            if (headerUserBtn && headerUserMenu) {
+                headerUserBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const isClosed = headerUserMenu.classList.contains('hidden');
+                    closeAllHeaderMenus();
+                    if (isClosed) headerUserMenu.classList.remove('hidden');
+                });
+            }
+
+            document.addEventListener('click', (e) => {
+                const isInsideMenu = e.target.closest('#header-notif-menu, #header-apps-menu, #header-user-menu');
+                if (!isInsideMenu) {
+                    closeAllHeaderMenus();
+                }
+            });
         });
     </script>
 </body>
