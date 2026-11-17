@@ -238,12 +238,14 @@ describe('Revisão Contextual: Segurança, Clean Architecture, State Machine Est
   describe('3. State Machine Estrita, Atomicidade SQL e Batching N+1 em SQLite Real', () => {
     let knex
     let findUserSpy
+    let lastCreatePagePayload = null
+    let lastUpdatePagePayload = null
 
     const userAdmin = { id: 1, name: 'Superadmin', email: 'admin@detran.mg.gov.br', permissions: ['manage:system'] }
     const userAuthor = { id: 101, name: 'Autor Original', email: 'autor@detran.mg.gov.br', permissions: ['read:pages', 'write:drafts'] }
     const userCoEditor = { id: 104, name: 'Co-Editor', email: 'coeditor@detran.mg.gov.br', permissions: ['read:pages', 'write:drafts'] }
     const userReviewer = { id: 102, name: 'Revisor Técnico', email: 'revisor@detran.mg.gov.br', permissions: ['read:pages', 'review:pages'] }
-    const userApprover = { id: 103, name: 'Homologador', email: 'aprovador@detran.mg.gov.br', permissions: ['read:pages', 'review:pages', 'approve:pages', 'write:pages'] }
+    const userApprover = { id: 103, name: 'Homologador', email: 'aprovador@detran.mg.gov.br', permissions: ['read:pages', 'review:pages', 'approve:pages'] }
 
     beforeAll(async () => {
       knex = Knex({
@@ -300,6 +302,7 @@ describe('Revisão Contextual: Segurança, Clean Architecture, State Machine Est
               return knex('pages')
             },
             async createPage(payload) {
+              lastCreatePagePayload = payload
               if (payload.title === 'FORCAR_FALHA_PUBLICACAO') {
                 throw new Error('Falha simulada ao gravar na tabela pages')
               }
@@ -310,6 +313,7 @@ describe('Revisão Contextual: Segurança, Clean Architecture, State Machine Est
               return { id, ...payload }
             },
             async updatePage(payload) {
+              lastUpdatePagePayload = payload
               if (payload.title === 'FORCAR_FALHA_PUBLICACAO') {
                 throw new Error('Falha simulada ao atualizar tabela pages')
               }
@@ -519,6 +523,140 @@ describe('Revisão Contextual: Segurança, Clean Architecture, State Machine Est
           { req: { user: userPlainViewer } }
         )
       ).rejects.toThrow('Permissão insuficiente para consultar este rascunho.')
+    })
+
+    it('permite que usuário aprovador publique rascunho com sucesso repassando skipAccessCheck e preservando autoria', async () => {
+      // 1. Autor cria rascunho em 1_level
+      const saveRes = await resolvers.DetranWorkflowMutation.saveDraft(
+        {},
+        {
+          path: 'comunicados/publicar-aprovador-teste',
+          title: 'Comunicado para Teste de Publicação',
+          content: 'Conteúdo final aprovado pelo autor',
+          approvalMode: '1_level'
+        },
+        { req: { user: userAuthor } }
+      )
+      const draftId = saveRes.draft.id
+
+      // 2. Autor submete
+      await resolvers.DetranWorkflowMutation.submit(
+        {},
+        { id: draftId, comment: 'Pronto para publicação' },
+        { req: { user: userAuthor } }
+      )
+
+      // 3. Aprovador (que possui approve:pages mas NÃO write:pages) publica
+      lastCreatePagePayload = null
+      const pubRes = await resolvers.DetranWorkflowMutation.publish(
+        {},
+        { id: draftId, comment: 'Publicado oficialmente pelo Diretor' },
+        { req: { user: userApprover } }
+      )
+      expect(pubRes.responseResult.succeeded).toBe(true)
+      expect(pubRes.draft.state).toBe('published')
+      expect(lastCreatePagePayload).not.toBeNull()
+      expect(lastCreatePagePayload.skipAccessCheck).toBe(true)
+      expect(lastCreatePagePayload.authorId).toBe(userAuthor.id)
+
+      // 4. Teste de atualização de página existente (updatePage)
+      lastUpdatePagePayload = null
+      const livePageId = 99
+      await knex('pages').insert({ id: livePageId, path: 'comunicados/atualizar-existente', hash: 'hash_99' })
+      const editDraftRes = await resolvers.DetranWorkflowMutation.saveDraft(
+        {},
+        {
+          pageId: livePageId,
+          path: 'comunicados/atualizar-existente',
+          title: 'Comunicado Atualizado',
+          content: 'Nova versão aprovada',
+          approvalMode: '1_level'
+        },
+        { req: { user: userAuthor } }
+      )
+      expect(editDraftRes.responseResult.succeeded).toBe(true)
+      await resolvers.DetranWorkflowMutation.submit(
+        {},
+        { id: editDraftRes.draft.id, comment: 'Atualização para aprovação' },
+        { req: { user: userAuthor } }
+      )
+      const pubEditRes = await resolvers.DetranWorkflowMutation.publish(
+        {},
+        { id: editDraftRes.draft.id, comment: 'Atualização homologada' },
+        { req: { user: userApprover } }
+      )
+      expect(pubEditRes.responseResult.succeeded).toBe(true)
+      expect(lastUpdatePagePayload).not.toBeNull()
+      expect(lastUpdatePagePayload.skipAccessCheck).toBe(true)
+      expect(lastUpdatePagePayload.authorId).toBe(userAuthor.id)
+    })
+
+    it('PagesModel.updatePage e createPage honram skipAccessCheck e aceitam approve:pages / manage:pages', async () => {
+      const PagesModel = require('../../../models/pages')
+      const WIKI_ERROR = require('../../../helpers/error')
+      global.WIKI.Error = WIKI_ERROR
+
+      // Usuário com apenas approve:pages (sem write:pages)
+      const userOnlyApprover = {
+        id: 103,
+        name: 'Aprovador Puro',
+        permissions: ['approve:pages', 'read:pages'],
+        getGlobalPermissions() { return this.permissions }
+      }
+
+      // Usuário leitor sem permissões de escrita/aprovação
+      const userViewerOnly = {
+        id: 999,
+        name: 'Leitor Puro',
+        permissions: ['read:pages'],
+        getGlobalPermissions() { return this.permissions }
+      }
+
+      // Simula checkAccess padrão do Wiki.js
+      global.WIKI.auth = {
+        checkAccess(user, perms) {
+          const userPerms = user.permissions || []
+          return perms.some(p => userPerms.includes(p))
+        }
+      }
+
+      // Teste 1: createPage com userViewerOnly e sem skipAccessCheck deve lançar PageDeleteForbidden
+      await expect(
+        PagesModel.createPage({
+          user: userViewerOnly,
+          locale: 'pt-br',
+          path: 'teste/sem-permissao',
+          skipAccessCheck: false
+        })
+      ).rejects.toThrow()
+
+      // Teste 2: createPage com userOnlyApprover (possui approve:pages) passa da checagem de permissão
+      try {
+        await PagesModel.createPage({
+          user: userOnlyApprover,
+          locale: 'pt-br',
+          path: 'teste/com-aprovador',
+          content: '',
+          skipAccessCheck: false
+        })
+      } catch (err) {
+        expect(err.name).not.toBe('PAGE_DELETE_FORBIDDEN')
+        expect(err.name).not.toBe('PageDeleteForbidden')
+      }
+
+      // Teste 3: createPage com skipAccessCheck: true passa direto mesmo para userViewerOnly
+      try {
+        await PagesModel.createPage({
+          user: userViewerOnly,
+          locale: 'pt-br',
+          path: 'teste/com-skip',
+          content: '',
+          skipAccessCheck: true
+        })
+      } catch (err) {
+        expect(err.name).not.toBe('PAGE_DELETE_FORBIDDEN')
+        expect(err.name).not.toBe('PageDeleteForbidden')
+      }
     })
   })
 })

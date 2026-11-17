@@ -495,7 +495,9 @@ async function publishDraftUseCase({ id, comment, user }) {
             content: draft.content,
             tags: Array.isArray(draft.tags) ? draft.tags : [],
             isPublished: true,
-            user
+            user,
+            skipAccessCheck: true,
+            authorId: draft.authorId || user.id
           })
           if (livePage && livePage.hash && typeof WIKI.models.pages.deletePageFromCache === 'function') {
             await WIKI.models.pages.deletePageFromCache(livePage.hash)
@@ -505,6 +507,7 @@ async function publishDraftUseCase({ id, comment, user }) {
           const pagePatch = {
             title: draft.title,
             content: draft.content,
+            authorId: draft.authorId || user.id,
             updatedAt: new Date().toISOString()
           }
           if (typeof pageQuery.patch === 'function') {
@@ -526,7 +529,10 @@ async function publishDraftUseCase({ id, comment, user }) {
           isPublished: true,
           isPrivate: false,
           tags: Array.isArray(draft.tags) ? draft.tags : [],
-          user
+          user,
+          skipAccessCheck: true,
+          authorId: draft.authorId || user.id,
+          creatorId: draft.authorId || user.id
         })
         if (newPage && newPage.id) {
           targetPageId = newPage.id

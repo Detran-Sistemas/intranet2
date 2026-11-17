@@ -255,7 +255,7 @@ module.exports = class Page extends Model {
     }
 
     // -> Check for page access
-    if (!WIKI.auth.checkAccess(opts.user, ['write:pages'], {
+    if (!opts.skipAccessCheck && !WIKI.auth.checkAccess(opts.user, ['write:pages', 'approve:pages', 'manage:pages'], {
       locale: opts.locale,
       path: opts.path
     })) {
@@ -275,7 +275,7 @@ module.exports = class Page extends Model {
 
     // -> Format CSS Scripts
     let scriptCss = ''
-    if (WIKI.auth.checkAccess(opts.user, ['write:styles'], {
+    if (opts.skipAccessCheck || WIKI.auth.checkAccess(opts.user, ['write:styles'], {
       locale: opts.locale,
       path: opts.path
     })) {
@@ -288,7 +288,7 @@ module.exports = class Page extends Model {
 
     // -> Format JS Scripts
     let scriptJs = ''
-    if (WIKI.auth.checkAccess(opts.user, ['write:scripts'], {
+    if (opts.skipAccessCheck || WIKI.auth.checkAccess(opts.user, ['write:scripts'], {
       locale: opts.locale,
       path: opts.path
     })) {
@@ -297,9 +297,9 @@ module.exports = class Page extends Model {
 
     // -> Create page
     await WIKI.models.pages.query().insert({
-      authorId: opts.user.id,
+      authorId: opts.authorId || opts.user.id,
       content: opts.content,
-      creatorId: opts.user.id,
+      creatorId: opts.creatorId || opts.authorId || opts.user.id,
       contentType: _.get(_.find(WIKI.data.editors, ['key', opts.editor]), `contentType`, 'text'),
       description: opts.description,
       editorKey: opts.editor,
@@ -375,7 +375,7 @@ module.exports = class Page extends Model {
     }
 
     // -> Check for page access
-    if (!WIKI.auth.checkAccess(opts.user, ['write:pages'], {
+    if (!opts.skipAccessCheck && !WIKI.auth.checkAccess(opts.user, ['write:pages', 'approve:pages', 'manage:pages'], {
       locale: ogPage.localeCode,
       path: ogPage.path
     })) {
@@ -402,7 +402,7 @@ module.exports = class Page extends Model {
 
     // -> Format CSS Scripts
     let scriptCss = _.get(ogPage, 'extra.css', '')
-    if (WIKI.auth.checkAccess(opts.user, ['write:styles'], {
+    if (opts.skipAccessCheck || WIKI.auth.checkAccess(opts.user, ['write:styles'], {
       locale: opts.locale,
       path: opts.path
     })) {
@@ -415,7 +415,7 @@ module.exports = class Page extends Model {
 
     // -> Format JS Scripts
     let scriptJs = _.get(ogPage, 'extra.js', '')
-    if (WIKI.auth.checkAccess(opts.user, ['write:scripts'], {
+    if (opts.skipAccessCheck || WIKI.auth.checkAccess(opts.user, ['write:scripts'], {
       locale: opts.locale,
       path: opts.path
     })) {
@@ -424,7 +424,7 @@ module.exports = class Page extends Model {
 
     // -> Update page
     await WIKI.models.pages.query().patch({
-      authorId: opts.user.id,
+      authorId: opts.authorId || opts.user.id,
       content: opts.content,
       description: opts.description,
       isPublished: opts.isPublished === true || opts.isPublished === 1,
@@ -462,7 +462,7 @@ module.exports = class Page extends Model {
     // -> Perform move?
     if ((opts.locale && opts.locale !== page.localeCode) || (opts.path && opts.path !== page.path)) {
       // -> Check target path access
-      if (!WIKI.auth.checkAccess(opts.user, ['write:pages'], {
+      if (!opts.skipAccessCheck && !WIKI.auth.checkAccess(opts.user, ['write:pages', 'approve:pages', 'manage:pages'], {
         locale: opts.locale,
         path: opts.path
       })) {
