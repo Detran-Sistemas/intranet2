@@ -997,12 +997,12 @@ export default {
   &__header-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
     position: relative;
     border-bottom: none !important;
     overflow: hidden;
     flex-shrink: 0;
-    padding: 0 1.25rem 0 1rem;
+    padding: 0 1rem;
     height: 80px;
     transition: height 0.35s cubic-bezier(0.4, 0, 0.2, 1), padding 0.35s ease;
 
@@ -1081,10 +1081,15 @@ export default {
   }
 
   &__header-actions {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
     flex-shrink: 0;
+    z-index: 5;
 
     @include v-compact {
       gap: 0.375rem;
@@ -1162,7 +1167,9 @@ export default {
     height: 100%;
     display: flex;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: center;
+    margin: 0 auto;
+    text-align: center;
     padding: 0;
     overflow: hidden;
     transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1198,6 +1205,7 @@ export default {
     max-width: 155px;
     width: auto;
     height: auto;
+    margin: 0 auto;
     object-fit: contain;
     transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     display: block;

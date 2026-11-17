@@ -84,11 +84,12 @@
             v-icon(size='16', color='#206e3b').mr-2 mdi-arrow-left
             span.d-none.d-sm-inline Voltar ao Portal
 
-      .admin-content-area.px-8.pb-12
+      .admin-content-area.px-8.pb-6
         transition(name='profile-router')
           router-view
 
-    nav-footer
+      nav-footer
+
     notify
     search-results
 </template>
@@ -352,8 +353,8 @@ export default {
   .admin-sidebar__header-row {
     display: flex;
     align-items: center;
-    justify-content: flex-start;
-    padding: 0 1.5rem;
+    justify-content: center;
+    padding: 0 1rem;
     height: 80px;
     position: relative;
     border-bottom: none !important;
@@ -365,14 +366,16 @@ export default {
     height: 80px;
     display: flex;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: center;
     padding: 0;
     overflow: hidden;
     transition: padding 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     text-decoration: none;
     color: inherit;
     cursor: pointer;
-    width: auto;
+    width: 100%;
+    margin: 0 auto;
+    text-align: center;
 
     &:hover .detran-sidebar__logo-img {
       opacity: 0.95;
@@ -385,6 +388,7 @@ export default {
     max-width: 155px;
     width: auto;
     height: auto;
+    margin: 0 auto;
     object-fit: contain;
     display: block;
     filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.25));

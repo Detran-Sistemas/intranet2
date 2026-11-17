@@ -142,22 +142,6 @@
               v-list-item(href='/graphql', target='_blank')
                 v-list-item-title GraphQL
 
-      //- Perfil de Usuário no rodapé da Sidebar (fixado no rodapé)
-      .admin-sidebar-footer
-        .admin-user-profile-card
-          a.d-flex.align-center.text-decoration-none(href='/p', title='Acessar Meu Perfil', style='flex: 1; min-width: 0;')
-            .admin-user-avatar-badge.mr-3(:class='{ "mr-0": adminDrawerMini }')
-              v-icon(size='20' color='white') mdi-account
-            .admin-user-info.overflow-hidden(v-if='!adminDrawerMini')
-              .admin-user-name.text-truncate {{ userName || 'Administrator' }}
-              .admin-user-email.text-truncate {{ userEmail || 'cezar.azevedo@detran.mg.gov.br' }}
-          a.admin-user-action-btn(
-            href='/'
-            title='Voltar ao Portal'
-            v-if='!adminDrawerMini'
-          )
-            v-icon(size='16' color='rgba(255,255,255,0.7)') mdi-cog
-
     //- Área Principal de Conteúdo
     v-main.admin-main
       //- Header Superior Flutuante do Admin (mesmo padrão glassmorphic do portal)
@@ -171,16 +155,219 @@
             span.detran-bc-parent PAINEL ADMINISTRATIVO
             span.detran-bc-sep /
             span.detran-bc-current {{ currentSectionTitle }}
-        .detran-admin-topbar__right.d-flex.align-center
+        .detran-admin-topbar__right.d-flex.align-center(style='gap: 10px;')
           a.detran-btn-portal-pill(href='/', title='Retornar ao Portal da Intranet')
             v-icon(size='16', color='#206e3b').mr-2 mdi-arrow-left
             span.d-none.d-sm-inline Voltar ao Portal
 
-      .admin-content-area.px-8.pb-12
+          //- Central de Notificações ("Novidades da Intranet")
+          v-menu(
+            v-if='isAuthenticated'
+            offset-y
+            bottom
+            left
+            transition='slide-y-transition'
+            min-width='380'
+            max-width='420'
+            :close-on-content-click='false'
+          )
+            template(v-slot:activator='{ on }')
+              button.detran-header__action-btn(
+                v-on='on'
+                title='Novidades da Intranet e Validações'
+                type='button'
+                aria-label='Novidades da Intranet'
+              )
+                v-badge(
+                  v-if='workflowPendingCount > 0'
+                  color='#e11d48'
+                  :content='workflowPendingCount'
+                  overlap
+                  offset-x='8'
+                  offset-y='8'
+                )
+                  v-icon(size='20' color='#d97706') mdi-bell-ring
+                v-icon(v-else size='20' color='#64748b') mdi-bell-outline
+            v-card.rounded-xl.overflow-hidden.elevation-12
+              .pa-4.white--text.d-flex.align-center.justify-space-between(style='background: linear-gradient(135deg, #185a30 0%, #103d20 100%);')
+                .d-flex.align-center
+                  v-icon.mr-2(color='#fcd34d', size='20') mdi-sparkles
+                  div
+                    .text-subtitle-2.font-weight-bold Novidades da Intranet
+                    .caption(style='color: #a7f3d0;') Atualizações e tramitações de validação
+                v-btn(x-small, text, dark, class='caption text-none', @click='markAllNotificationsRead') Marcar lidas
+              v-tabs(v-model='notifTab', grow, height='36', color='#1b6535')
+                v-tab.caption Todas ({{ workflowPendingCount }})
+                v-tab.caption Validações
+                v-tab.caption Publicações
+              v-card-text.pa-0(style='max-height: 320px; overflow-y: auto;')
+                template(v-if='filteredNotificationTasks.length > 0')
+                  v-list.py-0.dense
+                    v-list-item(
+                      v-for='task in filteredNotificationTasks'
+                      :key='task.id'
+                      :href='"/w/review/" + task.id + (task.state === "changes_requested" ? "?edit=1" : "")'
+                      class='py-2 px-3'
+                    )
+                      v-list-item-avatar.mr-3(size='32', :color='task.state === "changes_requested" ? "#fff7ed" : "#eff6ff"')
+                        v-icon(size='18', :color='task.state === "changes_requested" ? "#d97706" : "#2563eb"') {{ task.state === "changes_requested" ? "mdi-undo-variant" : "mdi-shield-check" }}
+                      v-list-item-content
+                        .d-flex.align-center.justify-space-between
+                          span.text-caption.font-weight-bold.text-uppercase(:class='task.state === "changes_requested" ? "amber--text text--darken-4" : "blue--text text--darken-3"') {{ task.state === "changes_requested" ? "Devolvido para Ajustes" : "Validação Pendente" }}
+                          span.text-caption(:class='task.state === "changes_requested" ? "amber--text text--darken-4 font-weight-bold" : "grey--text"') {{ task.state === "changes_requested" ? "Ajustar" : "Pendente" }}
+                        .caption.font-weight-bold.text-truncate {{ task.title || task.path }}
+                        .text-caption.grey--text.text--darken-1.text-truncate {{ task.state === "changes_requested" ? (task.lastComment ? "Motivo: " + task.lastComment : "Revisor solicitou ajustes") : ("Autor: " + (task.authorName || "Servidor")) }}
+                template(v-else)
+                  .pa-6.text-center.grey--text
+                    v-icon.mb-2(size='36', color='grey lighten-2') mdi-bell-check-outline
+                    .caption Nenhuma validação pendente no momento
+              v-divider
+              v-card-actions.pa-2.grey.lighten-4.d-flex.justify-center
+                v-btn(text, small, color='#1b6535', href='/w', class='caption font-weight-bold text-none')
+                  span Ver painel completo de governança
+                  v-icon(x-small, right) mdi-arrow-right
+
+          //- App Launcher / Sistemas Satélites Integrados (anterior ao botão de usuário)
+          v-menu(
+            offset-y
+            bottom
+            left
+            transition='slide-y-transition'
+            content-class='detran-apps-popover-menu'
+            max-width='340'
+          )
+            template(v-slot:activator='{ on }')
+              button.detran-header__action-btn(
+                v-on='on'
+                title='Aplicações e Sistemas Satélites'
+                type='button'
+                aria-label='Sistemas Satélites'
+              )
+                v-icon(size='20' color='#288b4a') mdi-apps
+            v-card.detran-apps-popover(flat)
+              .detran-apps-popover__header(style='padding: 14px 16px; border-bottom: 1px solid #e2e8f0; background: #f8fafc;')
+                .overline(style='font-size: 10px; font-weight: 700; color: #288b4a;') SISTEMAS INTEGRADOS
+                .font-weight-bold(style='font-size: 14px; color: #1e293b;') Aplicações Satélites (Entra ID)
+              v-list(dense style='padding: 6px 0;')
+                v-list-item(
+                  v-for='app in (internalApps && internalApps.length ? internalApps : [{ id: "servicedesk", nome: "Service Desk", icone: "mdi-headset", descricao: "Suporte e Chamados", resolvedSsoUrl: "/apps/servicedesk" }])'
+                  :key='app.id'
+                  :href='app.resolvedSsoUrl || `/apps/${app.id}`'
+                  style='border-radius: 8px; margin: 4px 8px;'
+                )
+                  v-list-item-avatar(size='36' color='green lighten-5')
+                    v-icon(color='primary' size='20') {{ app.icone || 'mdi-application' }}
+                  v-list-item-content
+                    v-list-item-title.font-weight-bold(style='font-size: 13px; color: #1e293b;') {{ app.nome }}
+                    v-list-item-subtitle(style='font-size: 11px; color: #64748b;') {{ app.descricao || 'Single Sign-On' }}
+                  v-list-item-action
+                    v-icon(size='16' color='#94a3b8') mdi-chevron-right
+              v-divider
+              .pa-2.text-center
+                v-btn(text x-small color='primary' href='/apps')
+                  | Abrir Hub de Aplicações
+
+          //- Botão de Usuário (somente Avatar com Dropdown estilizado)
+          a.detran-header__avatar-btn.is-login(
+            v-if='!isAuthenticated'
+            href='/login'
+            title='Fazer Login'
+            aria-label='Fazer Login'
+          )
+            v-icon(size='20' color='#288b4a') mdi-login
+
+          v-menu(
+            v-else
+            offset-y
+            bottom
+            left
+            transition='slide-y-transition'
+            content-class='detran-user-dropdown-menu'
+            min-width='300'
+            max-width='330'
+            :close-on-content-click='true'
+          )
+            template(v-slot:activator='{ on }')
+              button.detran-header__avatar-btn(
+                v-on='on'
+                :title='userName'
+                aria-label='Abrir menu do usuário'
+                type='button'
+              )
+                img.detran-header__user-avatar(
+                  v-if='hasUserAvatar'
+                  :src='userAvatar'
+                  :alt='userName'
+                  @error='avatarFailed = true'
+                  loading='lazy'
+                )
+                .detran-header__user-initials(v-else) {{ userInitials }}
+
+            v-card.detran-user-dropdown(flat)
+              .detran-user-dropdown__header
+                .detran-user-dropdown__avatar-wrap
+                  img.detran-user-dropdown__avatar(
+                    v-if='hasUserAvatar'
+                    :src='userAvatar'
+                    :alt='userName'
+                  )
+                  .detran-user-dropdown__avatar-initials(v-else) {{ userInitials }}
+                .detran-user-dropdown__info
+                  h3.detran-user-dropdown__name {{ userName }}
+                  p.detran-user-dropdown__email {{ userEmail }}
+
+              .detran-user-dropdown__body
+                a.detran-user-dropdown__item(
+                  href='/p'
+                  @click.prevent='goToProfile'
+                )
+                  .detran-user-dropdown__item-icon
+                    v-icon(size='18' color='#288b4a') mdi-account-circle-outline
+                  .detran-user-dropdown__item-text
+                    span.detran-user-dropdown__item-title Meu Perfil
+                    span.detran-user-dropdown__item-desc Informações e preferências
+                  v-icon(size='16' color='#94a3b8') mdi-chevron-right
+
+                a.detran-user-dropdown__item(
+                  href='/w'
+                )
+                  .detran-user-dropdown__item-icon
+                    v-icon(size='18' color='#288b4a') mdi-clipboard-check-outline
+                  .detran-user-dropdown__item-text
+                    span.detran-user-dropdown__item-title Governança &amp; Revisões
+                    span.detran-user-dropdown__item-desc Rascunhos e aprovações
+                  v-icon(size='16' color='#94a3b8') mdi-chevron-right
+
+                a.detran-user-dropdown__item(
+                  href='/a'
+                  @click.prevent='goToAdmin'
+                )
+                  .detran-user-dropdown__item-icon
+                    v-icon(size='18' color='#288b4a') mdi-cog-outline
+                  .detran-user-dropdown__item-text
+                    span.detran-user-dropdown__item-title Configurações
+                    span.detran-user-dropdown__item-desc Administração e ajustes do sistema
+                  v-icon(size='16' color='#94a3b8') mdi-chevron-right
+
+                hr.detran-user-dropdown__divider
+
+                button.detran-user-dropdown__item.detran-user-dropdown__item--logout(
+                  type='button'
+                  @click='doLogout'
+                )
+                  .detran-user-dropdown__item-icon.detran-user-dropdown__item-icon--danger
+                    v-icon(size='18' color='#ef4444') mdi-logout
+                  .detran-user-dropdown__item-text
+                    span.detran-user-dropdown__item-title Sair
+                    span.detran-user-dropdown__item-desc Encerrar sessão com segurança
+                  v-icon(size='16' color='#ef4444') mdi-chevron-right
+
+      .admin-content-area.px-8.pb-6
         transition(name='admin-router')
           router-view
 
-    nav-footer
+      nav-footer
+
     notify
     search-results
 </template>
@@ -189,10 +376,12 @@
 import _ from 'lodash'
 import VueRouter from 'vue-router'
 import { get, sync } from 'vuex-pathify'
+import gql from 'graphql-tag'
 
 import statsQuery from 'gql/admin/dashboard/dashboard-query-stats.gql'
-
 import adminStore from '../store/admin'
+import { broadcastLogout } from '../modules/auth-sync'
+import { filterNotificationTasks } from '../themes/default/components/transparent-editor/utils/editor-controller'
 
 /* global WIKI */
 
@@ -264,7 +453,12 @@ export default {
             background: '#999'
           }
         }
-      }
+      },
+      avatarFailed: false,
+      internalApps: [],
+      workflowPendingTasks: [],
+      workflowPendingCount: 0,
+      notifTab: 0
     }
   },
   computed: {
@@ -274,11 +468,20 @@ export default {
     userEmail: get('user/email'),
     pictureUrl: get('user/pictureUrl'),
     isAuthenticated: get('user/authenticated'),
+    hasUserAvatar () {
+      return Boolean(this.pictureUrl && this.pictureUrl.length > 0 && !this.avatarFailed)
+    },
+    userAvatar () {
+      return this.pictureUrl || ''
+    },
     userInitials () {
       if (!this.userName) return 'AD'
       const parts = this.userName.trim().split(' ')
       if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase()
       return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+    },
+    filteredNotificationTasks () {
+      return filterNotificationTasks(this.workflowPendingTasks, this.notifTab)
     },
     currentSectionTitle () {
       const path = this.$route.path
@@ -312,6 +515,21 @@ export default {
   created() {
     this.$store.commit('page/SET_MODE', 'admin')
   },
+  mounted () {
+    fetch('/api/detran/apps')
+      .then(res => res.json())
+      .then(data => {
+        if (data && Array.isArray(data.apps)) {
+          this.internalApps = data.apps
+        }
+      })
+      .catch(() => {})
+
+    this.fetchWorkflowPendingCount()
+    this.$root.$on('workflowRefreshTasks', () => {
+      this.fetchWorkflowPendingCount()
+    })
+  },
   methods: {
     hasPermission(prm) {
       if (_.isArray(prm)) {
@@ -321,6 +539,50 @@ export default {
       } else {
         return _.includes(this.permissions, prm)
       }
+    },
+    markAllNotificationsRead () {
+      this.workflowPendingTasks = []
+      this.workflowPendingCount = 0
+    },
+    goToProfile () {
+      window.location.assign('/p')
+    },
+    goToAdmin () {
+      this.$router.push('/dashboard').catch(() => {})
+    },
+    doLogout () {
+      const uid = (this.$store && this.$store.state && this.$store.state.user) ? this.$store.state.user.id : 0
+      broadcastLogout(uid)
+      if (this.$store) {
+        this.$store.commit('user/CLEAR_AUTH')
+      }
+      window.location.assign('/logout')
+    },
+    async fetchWorkflowPendingCount () {
+      try {
+        const result = await this.$apollo.query({
+          query: gql`
+            query {
+              workflow {
+                pendingTasks {
+                  id
+                  title
+                  path
+                  state
+                  authorName
+                  lastComment
+                  createdAt
+                  updatedAt
+                }
+              }
+            }
+          `,
+          fetchPolicy: 'network-only'
+        })
+        const tasks = (result && result.data && result.data.workflow && result.data.workflow.pendingTasks) || []
+        this.workflowPendingCount = tasks.length
+        this.workflowPendingTasks = tasks
+      } catch (e) {}
     }
   },
   apollo: {
@@ -404,12 +666,12 @@ export default {
     &:hover { background: rgba($detran-400, 0.5); }
   }
 
-  // Header do Sidebar com Logo alinhada à esquerda
+  // Header do Sidebar com Logo centralizada
   .admin-sidebar__header-row {
     display: flex;
     align-items: center;
-    justify-content: flex-start;
-    padding: 0 1.5rem;
+    justify-content: center;
+    padding: 0 1rem;
     height: 80px;
     position: relative;
     border-bottom: none !important;
@@ -421,14 +683,16 @@ export default {
     height: 80px;
     display: flex;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: center;
     padding: 0;
     overflow: hidden;
     transition: padding 0.35s cubic-bezier(0.4, 0, 0.2, 1);
     text-decoration: none;
     color: inherit;
     cursor: pointer;
-    width: auto;
+    width: 100%;
+    margin: 0 auto;
+    text-align: center;
 
     &:hover .detran-sidebar__logo-img {
       opacity: 0.95;
@@ -441,6 +705,7 @@ export default {
     max-width: 155px;
     width: auto;
     height: auto;
+    margin: 0 auto;
     object-fit: contain;
     display: block;
     filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.25));
@@ -669,75 +934,6 @@ export default {
     }
   }
 
-  // Rodapé do Usuário na Sidebar (fixado no rodapé)
-  .admin-sidebar-footer {
-    border-top: none !important;
-    background: transparent !important;
-    flex-shrink: 0 !important;
-    padding: 0.75rem 1rem !important;
-    display: flex !important;
-    align-items: center !important;
-
-    .admin-user-profile-card {
-      display: flex !important;
-      align-items: center !important;
-      width: 100% !important;
-      padding: 0.375rem 0.5rem !important;
-      border-radius: 12px !important;
-      transition: background 0.2s ease;
-
-      &:hover {
-        background: rgba(255, 255, 255, 0.10) !important;
-      }
-    }
-
-    .admin-user-avatar-badge {
-      width: 40px !important;
-      height: 40px !important;
-      border-radius: 9999px !important;
-      background: linear-gradient(135deg, $detran-500, $detran-700) !important;
-      border: 2px solid rgba(255, 255, 255, 0.20) !important;
-      display: flex !important;
-      align-items: center !important;
-      justify-content: center !important;
-      flex-shrink: 0 !important;
-    }
-
-    .admin-user-name {
-      color: #ffffff !important;
-      font-weight: 600 !important;
-      font-size: 0.875rem !important;
-      line-height: 1.25 !important;
-    }
-
-    .admin-user-email {
-      color: rgba(255, 255, 255, 0.70) !important;
-      font-size: 0.75rem !important;
-      line-height: 1.2 !important;
-      margin-top: 1px !important;
-    }
-
-    .admin-user-action-btn {
-      width: 36px;
-      height: 36px;
-      border-radius: 0.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: rgba(255, 255, 255, 0.70) !important;
-      background: rgba(255, 255, 255, 0.08);
-      text-decoration: none !important;
-      flex-shrink: 0;
-      transition: all 0.2s ease;
-
-      &:hover {
-        background: rgba(255, 255, 255, 0.18);
-        color: #ffffff !important;
-        transform: rotate(45deg);
-      }
-    }
-  }
-
   .v-list {
     background: transparent !important;
     padding: 0.5rem 1rem !important;
@@ -762,6 +958,50 @@ export default {
     display: flex;
     flex-direction: column;
   }
+
+  // Rodapé perfeitamente integrado no canvas branco, idêntico à visão geral
+  .detran-footer {
+    width: 100%;
+    margin-top: auto;
+    background: transparent !important;
+    border-top: 1px solid rgba(226, 232, 240, 0.85) !important;
+    padding: 1.5rem 2rem 1.25rem;
+    z-index: 25;
+    box-shadow: none !important;
+
+    &__content {
+      color: $slate-500 !important;
+      font-size: 0.8125rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    &__sep {
+      color: $slate-300 !important;
+    }
+
+    &__innovation {
+      color: $detran-700 !important;
+      font-weight: 600;
+    }
+
+    &__link, a {
+      color: $detran-600 !important;
+      font-weight: 500;
+      text-decoration: none;
+
+      &:hover {
+        text-decoration: underline;
+      }
+    }
+  }
+}
+
+.admin-content-area {
+  flex: 1 0 auto;
 }
 
 // --- Topbar Flutuante do Admin ---
@@ -828,6 +1068,234 @@ export default {
         color: #ffffff !important;
       }
     }
+  }
+}
+
+// Botões de ação do topo (notificações e apps)
+.detran-header__action-btn {
+  @include glass-panel;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: $radius-lg;
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  box-shadow: $shadow-float;
+  color: #475569;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.95);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 0;
+
+  &:hover {
+    border-color: $detran-400;
+    box-shadow: 0 4px 12px rgba(40, 139, 74, 0.18);
+    transform: translateY(-1px);
+    color: #1e293b;
+  }
+}
+
+// Botão de avatar do usuário no topo
+.detran-header__avatar-btn {
+  @include glass-panel;
+  width: 42px;
+  height: 42px;
+  padding: 3px;
+  border-radius: $radius-full !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: $shadow-float;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  cursor: pointer;
+  text-decoration: none !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+  &:hover {
+    border-color: $detran-400;
+    box-shadow: 0 4px 12px rgba(40, 139, 74, 0.18);
+    transform: translateY(-1px);
+  }
+
+  &.is-login {
+    background: rgba(255, 255, 255, 0.95);
+  }
+
+  .detran-header__user-avatar {
+    width: 100%;
+    height: 100%;
+    border-radius: $radius-full !important;
+    object-fit: cover;
+    display: block;
+    flex-shrink: 0;
+  }
+
+  .detran-header__user-initials {
+    width: 100%;
+    height: 100%;
+    border-radius: $radius-full !important;
+    background: linear-gradient(135deg, $detran-500, $detran-700);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: white;
+    flex-shrink: 0;
+  }
+}
+
+.detran-apps-popover-menu {
+  border-radius: 1rem !important;
+  box-shadow: 0 18px 40px -10px rgba(15, 23, 42, 0.22), 0 4px 14px rgba(15, 23, 42, 0.08) !important;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  overflow: hidden !important;
+  margin-top: 8px;
+}
+
+.detran-user-dropdown-menu {
+  border-radius: 1rem !important;
+  box-shadow: 0 18px 40px -10px rgba(15, 23, 42, 0.22), 0 4px 14px rgba(15, 23, 42, 0.08) !important;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  overflow: hidden !important;
+  margin-top: 8px;
+}
+
+.detran-user-dropdown {
+  background: #ffffff !important;
+  border-radius: 1rem !important;
+  overflow: hidden;
+  font-family: $font-family-base;
+
+  &__header {
+    background: linear-gradient(135deg, $detran-600 0%, $detran-800 100%);
+    padding: 1rem 1.125rem;
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+  }
+
+  &__avatar-wrap {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    overflow: hidden;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.14);
+  }
+
+  &__avatar {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  &__avatar-initials {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #ffffff;
+  }
+
+  &__info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__name {
+    font-size: 0.9375rem;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__email {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.8);
+    margin: 2px 0 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__body {
+    padding: 0.5rem;
+  }
+
+  &__item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.625rem 0.75rem;
+    border-radius: 0.625rem;
+    text-decoration: none !important;
+    transition: background 0.15s ease, border-color 0.15s ease;
+    border: 1px solid transparent;
+    cursor: pointer;
+    width: 100%;
+    box-sizing: border-box;
+
+    &:hover {
+      background: #f1f5f9;
+      border-color: #e2e8f0;
+    }
+
+    &--logout:hover {
+      background: #fef2f2;
+      border-color: #fecaca;
+    }
+  }
+
+  &__item-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 0.5rem;
+    background: rgba($detran-500, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    &--danger {
+      background: #fee2e2;
+    }
+  }
+
+  &__item-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  &__item-title {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #1e293b;
+    line-height: 1.2;
+  }
+
+  &__item-desc {
+    font-size: 0.6875rem;
+    color: #64748b;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__divider {
+    border: none;
+    border-top: 1px solid #e2e8f0;
+    margin: 0.375rem 0;
   }
 }
 
