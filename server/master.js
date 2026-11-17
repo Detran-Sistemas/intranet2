@@ -155,7 +155,8 @@ module.exports = async () => {
       company: WIKI.config.company,
       contentLicense: WIKI.config.contentLicense,
       footerOverride: WIKI.config.footerOverride,
-      logoUrl: WIKI.config.logoUrl
+      logoUrl: WIKI.config.logoUrl,
+      authHideLocal: Boolean(WIKI.config.auth && (WIKI.config.auth.hideLocal === true || WIKI.config.auth.hideLocal === 'true' || WIKI.config.auth.hideLocal === 1 || WIKI.config.auth.hideLocal === '1'))
     }
     res.locals.langs = await WIKI.models.locales.getNavLocales({ cache: true })
     res.locals.analyticsCode = await WIKI.models.analytics.getCode({ cache: true })

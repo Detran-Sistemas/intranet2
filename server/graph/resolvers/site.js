@@ -26,7 +26,7 @@ module.exports = {
         ...WIKI.config.security,
         authAutoLogin: WIKI.config.auth.autoLogin,
         authEnforce2FA: WIKI.config.auth.enforce2FA,
-        authHideLocal: WIKI.config.auth.hideLocal,
+        authHideLocal: Boolean(WIKI.config.auth && (WIKI.config.auth.hideLocal === true || WIKI.config.auth.hideLocal === 'true' || WIKI.config.auth.hideLocal === 1 || WIKI.config.auth.hideLocal === '1')),
         authLoginBgUrl: WIKI.config.auth.loginBgUrl,
         authJwtAudience: WIKI.config.auth.audience,
         authJwtExpiration: WIKI.config.auth.tokenExpiration,
@@ -80,10 +80,11 @@ module.exports = {
           analyticsId: _.get(args, 'analyticsId', WIKI.config.seo.analyticsId)
         }
 
+        const hideLocalRaw = _.get(args, 'authHideLocal', WIKI.config.auth.hideLocal)
         WIKI.config.auth = {
           autoLogin: _.get(args, 'authAutoLogin', WIKI.config.auth.autoLogin),
           enforce2FA: _.get(args, 'authEnforce2FA', WIKI.config.auth.enforce2FA),
-          hideLocal: _.get(args, 'authHideLocal', WIKI.config.auth.hideLocal),
+          hideLocal: Boolean(hideLocalRaw === true || hideLocalRaw === 'true' || hideLocalRaw === 1 || hideLocalRaw === '1'),
           loginBgUrl: _.get(args, 'authLoginBgUrl', WIKI.config.auth.loginBgUrl),
           audience: _.get(args, 'authJwtAudience', WIKI.config.auth.audience),
           tokenExpiration: _.get(args, 'authJwtExpiration', WIKI.config.auth.tokenExpiration),

@@ -199,10 +199,12 @@
               //- 4. NENHUMA ESTRATÉGIA ATIVA
               //- ---------------------------------------------------------
               template(v-else-if='screen === `login` && filteredStrategies.length === 0')
-                .detran-login-none.text-center.py-6
+                .detran-login-none.text-center.py-6(v-if='!isStrategiesLoading')
                   v-icon(size='40' color='#94a3b8') mdi-shield-alert-outline
                   p.mt-3.grey--text Nenhuma estratégia de autenticação ativa no momento.
                   p.caption.grey--text Configure os métodos de acesso na aba de Administração.
+                .detran-login-loading.text-center.py-6(v-else)
+                  v-progress-circular(indeterminate color='primary' size='36')
 
               //- ---------------------------------------------------------
               //- FORMULÁRIO DE ESQUECI A SENHA
@@ -366,7 +368,7 @@ export default {
       default: ''
     },
     hideLocal: {
-      type: Boolean,
+      type: [Boolean, String],
       default: false
     },
     changePwdContinuationToken: {
@@ -378,7 +380,7 @@ export default {
     return {
       error: false,
       strategies: [],
-      selectedStrategyKey: 'local',
+      selectedStrategyKey: '',
       screen: 'login',
       username: '',
       password: '',
@@ -407,9 +409,24 @@ export default {
       return this.strategies.length > 1
     },
     logoUrl () { return siteConfig.logoUrl },
-    filteredStrategies () {
+    isStrategiesLoading () {
+      return _.get(this, '$apollo.queries.strategies.loading', false)
+    },
+    isLocalHidden () {
       const qParams = new URLSearchParams(window.location.search)
-      if (this.hideLocal && !qParams.has('all')) {
+      if (qParams.has('all')) {
+        return false
+      }
+      if (this.hideLocal === true || this.hideLocal === 'true' || this.hideLocal === 'hide-local' || this.hideLocal === 1 || this.hideLocal === '1') {
+        return true
+      }
+      if (typeof siteConfig !== 'undefined' && siteConfig && (siteConfig.authHideLocal === true || siteConfig.authHideLocal === 'true' || siteConfig.authHideLocal === 1 || siteConfig.authHideLocal === '1')) {
+        return true
+      }
+      return false
+    },
+    filteredStrategies () {
+      if (this.isLocalHidden) {
         return _.reject(this.strategies, ['key', 'local'])
       } else {
         return this.strategies
@@ -422,14 +439,20 @@ export default {
       return this.filteredStrategies.filter(s => s.strategy && !s.strategy.useForm)
     },
     selectedStrategy () {
-      let stg = _.find(this.strategies, ['key', this.selectedStrategyKey])
+      let stg = _.find(this.filteredStrategies, ['key', this.selectedStrategyKey])
       if (!stg && this.formStrategies.length > 0) {
         stg = this.formStrategies[0]
       }
       if (!stg && this.filteredStrategies.length > 0) {
         stg = this.filteredStrategies[0]
       }
-      return stg || { key: 'local', strategy: { useForm: true, usernameType: 'email', icon: '', color: 'blue darken-2' }, displayName: 'Local' }
+      if (stg) {
+        return stg
+      }
+      if (this.isLocalHidden) {
+        return { key: '', strategy: { useForm: false, usernameType: 'email', icon: '', color: 'grey' }, displayName: '' }
+      }
+      return { key: 'local', strategy: { useForm: true, usernameType: 'email', icon: '', color: 'blue darken-2' }, displayName: 'Local' }
     },
     isUsernameEmail () {
       return _.get(this.selectedStrategy, 'strategy.usernameType', 'email') === 'email'
@@ -455,7 +478,12 @@ export default {
     filteredStrategies: {
       immediate: true,
       handler (newValue) {
-        if (!newValue || newValue.length === 0) return
+        if (!newValue || newValue.length === 0) {
+          if (this.isLocalHidden) {
+            this.selectedStrategyKey = ''
+          }
+          return
+        }
         if (!_.some(newValue, ['key', this.selectedStrategyKey])) {
           const firstForm = _.find(newValue, s => s.strategy && s.strategy.useForm)
           if (firstForm) {

@@ -62,7 +62,8 @@ router.get('/login', async (req, res, next) => {
     }
     // -> Show Login
     const bgUrl = !_.isEmpty(WIKI.config.auth.loginBgUrl) ? WIKI.config.auth.loginBgUrl : '/_assets/img/splash/1.jpg'
-    res.render('login', { bgUrl, hideLocal: WIKI.config.auth.hideLocal })
+    const hideLocal = Boolean(WIKI.config.auth && (WIKI.config.auth.hideLocal === true || WIKI.config.auth.hideLocal === 'true' || WIKI.config.auth.hideLocal === 1 || WIKI.config.auth.hideLocal === '1'))
+    res.render('login', { bgUrl, hideLocal })
   }
 })
 
@@ -225,7 +226,8 @@ router.get('/login-reset/:token', bruteforce.prevent, async (req, res, next) => 
       kind: 'changePwd'
     })
     const bgUrl = !_.isEmpty(WIKI.config.auth.loginBgUrl) ? WIKI.config.auth.loginBgUrl : '/_assets/img/splash/1.jpg'
-    res.render('login', { bgUrl, hideLocal: WIKI.config.auth.hideLocal, changePwdContinuationToken })
+    const hideLocal = Boolean(WIKI.config.auth && (WIKI.config.auth.hideLocal === true || WIKI.config.auth.hideLocal === 'true' || WIKI.config.auth.hideLocal === 1 || WIKI.config.auth.hideLocal === '1'))
+    res.render('login', { bgUrl, hideLocal, changePwdContinuationToken })
   } catch (err) {
     next(err)
   }
