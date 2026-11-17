@@ -359,6 +359,48 @@ describe('Etapa 3.1: Tela Comparativa de Revisão, Diff e Anotações', () => {
       expect(res.draft.currentLevel).toBe(2)
     })
 
+    it('deve permitir que revisor encaminhe rascunho de 1_level para o aprovador via approveStep promovendo para 2_levels', async () => {
+      const draft1L = await DraftModel.query().insert({
+        pageId: null,
+        path: 'diretrizes/manual-1level-forward',
+        locale: 'pt-br',
+        title: 'Manual 1 Level',
+        content: 'Conteúdo original',
+        state: 'in_review',
+        approvalMode: '1_level',
+        currentLevel: 1,
+        authorId: 10
+      })
+
+      const userReviewer = { id: 25, name: 'Maria Eduarda Revisor', permissions: ['review:pages'] }
+      const res = await workflowResolvers.DetranWorkflowMutation.approveStep(
+        null,
+        {
+          id: draft1L.id,
+          comment: 'Modificações editoriais aceitas. Enviando para o aprovador.'
+        },
+        { user: userReviewer }
+      )
+
+      expect(res.responseResult.succeeded).toBe(true)
+      expect(res.draft.state).toBe('awaiting_approval')
+      expect(res.draft.currentLevel).toBe(2)
+      expect(res.draft.approvalMode).toBe('2_levels')
+
+      // O aprovador agora consegue homologar e publicar
+      const userApprover = { id: 35, name: 'Aprovador Final', permissions: ['approve:pages'] }
+      const pubRes = await workflowResolvers.DetranWorkflowMutation.publish(
+        null,
+        {
+          id: draft1L.id,
+          comment: 'Homologado após revisão técnica.'
+        },
+        { user: userApprover }
+      )
+      expect(pubRes.responseResult.succeeded).toBe(true)
+      expect(pubRes.draft.state).toBe('published')
+    })
+
     it('deve homologar e publicar oficialmente em pages via publish', async () => {
       // Ajustar estado para awaiting_approval (homologação final em 2 níveis)
       await testDraft.$query().patch({ state: 'awaiting_approval', currentLevel: 2 })
@@ -561,7 +603,7 @@ describe('Etapa 3.1: Tela Comparativa de Revisão, Diff e Anotações', () => {
       expect(rcSrc).toContain('sortReviewItems(')
     })
 
-    it('sinaliza requiresApproverToPublish para Revisor em 1_level / awaiting_approval e libera encaminhamento em 2_levels', () => {
+    it('libera encaminhamento para o Aprovador para Revisor em 1_level e 2_levels e sinaliza requiresApproverToPublish em awaiting_approval', () => {
       const reviewer1Level = getAvailableReviewActions({
         state: 'in_review',
         approvalMode: '1_level',
@@ -570,9 +612,11 @@ describe('Etapa 3.1: Tela Comparativa de Revisão, Diff e Anotações', () => {
         permissions: { 'review:pages': true }
       })
       expect(reviewer1Level.canPublish).toBe(false)
-      expect(reviewer1Level.canApproveStep).toBe(false)
+      expect(reviewer1Level.canApproveStep).toBe(true)
+      expect(reviewer1Level.canFinalizeApproveStep).toBe(true)
+      expect(reviewer1Level.labelApproveStep).toBe('Enviar para o Aprovador')
       expect(reviewer1Level.canRequestChanges).toBe(true)
-      expect(reviewer1Level.requiresApproverToPublish).toBe(true)
+      expect(reviewer1Level.requiresApproverToPublish).toBe(false)
       expect(reviewer1Level.awaitingFinalApprovalOnly).toBe(false)
 
       const reviewer2LevelsStep1 = getAvailableReviewActions({

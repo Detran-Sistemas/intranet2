@@ -173,7 +173,7 @@ function getAvailableReviewActions (draftOrOptions = {}, permissionsArg = null) 
     canFinalizePublish: false,
     requiresApproverToPublish: false,
     awaitingFinalApprovalOnly: false,
-    labelApproveStep: 'Aprovar Nível 1 (Técnico)',
+    labelApproveStep: 'Enviar para o Aprovador',
     labelPublish: 'Homologar e Publicar',
     labelRevalidate: 'Revalidar Vigência (+12m)',
     statusDescription: ''
@@ -183,20 +183,25 @@ function getAvailableReviewActions (draftOrOptions = {}, permissionsArg = null) 
     if (!resolvedIsAuthor) {
       actions.canRequestChanges = canReviewOrApprove
     }
-    if (approvalMode === '2_levels') {
-      if (!resolvedIsAuthor) {
+    if (!resolvedIsAuthor) {
+      if (canApprove && approvalMode !== '2_levels') {
+        // Approver in 1-level mode can publish directly
+        actions.canPublish = true
+        actions.canApproveStep = false
+        actions.statusDescription = 'Aguardando Homologação Direta (Nível Único)'
+      } else {
+        // Reviewer (or in 2-level mode): can approve review step and forward to Approver
+        actions.canPublish = false
         actions.canApproveStep = canReviewOrApprove
+        actions.labelApproveStep = 'Enviar para o Aprovador'
+        actions.statusDescription = resolvedIsAuthor ?
+          'Aguardando parecer do revisor técnico. Puxe de volta para editar se necessário.' :
+          (approvalMode === '2_levels' ?
+            'Aguardando Revisão Técnica (Nível 1 de 2)' :
+            'Aguardando Parecer do Revisor — revise as modificações e envie ao aprovador')
       }
-      actions.statusDescription = resolvedIsAuthor ?
-        'Aguardando parecer do revisor técnico. Puxe de volta para editar se necessário.' :
-        'Aguardando Revisão Técnica (Nível 1 de 2)'
     } else {
-      if (!resolvedIsAuthor) {
-        actions.canPublish = canApprove
-      }
-      actions.statusDescription = resolvedIsAuthor ?
-        'Aguardando parecer do revisor técnico. Puxe de volta para editar se necessário.' :
-        'Aguardando Homologação Direta (Nível Único)'
+      actions.statusDescription = 'Aguardando parecer do revisor técnico. Puxe de volta para editar se necessário.'
     }
   } else if (state === 'awaiting_approval' || state === 'in_approval_step2') {
     if (!resolvedIsAuthor) {
@@ -232,7 +237,7 @@ function getAvailableReviewActions (draftOrOptions = {}, permissionsArg = null) 
     !resolvedIsAuthor &&
     canReview &&
     !canApprove &&
-    ((state === 'in_review' && approvalMode !== '2_levels') || actions.awaitingFinalApprovalOnly)
+    (state === 'awaiting_approval' || state === 'in_approval_step2')
   )
 
   return actions

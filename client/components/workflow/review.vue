@@ -351,11 +351,11 @@
                 v-if='actionsHelper.canApproveStep && !actionsHelper.canPublish'
                 type='button'
                 :disabled='submittingAction || actionsHelper.isApprovalBlockedByPendingItems'
-                :title='actionsHelper.isApprovalBlockedByPendingItems ? "Analise todas as sugestões e comentários pendentes antes de aprovar" : "Aprovar revisão técnica"'
+                :title='actionsHelper.isApprovalBlockedByPendingItems ? "Analise todas as sugestões e comentários pendentes antes de enviar ao aprovador" : "Enviar texto para o aprovador"'
                 @click='openActionDialog("approveStep")'
               )
-                v-icon(size='15' color='#ffffff') mdi-check-all
-                span Aprovar Revisão Técnica
+                v-icon(size='15' color='#ffffff') mdi-send-check-outline
+                span {{ actionsHelper.labelApproveStep || 'Enviar para o Aprovador' }}
 
               button.detran-fab-btn.detran-fab-btn--primary(
                 v-else-if='actionsHelper.canPublish'
@@ -369,11 +369,11 @@
 
               p.detran-decision-side-card__lock-hint(
                 v-if='actionsHelper.isApprovalBlockedByPendingItems'
-              ) Aceite ou recuse todos os {{ pendingReviewCount }} {{ pendingReviewCount === 1 ? 'item pendente' : 'itens pendentes' }} para liberar a aprovação (ou devolva com ajustes).
+              ) Aceite ou recuse todos os {{ pendingReviewCount }} {{ pendingReviewCount === 1 ? 'item pendente' : 'itens pendentes' }} para liberar o envio ao aprovador (ou devolva com ajustes).
 
               p.detran-decision-side-card__lock-hint(
                 v-else-if='actionsHelper.requiresApproverToPublish && !actionsHelper.canApproveStep && !actionsHelper.canPublish'
-              ) {{ actionsHelper.awaitingFinalApprovalOnly ? 'Revisão técnica já concluída (Nível 1). Aguardando homologação final por usuário com perfil Aprovador.' : 'Publicação direta em 1 nível é exclusiva para Aprovadores. Devolva com ajustes ou configure fluxo de 2 níveis no Admin.' }}
+              ) {{ actionsHelper.awaitingFinalApprovalOnly ? 'Revisão técnica já concluída (Nível 1). Aguardando homologação final por usuário com perfil Aprovador.' : 'Aguardando homologação final por usuário com perfil Aprovador.' }}
 
     //- ========================================================================
     //- MODAL INSTITUCIONAL DE CONFIRMAÇÃO DE DECISÃO
@@ -448,7 +448,7 @@
               color='#ffffff'
             )
             v-icon(v-else size='15' color='#ffffff') mdi-check
-            span {{ actionDialog.type === 'requestChanges' ? 'Enviar para Ajustes' : (actionDialog.type === 'retract' ? 'Puxar para Edição' : (actionDialog.type === 'submit' ? 'Submeter à Aprovação' : (actionDialog.type === 'approveStep' ? 'Aprovar Revisão' : 'Confirmar e Publicar'))) }}
+            span {{ actionDialog.type === 'requestChanges' ? 'Enviar para Ajustes' : (actionDialog.type === 'retract' ? 'Puxar para Edição' : (actionDialog.type === 'submit' ? 'Submeter à Aprovação' : (actionDialog.type === 'approveStep' ? 'Enviar para o Aprovador' : 'Confirmar e Publicar'))) }}
 </template>
 
 <script>
@@ -463,7 +463,8 @@ import {
   canDecideReviewSuggestion,
   buildVisualDiffDocument,
   createTextQuoteSelectorFromText,
-  applySuggestionDecisionToMarkdown
+  applySuggestionDecisionToMarkdown,
+  decodeTextQuoteSelector
 } from '../../store/detran-workflow-review'
 import { inspectMarkdownForBlobUrls } from '../../themes/default/components/transparent-editor/utils/smart-paste'
 
@@ -675,7 +676,13 @@ export default {
     },
 
     unresolvedCommentsCount () {
-      return (this.draft.comments || []).filter(c => !c.resolved).length
+      return (this.draft.comments || []).filter(c => {
+        if (c.resolved) return false
+        const selector = decodeTextQuoteSelector(c)
+        // Replies to suggestions or other comments do not count as root pending items
+        if (selector.targetId || selector.parentCommentId) return false
+        return true
+      }).length
     },
 
     pendingReviewCount () {
@@ -754,7 +761,7 @@ export default {
         return `Faltam ${this.pendingReviewCount} ${this.pendingReviewCount === 1 ? 'revisão pendente' : 'revisões pendentes'}`
       }
       if (this.actionsHelper.requiresApproverToPublish && !this.actionsHelper.canApproveStep && !this.actionsHelper.canPublish) {
-        return 'Alterações Revisadas (Sem Publicação)'
+        return 'Alterações Revisadas (Aguardando Aprovador)'
       }
       return '✓ Todas as alterações revisadas'
     },
@@ -1482,12 +1489,12 @@ export default {
         this.actionDialog.icon = 'mdi-undo-variant'
         this.actionDialog.headerClass = 'is-warning'
       } else if (type === 'approveStep') {
-        this.actionDialog.title = 'Aprovar Nível 1 (Revisão Técnica)'
+        this.actionDialog.title = 'Enviar Texto para o Aprovador'
         this.actionDialog.description =
-          'O parecer técnico será registrado e o documento avançará para a Homologação Final.'
-        this.actionDialog.commentLabel = 'Parecer Técnico (Opcional):'
-        this.actionDialog.commentPlaceholder = 'Observações sobre a conformidade técnica do documento...'
-        this.actionDialog.icon = 'mdi-check-all'
+          'Todas as alterações do editor foram revisadas. O documento avançará para a homologação final do Aprovador.'
+        this.actionDialog.commentLabel = 'Parecer da Revisão (Opcional):'
+        this.actionDialog.commentPlaceholder = 'Ex: Modificações editoriais aceitas e texto revisado com sucesso...'
+        this.actionDialog.icon = 'mdi-send-check-outline'
         this.actionDialog.headerClass = 'is-emerald'
       } else if (type === 'publish') {
         this.actionDialog.title = 'Aprovar e Publicar no Portal da Intranet'
@@ -1669,7 +1676,7 @@ export default {
             this.$store.commit('showNotification', {
               style: 'success',
               icon: 'check',
-              message: 'Revisão técnica aprovada. Encaminhado para homologação final!'
+              message: 'Texto revisado e enviado para o Aprovador com sucesso!'
             })
             /* eslint-disable-next-line vue/custom-event-name-casing */
             this.$root.$emit('workflowRefreshTasks')

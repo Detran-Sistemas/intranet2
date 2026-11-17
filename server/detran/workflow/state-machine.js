@@ -96,9 +96,6 @@ class WorkflowStateMachine {
         if (currentState !== STATES.IN_REVIEW) {
           throw new InvalidTransitionError(currentState, action, 'Can only approve step from in_review')
         }
-        if (mode !== '2_levels') {
-          throw new InvalidTransitionError(currentState, action, 'Step approval only applies to 2-level workflows. Use publish for 1-level workflows.')
-        }
         return { targetState: STATES.AWAITING_APPROVAL, currentLevel: 2 }
 
       case ACTIONS.PUBLISH:
@@ -227,6 +224,10 @@ class WorkflowStateMachine {
     const patchData = {
       state: targetState,
       currentLevel
+    }
+
+    if (action === ACTIONS.APPROVE_STEP && draft.approvalMode !== '2_levels') {
+      patchData.approvalMode = '2_levels'
     }
 
     if (action === ACTIONS.RETRACT) {
