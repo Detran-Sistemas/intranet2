@@ -459,5 +459,66 @@ describe('Revisão Contextual: Segurança, Clean Architecture, State Machine Est
       // Com batching via WHERE IN, findById individual por rascunho não deve ser chamado N vezes
       expect(findUserSpy.mock.calls.length).toBeLessThanOrEqual(1)
     })
+
+    it('permite que revisor/aprovador consulte rascunho com regras de página padrão do Wiki.js e garante acesso do autor', async () => {
+      // Cria rascunho pelo autor
+      const saveRes = await resolvers.DetranWorkflowMutation.saveDraft(
+        {},
+        {
+          path: 'normativos/resolucao-maria-eduarda',
+          title: 'Resolução para Teste de Acesso',
+          content: 'Conteúdo normativo',
+          approvalMode: '2_levels'
+        },
+        { req: { user: userAuthor } }
+      )
+      const draftId = saveRes.draft.id
+
+      // Simula WIKI.auth integrado com grupo que possui 'read:pages' nas regras de página
+      global.WIKI.auth = {
+        checkAccess: jest.fn((user, permissions, page) => {
+          // Wiki.js core checkAccess: rule.roles tipicamente possui ['read:pages']
+          const ruleRoles = ['read:pages']
+          return permissions.some(p => ruleRoles.includes(p))
+        })
+      }
+
+      // 1. Revisor terceiro (Maria Eduarda) consulta rascunho: deve ter sucesso
+      const draftReviewer = await resolvers.DetranWorkflowQuery.draft(
+        {},
+        { id: draftId },
+        { req: { user: userReviewer } }
+      )
+      expect(draftReviewer).not.toBeNull()
+      expect(draftReviewer.id).toBe(draftId)
+
+      // 2. Aprovador terceiro consulta rascunho: deve ter sucesso
+      const draftApprover = await resolvers.DetranWorkflowQuery.draft(
+        {},
+        { id: draftId },
+        { req: { user: userApprover } }
+      )
+      expect(draftApprover).not.toBeNull()
+      expect(draftApprover.id).toBe(draftId)
+
+      // 3. Autor consulta o próprio rascunho: deve ter acesso garantido
+      const draftSelf = await resolvers.DetranWorkflowQuery.draft(
+        {},
+        { id: draftId },
+        { req: { user: userAuthor } }
+      )
+      expect(draftSelf).not.toBeNull()
+      expect(draftSelf.id).toBe(draftId)
+
+      // 4. Usuário leitor comum (sem write:drafts, review:pages ou approve:pages): deve ser bloqueado
+      const userPlainViewer = { id: 999, name: 'Leitor Comum', email: 'leitor@detran.mg.gov.br', permissions: ['read:pages'] }
+      await expect(
+        resolvers.DetranWorkflowQuery.draft(
+          {},
+          { id: draftId },
+          { req: { user: userPlainViewer } }
+        )
+      ).rejects.toThrow('Permissão insuficiente para consultar este rascunho.')
+    })
   })
 })

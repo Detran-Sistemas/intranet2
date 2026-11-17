@@ -10,6 +10,30 @@ const eventsDispatcher = require('./events-dispatcher')
 /* global WIKI */
 
 /**
+ * Helper to extract permissions list from user instance, JWT payload, or session groups
+ *
+ * @param {Object} user
+ * @returns {Array<string>}
+ */
+function extractUserPermissions(user) {
+  if (!user) return []
+  if (Array.isArray(user.permissions)) return user.permissions
+  if (typeof user.getGlobalPermissions === 'function') {
+    try {
+      const perms = user.getGlobalPermissions()
+      if (Array.isArray(perms)) return perms
+    } catch (_) {}
+  }
+  if (Array.isArray(user.groups) && typeof WIKI !== 'undefined' && WIKI.auth && WIKI.auth.groups) {
+    return _.uniq(_.flatten(user.groups.map(g => {
+      const gid = (typeof g === 'object' && g !== null) ? g.id : g
+      return _.get(WIKI.auth.groups, `${gid}.permissions`, [])
+    })))
+  }
+  return []
+}
+
+/**
  * Check RBAC access against Wiki.js core auth or user permissions array (Fail-Closed)
  *
  * @param {Object} user - Authenticated user
@@ -26,22 +50,28 @@ function checkWorkflowAccess(user, requiredPermissions, pageContext = null) {
     return true
   }
 
-  // 1. Core Wiki.js auth integration
-  if (typeof WIKI !== 'undefined' && WIKI.auth && typeof WIKI.auth.checkAccess === 'function') {
-    const pageArg = (pageContext && pageContext.path) ? pageContext : false
-    return Boolean(WIKI.auth.checkAccess(user, requiredPermissions, pageArg))
+  const userPermissions = extractUserPermissions(user)
+
+  // Superadmin bypass
+  if (userPermissions.includes('manage:system')) {
+    return true
   }
 
-  // 2. Standalone / Test environment with explicit permissions array
-  if (Array.isArray(user.permissions)) {
-    if (user.permissions.includes('manage:system')) {
-      return true
-    }
-    return _.intersection(user.permissions, requiredPermissions).length > 0
+  // 1. Global capability check: user must possess at least one of the required workflow permissions
+  if (_.intersection(userPermissions, requiredPermissions).length < 1) {
+    return false
   }
 
-  // Fail-closed when neither WIKI.auth nor user.permissions array is present
-  return false
+  // 2. Page-level scoping check: verify path accessibility through Wiki.js core auth when context is provided
+  if (pageContext && (typeof pageContext.path === 'string') && typeof WIKI !== 'undefined' && WIKI.auth && typeof WIKI.auth.checkAccess === 'function') {
+    // In Wiki.js, group page rules authorize path access via 'read:pages', 'write:pages', or 'manage:pages'.
+    // A user with a valid workflow role (e.g. 'review:pages' or 'approve:pages') is authorized for path P
+    // if their page rules grant them reading/writing access to that path in Wiki.js without an overriding DENY rule.
+    const pageRoles = _.uniq([...requiredPermissions, 'read:pages', 'write:pages', 'manage:pages'])
+    return Boolean(WIKI.auth.checkAccess(user, pageRoles, pageContext))
+  }
+
+  return true
 }
 
 /**

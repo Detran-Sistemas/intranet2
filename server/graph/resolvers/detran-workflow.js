@@ -69,7 +69,12 @@ module.exports = {
         return null
       }
 
-      if (hasAuthContext && !checkWorkflowAccess(user, ['write:drafts', 'write:pages', 'review:pages', 'approve:pages', 'manage:pages', 'manage:system'], { path: draft.path, locale: draft.locale })) {
+      const isAuthor = Boolean(user && (
+        (draft.authorId && Number(draft.authorId) === Number(user.id)) ||
+        (user.email && draft.authorEmail && String(draft.authorEmail).trim().toLowerCase() === String(user.email).trim().toLowerCase())
+      ))
+
+      if (hasAuthContext && !isAuthor && !checkWorkflowAccess(user, ['write:drafts', 'write:pages', 'review:pages', 'approve:pages', 'manage:pages', 'manage:system'], { path: draft.path, locale: draft.locale })) {
         throw new PermissionDeniedError('Permissão insuficiente para consultar este rascunho.')
       }
 
@@ -97,7 +102,12 @@ module.exports = {
         return null
       }
 
-      if (hasAuthContext && !checkWorkflowAccess(user, ['write:drafts', 'write:pages', 'review:pages', 'approve:pages', 'manage:pages', 'manage:system'], { path: draft.path, locale: draft.locale })) {
+      const isAuthor = Boolean(user && (
+        (draft.authorId && Number(draft.authorId) === Number(user.id)) ||
+        (user.email && draft.authorEmail && String(draft.authorEmail).trim().toLowerCase() === String(user.email).trim().toLowerCase())
+      ))
+
+      if (hasAuthContext && !isAuthor && !checkWorkflowAccess(user, ['write:drafts', 'write:pages', 'review:pages', 'approve:pages', 'manage:pages', 'manage:system'], { path: draft.path, locale: draft.locale })) {
         return null
       }
 
