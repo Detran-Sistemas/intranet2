@@ -662,21 +662,27 @@ function wrapImageInSuggestionBox (blockObj, sugId, badgeLabel = 'Nova Imagem Ad
  */
 function encodeTextQuoteSelector ({
   id = '',
+  targetId = null,
+  parentCommentId = null,
   exact = '',
   prefix = '',
   suffix = '',
   suggestedReplacement = '',
   status = 'pending',
+  reviewedAt = null,
   replies = []
 } = {}) {
   return JSON.stringify({
     type: 'TextQuoteSelector',
     id: id || `tq-${Date.now()}`,
+    targetId: targetId || undefined,
+    parentCommentId: parentCommentId || undefined,
     exact: String(exact || '').trim(),
     prefix: String(prefix || '').slice(-30),
     suffix: String(suffix || '').slice(0, 30),
     suggestedReplacement: String(suggestedReplacement || '').trim(),
     status: status || 'pending',
+    reviewedAt: reviewedAt || null,
     replies: Array.isArray(replies) ? replies : []
   })
 }
@@ -692,6 +698,8 @@ function decodeTextQuoteSelector (commentRow = {}) {
       if (parsed && (parsed.type === 'TextQuoteSelector' || typeof parsed.exact === 'string')) {
         return {
           id: parsed.id || `com-${commentRow.id || Date.now()}`,
+          targetId: parsed.targetId || null,
+          parentCommentId: parsed.parentCommentId || null,
           exact: parsed.exact || '',
           prefix: parsed.prefix || '',
           suffix: parsed.suffix || '',
@@ -708,6 +716,8 @@ function decodeTextQuoteSelector (commentRow = {}) {
 
   return {
     id: `com-${commentRow.id || Date.now()}`,
+    targetId: null,
+    parentCommentId: null,
     exact: rawAnchor,
     prefix: '',
     suffix: '',

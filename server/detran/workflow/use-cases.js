@@ -133,22 +133,25 @@ async function formatDraftsBatch(drafts = []) {
     }
   }
 
-  // 2. Batch fetch author names (1 query via whereIn or deduplicated per unique authorId)
-  const uniqueAuthorIds = _.uniq(validDrafts.map(d => Number(d.authorId)).filter(id => id > 0))
+  // 2. Batch fetch user names (authors, commenters, and event users)
+  const allUserIds = new Set(validDrafts.map(d => Number(d.authorId)).filter(id => id > 0))
+  eventsByDraftId.forEach(list => list.forEach(ev => { if (ev.userId) allUserIds.add(Number(ev.userId)) }))
+  commentsByDraftId.forEach(list => list.forEach(cm => { if (cm.userId) allUserIds.add(Number(cm.userId)) }))
+  const uniqueUserIds = Array.from(allUserIds)
   const authorsById = new Map()
 
-  if (uniqueAuthorIds.length > 0 && typeof WIKI !== 'undefined' && WIKI.models && WIKI.models.users) {
+  if (uniqueUserIds.length > 0 && typeof WIKI !== 'undefined' && WIKI.models && WIKI.models.users) {
     try {
       const uQuery = WIKI.models.users.query()
       if (uQuery && typeof uQuery.whereIn === 'function') {
-        const rows = await uQuery.whereIn('id', uniqueAuthorIds)
+        const rows = await uQuery.whereIn('id', uniqueUserIds)
         if (Array.isArray(rows)) {
           for (const u of rows) {
             if (u && u.id) authorsById.set(Number(u.id), u)
           }
         }
       } else if (uQuery && typeof uQuery.findById === 'function') {
-        for (const uid of uniqueAuthorIds) {
+        for (const uid of uniqueUserIds) {
           const u = await WIKI.models.users.query().findById(uid)
           if (u) authorsById.set(Number(uid), u)
         }
@@ -222,10 +225,24 @@ async function formatDraftsBatch(drafts = []) {
     }
 
     if (!formatted.events) {
-      formatted.events = eventsByDraftId.get(draft.id) || []
+      const rawEvents = eventsByDraftId.get(draft.id) || []
+      formatted.events = rawEvents.map(ev => {
+        const u = authorsById.get(Number(ev.userId))
+        return {
+          ...ev,
+          userName: u ? (u.name || u.email) : (ev.userName || `Usuário #${ev.userId}`)
+        }
+      })
     }
     if (!formatted.comments) {
-      formatted.comments = commentsByDraftId.get(draft.id) || []
+      const rawComments = commentsByDraftId.get(draft.id) || []
+      formatted.comments = rawComments.map(cm => {
+        const u = authorsById.get(Number(cm.userId))
+        return {
+          ...cm,
+          userName: u ? (u.name || u.email) : (cm.userName || `Usuário #${cm.userId}`)
+        }
+      })
     }
 
     if (formatted.events && formatted.events.length > 0) {

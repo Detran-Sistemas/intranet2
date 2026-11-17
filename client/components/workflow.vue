@@ -708,6 +708,7 @@ export default {
   z-index: 51;
 
   &.is-collapsed {
+    margin-left: auto;
     max-width: 46px;
     width: 46px;
     padding: 0;

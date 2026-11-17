@@ -770,5 +770,29 @@ module.exports = {
         return graphHelper.generateError(err)
       }
     }
+  },
+  DetranWorkflowComment: {
+    async userName(obj) {
+      if (obj.userName) return obj.userName
+      if (obj.userId && typeof WIKI !== 'undefined' && WIKI.models && WIKI.models.users) {
+        try {
+          const u = await WIKI.models.users.query().findById(obj.userId)
+          if (u) return u.name || u.email
+        } catch (e) {}
+      }
+      return `Usuário #${obj.userId}`
+    }
+  },
+  DetranWorkflowEvent: {
+    async userName(obj) {
+      if (obj.userName) return obj.userName
+      if (obj.userId && typeof WIKI !== 'undefined' && WIKI.models && WIKI.models.users) {
+        try {
+          const u = await WIKI.models.users.query().findById(obj.userId)
+          if (u) return u.name || u.email
+        } catch (e) {}
+      }
+      return `Usuário #${obj.userId}`
+    }
   }
 }

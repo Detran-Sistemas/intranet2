@@ -303,50 +303,92 @@ export default {
         ...this.localReviewedTimestamps
       }
     },
+    persistedRepliesByTargetId () {
+      const map = {}
+      for (const c of (this.comments || [])) {
+        const selector = decodeTextQuoteSelector(c)
+        const targetId = selector.targetId || (selector.parentCommentId ? `com-${selector.parentCommentId}` : null)
+        if (targetId) {
+          if (!map[targetId]) map[targetId] = []
+          map[targetId].push({
+            id: c.id,
+            author: c.userName || 'Servidor',
+            text: c.body,
+            createdAt: c.createdAt
+          })
+        }
+      }
+      return map
+    },
     normalizedSuggestionItems () {
       return (this.suggestions || []).map(sug => {
         const decision = this.suggestionDecisions[sug.id] || sug.status || 'pending'
         const status = decision === 'accepted' ? 'accepted' : (decision === 'rejected' ? 'rejected' : 'pending')
         const reviewedAt = status !== 'pending' ? (this.mergedReviewedTimestamps[sug.id] || sug.reviewedAt || null) : null
+
+        const persisted = this.persistedRepliesByTargetId[sug.id] || []
+        const local = this.localSuggestionReplies[sug.id] || sug.replies || []
+        const mergedReplies = [...persisted]
+        for (const loc of local) {
+          if (!mergedReplies.some(p => p.text === loc.text)) {
+            mergedReplies.push(loc)
+          }
+        }
+
         return {
           ...sug,
           status,
           createdAt: sug.createdAt || this.draftUpdatedAt || null,
           reviewedAt,
           timeLabel: reviewedAt ? `Revisado às ${moment(reviewedAt).format('HH:mm')}` : (sug.time || 'Nesta submissão'),
-          replies: this.localSuggestionReplies[sug.id] || sug.replies || []
+          replies: mergedReplies
         }
       })
     },
     normalizedCommentItems () {
-      return (this.comments || []).map(c => {
-        const selector = decodeTextQuoteSelector(c)
-        const isRedaction = Boolean(selector.suggestedReplacement)
-        const status = c.resolved ? (selector.status === 'rejected' ? 'rejected' : 'accepted') : 'pending'
-        const itemId = `com-${c.id}`
-        const reviewedAt = status !== 'pending' ?
-          (this.mergedReviewedTimestamps[itemId] || selector.reviewedAt || c.updatedAt || c.createdAt || null) :
-          null
-        return {
-          id: itemId,
-          rawCommentId: c.id,
-          type: isRedaction ? 'redaction' : 'comment',
-          author: c.userName || 'Revisor',
-          actionLabel: isRedaction ? 'Sugeriu nova redação' : 'Comentou no trecho',
-          createdAt: c.createdAt || null,
-          updatedAt: c.updatedAt || null,
-          reviewedAt,
-          timeLabel: c.createdAt ? moment(c.createdAt).format('DD/MM HH:mm') : 'Agora mesmo',
-          quote: selector.exact || '',
-          prefix: selector.prefix || '',
-          suffix: selector.suffix || '',
-          oldText: isRedaction ? selector.exact : '',
-          newText: selector.suggestedReplacement || '',
-          commentText: c.body || '',
-          status,
-          replies: selector.replies || []
-        }
-      })
+      return (this.comments || [])
+        .filter(c => {
+          const selector = decodeTextQuoteSelector(c)
+          return !selector.targetId && !selector.parentCommentId
+        })
+        .map(c => {
+          const selector = decodeTextQuoteSelector(c)
+          const isRedaction = Boolean(selector.suggestedReplacement)
+          const status = c.resolved ? (selector.status === 'rejected' ? 'rejected' : 'accepted') : 'pending'
+          const itemId = `com-${c.id}`
+          const reviewedAt = status !== 'pending' ?
+            (this.mergedReviewedTimestamps[itemId] || selector.reviewedAt || c.updatedAt || c.createdAt || null) :
+            null
+
+          const persisted = this.persistedRepliesByTargetId[itemId] || []
+          const local = this.localSuggestionReplies[itemId] || selector.replies || []
+          const mergedReplies = [...persisted]
+          for (const loc of local) {
+            if (!mergedReplies.some(p => p.text === loc.text)) {
+              mergedReplies.push(loc)
+            }
+          }
+
+          return {
+            id: itemId,
+            rawCommentId: c.id,
+            type: isRedaction ? 'redaction' : 'comment',
+            author: c.userName || 'Revisor',
+            actionLabel: isRedaction ? 'Sugeriu nova redação' : 'Comentou no trecho',
+            createdAt: c.createdAt || null,
+            updatedAt: c.updatedAt || null,
+            reviewedAt,
+            timeLabel: c.createdAt ? moment(c.createdAt).format('DD/MM HH:mm') : 'Agora mesmo',
+            quote: selector.exact || '',
+            prefix: selector.prefix || '',
+            suffix: selector.suffix || '',
+            oldText: isRedaction ? selector.exact : '',
+            newText: selector.suggestedReplacement || '',
+            commentText: c.body || '',
+            status,
+            replies: mergedReplies
+          }
+        })
     },
     allItems () {
       return sortReviewItems(
@@ -636,15 +678,78 @@ export default {
         this.resolvingId = null
       }
     },
-    submitReply (item) {
+    async submitReply (item) {
       const text = String(this.replyInputs[item.id] || '').trim()
       if (!text) return
+
+      const myName = (this.$store && this.$store.state && this.$store.state.user && this.$store.state.user.name) || 'Você'
       const existing = this.localSuggestionReplies[item.id] || item.replies || []
+      const optimisticReply = { author: myName, text, createdAt: new Date().toISOString() }
+
       this.$set(this.localSuggestionReplies, item.id, [
         ...existing,
-        { author: 'Você (Revisor)', text }
+        optimisticReply
       ])
       this.$set(this.replyInputs, item.id, '')
+
+      try {
+        const encodedAnchor = encodeTextQuoteSelector({
+          id: item.id,
+          targetId: item.id,
+          parentCommentId: item.rawCommentId || null,
+          exact: item.oldText || item.newText || item.quote || '',
+          prefix: item.prefix || '',
+          suffix: item.suffix || '',
+          suggestedReplacement: item.newText || '',
+          status: item.status || 'pending',
+          replies: []
+        })
+
+        const result = await this.$apollo.mutate({
+          mutation: gql`
+            mutation ($draftId: Int!, $lineNumber: Int, $anchorText: String, $body: String!) {
+              workflow {
+                addComment(draftId: $draftId, lineNumber: $lineNumber, anchorText: $anchorText, body: $body) {
+                  responseResult {
+                    succeeded
+                    message
+                  }
+                  comment {
+                    id
+                    draftId
+                    userId
+                    userName
+                    lineNumber
+                    anchorText
+                    body
+                    resolved
+                    createdAt
+                    updatedAt
+                  }
+                }
+              }
+            }
+          `,
+          variables: {
+            draftId: this.draftId,
+            lineNumber: item.lineNumber || null,
+            anchorText: encodedAnchor,
+            body: text
+          }
+        })
+
+        const payload = result && result.data && result.data.workflow && result.data.workflow.addComment
+        if (payload && payload.responseResult && payload.responseResult.succeeded && payload.comment) {
+          /* eslint-disable-next-line vue/custom-event-name-casing */
+          this.$emit('comment-added', payload.comment)
+        }
+      } catch (err) {
+        this.$store.commit('showNotification', {
+          style: 'red',
+          icon: 'alert',
+          message: err.message || 'Erro ao persistir comentário.'
+        })
+      }
     },
     scrollToCard (itemId) {
       this.$nextTick(() => {

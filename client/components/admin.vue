@@ -206,17 +206,23 @@
                     v-list-item(
                       v-for='task in filteredNotificationTasks'
                       :key='task.id'
-                      :href='"/w/review/" + task.id + (task.state === "changes_requested" ? "?edit=1" : "")'
+                      :href='"/w/review/" + task.id + (task.state === "changes_requested" ? "?mode=edit&edit=1" : (task.state === "awaiting_approval" ? "?mode=clean" : "?mode=suggest"))'
+                      @click='markNotificationRead(task)'
                       class='py-2 px-3'
+                      :style='isNotificationRead(task) ? "opacity: 0.72; background: #f8fafc;" : "background: #ffffff;"'
                     )
-                      v-list-item-avatar.mr-3(size='32', :color='task.state === "changes_requested" ? "#fff7ed" : "#eff6ff"')
-                        v-icon(size='18', :color='task.state === "changes_requested" ? "#d97706" : "#2563eb"') {{ task.state === "changes_requested" ? "mdi-undo-variant" : "mdi-shield-check" }}
+                      v-list-item-avatar.mr-3(size='32', :color='task.state === "changes_requested" ? "#fff7ed" : (task.state === "published" ? "#f0fdf4" : "#eff6ff")')
+                        v-icon(size='18', :color='task.state === "changes_requested" ? "#d97706" : (task.state === "published" ? "#16a34a" : "#2563eb")')
+                          | {{ task.state === "changes_requested" ? "mdi-undo-variant" : (task.state === "published" ? "mdi-check-decagram" : "mdi-shield-check") }}
                       v-list-item-content
                         .d-flex.align-center.justify-space-between
-                          span.text-caption.font-weight-bold.text-uppercase(:class='task.state === "changes_requested" ? "amber--text text--darken-4" : "blue--text text--darken-3"') {{ task.state === "changes_requested" ? "Devolvido para Ajustes" : "Validação Pendente" }}
-                          span.text-caption(:class='task.state === "changes_requested" ? "amber--text text--darken-4 font-weight-bold" : "grey--text"') {{ task.state === "changes_requested" ? "Ajustar" : "Pendente" }}
+                          span.text-caption.font-weight-bold.text-uppercase(:class='task.state === "changes_requested" ? "amber--text text--darken-4" : (task.state === "published" ? "green--text text--darken-3" : "blue--text text--darken-3")')
+                            | {{ task.state === "changes_requested" ? "Devolvido para Ajustes" : (task.state === "published" ? "Publicação Homologada" : "Validação Pendente") }}
+                          span.text-caption(:class='!isNotificationRead(task) ? (task.state === "changes_requested" ? "amber--text text--darken-4 font-weight-bold" : "blue--text text--darken-3 font-weight-bold") : "grey--text"')
+                            | {{ !isNotificationRead(task) ? (task.state === "changes_requested" ? "Ajustar" : (task.state === "published" ? "Nova" : "Pendente")) : "Lida" }}
                         .caption.font-weight-bold.text-truncate {{ task.title || task.path }}
-                        .text-caption.grey--text.text--darken-1.text-truncate {{ task.state === "changes_requested" ? (task.lastComment ? "Motivo: " + task.lastComment : "Revisor solicitou ajustes") : ("Autor: " + (task.authorName || "Servidor")) }}
+                        .text-caption.grey--text.text--darken-1.text-truncate
+                          | {{ task.state === "changes_requested" ? (task.lastComment ? "Motivo: " + task.lastComment : "Revisor solicitou ajustes") : (task.state === "published" ? "Documento publicado e ativo no portal" : ("Autor: " + (task.authorName || "Servidor"))) }}
                 template(v-else)
                   .pa-6.text-center.grey--text
                     v-icon.mb-2(size='36', color='grey lighten-2') mdi-bell-check-outline
@@ -381,7 +387,6 @@ import gql from 'graphql-tag'
 import statsQuery from 'gql/admin/dashboard/dashboard-query-stats.gql'
 import adminStore from '../store/admin'
 import { broadcastLogout } from '../modules/auth-sync'
-import { filterNotificationTasks } from '../themes/default/components/transparent-editor/utils/editor-controller'
 
 /* global WIKI */
 
@@ -457,6 +462,7 @@ export default {
       avatarFailed: false,
       internalApps: [],
       workflowPendingTasks: [],
+      workflowRecentTasks: [],
       workflowPendingCount: 0,
       notifTab: 0
     }
@@ -480,8 +486,31 @@ export default {
       if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase()
       return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
     },
+    readStorageKey () {
+      const uid = (this.$store && this.$store.state && this.$store.state.user && this.$store.state.user.id) || 0
+      return `detran_wf_read_notifs_${uid}`
+    },
+    allNotificationTasks () {
+      const map = new Map()
+      for (const t of (this.workflowPendingTasks || [])) {
+        if (t && t.id) map.set(t.id, { ...t, isPending: true })
+      }
+      for (const t of (this.workflowRecentTasks || [])) {
+        if (t && t.id && !map.has(t.id)) map.set(t.id, { ...t, isPending: false })
+      }
+      const merged = Array.from(map.values())
+      merged.sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0))
+      return merged
+    },
     filteredNotificationTasks () {
-      return filterNotificationTasks(this.workflowPendingTasks, this.notifTab)
+      const list = this.allNotificationTasks
+      if (this.notifTab === 1) {
+        return list.filter(t => t.state !== 'published')
+      }
+      if (this.notifTab === 2) {
+        return list.filter(t => t.state === 'published' || t.type === 'news')
+      }
+      return list
     },
     currentSectionTitle () {
       const path = this.$route.path
@@ -540,9 +569,48 @@ export default {
         return _.includes(this.permissions, prm)
       }
     },
+    getReadNotificationsMap () {
+      try {
+        return JSON.parse(localStorage.getItem(this.readStorageKey) || '{}')
+      } catch (e) {
+        return {}
+      }
+    },
+    isNotificationRead (task) {
+      if (!task || !task.id) return true
+      const readMap = this.getReadNotificationsMap()
+      const readTimestamp = readMap[task.id]
+      if (!readTimestamp) return false
+      if (task.updatedAt) {
+        return new Date(readTimestamp).getTime() >= new Date(task.updatedAt).getTime()
+      }
+      return true
+    },
+    markNotificationRead (task) {
+      if (!task || !task.id) return
+      const readMap = this.getReadNotificationsMap()
+      readMap[task.id] = task.updatedAt || new Date().toISOString()
+      try {
+        localStorage.setItem(this.readStorageKey, JSON.stringify(readMap))
+      } catch (e) {}
+      this.updateUnreadCount()
+    },
     markAllNotificationsRead () {
-      this.workflowPendingTasks = []
+      const readMap = this.getReadNotificationsMap()
+      const allTasks = this.allNotificationTasks
+      for (const t of allTasks) {
+        if (t && t.id) {
+          readMap[t.id] = t.updatedAt || new Date().toISOString()
+        }
+      }
+      try {
+        localStorage.setItem(this.readStorageKey, JSON.stringify(readMap))
+      } catch (e) {}
       this.workflowPendingCount = 0
+    },
+    updateUnreadCount () {
+      const unreadPending = (this.workflowPendingTasks || []).filter(t => !this.isNotificationRead(t))
+      this.workflowPendingCount = unreadPending.length
     },
     goToProfile () {
       window.location.assign('/p')
@@ -574,14 +642,26 @@ export default {
                   createdAt
                   updatedAt
                 }
+                drafts(limit: 15) {
+                  id
+                  title
+                  path
+                  state
+                  authorName
+                  lastComment
+                  createdAt
+                  updatedAt
+                }
               }
             }
           `,
           fetchPolicy: 'network-only'
         })
         const tasks = (result && result.data && result.data.workflow && result.data.workflow.pendingTasks) || []
-        this.workflowPendingCount = tasks.length
+        const recent = (result && result.data && result.data.workflow && result.data.workflow.drafts) || []
         this.workflowPendingTasks = tasks
+        this.workflowRecentTasks = recent
+        this.updateUnreadCount()
       } catch (e) {}
     }
   },

@@ -67,7 +67,17 @@
       //- 2. SEÇÃO SEPARADA EXCLUSIVA DO TÍTULO DO TEXTO
       .detran-gdocs-header__title-section
         .detran-gdocs-header__title-group
-          h1.detran-page-title {{ draft.title || 'Revisão de Documento' }}
+          template(v-if='canEditDraftText')
+            input.detran-page-title-input(
+              v-model='editableTitle'
+              type='text'
+              placeholder='Título do documento...'
+              @input='onTitleChange'
+              title='Clique para editar o título do documento'
+              aria-label='Título do documento'
+            )
+          template(v-else)
+            h1.detran-page-title {{ draft.title || 'Revisão de Documento' }}
           span.detran-review-status-pill(:class='stateBadge.pillClass')
             v-icon(size='14' :color='stateBadge.iconColor') {{ stateBadge.icon }}
             span {{ stateBadge.label }}
@@ -159,17 +169,53 @@
             )
               span ✏️ Sugerir redação
 
+        //- Alerta Destacado de Devolução para Ajustes
+        .detran-changes-requested-banner(v-if='draft.state === "changes_requested"')
+          .detran-changes-requested-banner__icon
+            v-icon(size='24' color='#d97706') mdi-alert-circle-outline
+          .detran-changes-requested-banner__content
+            .detran-changes-requested-banner__header
+              strong.detran-changes-requested-banner__title Documento devolvido para ajustes por {{ returnReviewerName }}
+            .detran-changes-requested-banner__body(v-if='returnReasonComment')
+              strong Motivo apontado:
+              span &nbsp;"{{ returnReasonComment }}"
+            .detran-changes-requested-banner__hint
+              | Você está em modo de edição. Faça as correções solicitadas no texto, tags ou título e submeta novamente para revisão.
+
         //- Folha de Papel A4 (Container de Leitura WYSIWYG ou Edição Transparente in-place!)
         article#documentPaper.doc-paper(
           :class='{ "clean-mode": docMode === "clean", "edit-mode": docMode === "edit" }'
         )
           //- Tags de Categoria da Página no Topo da Folha
-          .detran-doc-tags.select-none
+          .detran-doc-tags(:class='{ "select-none": !canEditDraftText }')
             span.detran-doc-tag {{ draft.pageId ? '#DOCUMENTO-' + draft.pageId : '#NOVA-PÁGINA' }}
-            span.detran-doc-tag(
-              v-for='tag in (draft.tags || [])'
-              :key='tag'
-            ) {{ '#' + String(tag).toUpperCase() }}
+            span.detran-doc-tag.is-editable(
+              v-for='(tag, tIdx) in editableTags'
+              :key='tIdx'
+            )
+              span {{ '#' + String(tag).toUpperCase() }}
+              button.detran-doc-tag__remove(
+                v-if='canEditDraftText'
+                type='button'
+                title='Remover tag'
+                @click.stop='removeTag(tIdx)'
+              )
+                v-icon(size='12' color='#15803d') mdi-close
+            .detran-doc-tag-add(v-if='canEditDraftText')
+              input.detran-doc-tag-input(
+                v-model='newTagInput'
+                type='text'
+                placeholder='+ Tag'
+                @keydown.enter.prevent='addTag'
+                @keydown.space.prevent='addTag'
+              )
+              button.detran-doc-tag-add-btn(
+                v-if='newTagInput && newTagInput.trim()'
+                type='button'
+                title='Adicionar tag'
+                @click='addTag'
+              )
+                v-icon(size='14' color='#15803d') mdi-plus
             span.detran-doc-edit-badge(v-if='docMode === "edit"')
               v-icon(size='13' color='#15803d') mdi-auto-fix
               span Modo Edição Ativo — Clique em qualquer bloco para editar
@@ -439,6 +485,9 @@ export default {
       submittingAction: false,
       docMode: 'suggest',
       showOnboarding: true,
+      editableTitle: '',
+      editableTags: [],
+      newTagInput: '',
       activeItemId: null,
       suggestionDecisions: {},
       draftModifiedByReview: false,
@@ -563,6 +612,29 @@ export default {
     canReviewOrApprove () {
       const perms = this.userPermissions
       return Boolean(perms['review:pages'] || perms['approve:pages'] || perms['manage:pages'] || perms['manage:system'])
+    },
+
+    canReview () {
+      const perms = this.userPermissions
+      return Boolean(perms['review:pages'] || perms['manage:pages'] || perms['manage:system'])
+    },
+
+    canApprove () {
+      const perms = this.userPermissions
+      return Boolean(perms['approve:pages'] || perms['manage:pages'] || perms['manage:system'])
+    },
+
+    returnReasonComment () {
+      if (!this.draft || !Array.isArray(this.draft.events)) return ''
+      const evt = this.draft.events.find(e => e.action === 'request_changes' && e.comment && e.comment.trim())
+      if (evt) return evt.comment
+      return this.draft.lastComment || ''
+    },
+
+    returnReviewerName () {
+      if (!this.draft || !Array.isArray(this.draft.events)) return 'Revisor'
+      const evt = this.draft.events.find(e => e.action === 'request_changes')
+      return evt ? (evt.userName || 'Revisor') : 'Revisor'
     },
 
     isAuthor () {
@@ -796,6 +868,38 @@ export default {
       } else {
         this.$router.push('/')
       }
+    },
+
+    onTitleChange () {
+      this.draft.title = this.editableTitle
+      this.draftModifiedByReview = true
+      this.debouncedSaveDraft()
+    },
+
+    addTag () {
+      const val = String(this.newTagInput || '').trim().replace(/^#/, '').toLowerCase()
+      if (!val) return
+      if (!this.editableTags.includes(val)) {
+        this.editableTags.push(val)
+        this.draft.tags = [...this.editableTags]
+        this.draftModifiedByReview = true
+        this.debouncedSaveDraft()
+      }
+      this.newTagInput = ''
+    },
+
+    removeTag (index) {
+      this.editableTags.splice(index, 1)
+      this.draft.tags = [...this.editableTags]
+      this.draftModifiedByReview = true
+      this.debouncedSaveDraft()
+    },
+
+    debouncedSaveDraft () {
+      clearTimeout(this.reviewSaveTimer)
+      this.reviewSaveTimer = setTimeout(() => {
+        this.persistReviewedDraftContentIfNeeded().catch(() => {})
+      }, 1000)
     },
 
     renderMermaidDiagrams () {
@@ -1185,6 +1289,8 @@ export default {
         }
 
         this.draft = draftData
+        this.editableTitle = draftData.title || ''
+        this.editableTags = Array.isArray(draftData.tags) ? [...draftData.tags] : []
         if (draftData.decisions) {
           try {
             this.suggestionDecisions = typeof draftData.decisions === 'string' ? JSON.parse(draftData.decisions) : draftData.decisions
@@ -1204,13 +1310,29 @@ export default {
           }
         }
 
-        const routeEdit = this.$route && this.$route.query && this.$route.query.edit
-        const urlEdit = typeof window !== 'undefined' && window.location && new URLSearchParams(window.location.search).get('edit')
-        const wantsEdit = routeEdit === '1' || routeEdit === 'true' || urlEdit === '1' || urlEdit === 'true'
+        const routeQuery = (this.$route && this.$route.query) || {}
+        const urlParams = typeof window !== 'undefined' && window.location ? new URLSearchParams(window.location.search) : new URLSearchParams()
+        const explicitMode = routeQuery.mode || urlParams.get('mode')
+        const wantsEdit = explicitMode === 'edit' || routeQuery.edit === '1' || routeQuery.edit === 'true' || urlParams.get('edit') === '1' || urlParams.get('edit') === 'true'
+
         if (wantsEdit && this.canEditDraftText) {
           this.docMode = 'edit'
-        } else if (!this.canEditDraftText && this.docMode === 'edit') {
+        } else if (explicitMode === 'clean') {
+          this.docMode = 'clean'
+        } else if (explicitMode === 'suggest') {
           this.docMode = 'suggest'
+        } else {
+          // Dynamic default based on user profile and document state:
+          // 1. Editor opening returned draft (devolução) -> Editar Texto por default
+          if ((draftData.state === 'changes_requested' || draftData.state === 'draft') && this.canEditDraftText) {
+            this.docMode = 'edit'
+          // 2. Aprovador na etapa de aprovação -> Prévia Final Limpa por default
+          } else if (draftData.state === 'awaiting_approval' || draftData.state === 'in_approval_step2' || (this.canApprove && !this.canReview)) {
+            this.docMode = 'clean'
+          // 3. Revisor na etapa de revisão -> Modo Sugestões (Diff Visual) por default
+          } else {
+            this.docMode = 'suggest'
+          }
         }
 
         if (!this.livePage || !this.livePage.content) {
@@ -1747,6 +1869,78 @@ export default {
   }
 }
 
+.detran-page-title-input {
+  font-family: inherit;
+  font-size: 1.625rem;
+  font-weight: 800;
+  color: $slate-900;
+  line-height: 1.25;
+  margin: 0;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  padding: 0.15rem 0.5rem;
+  background: transparent;
+  width: 100%;
+  max-width: 560px;
+  outline: none;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+  }
+
+  &:focus {
+    background: #ffffff;
+    border-color: #15803d;
+    box-shadow: 0 0 0 3px rgba(21, 128, 61, 0.15);
+  }
+}
+
+.detran-changes-requested-banner {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-left: 4px solid #d97706;
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  box-shadow: 0 2px 6px rgba(217, 119, 6, 0.08);
+
+  &__icon {
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  &__content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__title {
+    font-size: 0.9375rem;
+    font-weight: 700;
+    color: #92400e;
+    display: block;
+    margin-bottom: 0.25rem;
+  }
+
+  &__body {
+    font-size: 0.875rem;
+    color: #78350f;
+    margin-bottom: 0.35rem;
+    line-height: 1.4;
+  }
+
+  &__hint {
+    font-size: 0.75rem;
+    color: #b45309;
+    font-weight: 500;
+  }
+}
+
 .detran-gdocs-top-sep {
   color: $slate-300;
   font-weight: 300;
@@ -2188,6 +2382,63 @@ export default {
   background: #f0fdf4;
   color: #15803d;
   border: 1px solid #bbf7d0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+
+  &__remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    margin-left: 2px;
+    border-radius: 50%;
+    transition: transform 0.15s ease;
+
+    &:hover {
+      transform: scale(1.2);
+    }
+  }
+}
+
+.detran-doc-tag-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.detran-doc-tag-input {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  width: 75px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 4px;
+  background: #ffffff;
+  outline: none;
+  color: #334155;
+  transition: all 0.15s ease;
+
+  &:focus {
+    width: 110px;
+    border-color: #15803d;
+    border-style: solid;
+    box-shadow: 0 0 0 2px rgba(21, 128, 61, 0.12);
+  }
+}
+
+.detran-doc-tag-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 4px;
+  padding: 2px 6px;
+  cursor: pointer;
 }
 
 .detran-doc-edit-badge {
