@@ -189,28 +189,52 @@
                       @paste.stop='onInlineCellPaste'
                     )
           .detran-table-toolbar.select-none(v-if='isHovered || isFocused')
-            button.detran-inline-chip-btn(type='button' @mousedown.prevent @click.stop='addTableRow')
-              v-icon(size='13') mdi-table-row-plus-after
-              span + Linha
-            button.detran-inline-chip-btn(type='button' @mousedown.prevent @click.stop='addTableCol')
-              v-icon(size='13') mdi-table-column-plus-after
-              span + Coluna
-            button.detran-inline-chip-btn.is-danger(
-              v-if='rawTableData.rows.length > 1'
-              type='button'
-              @mousedown.prevent
-              @click.stop='removeLastTableRow'
-            )
-              v-icon(size='13') mdi-table-row-remove
-              span - Linha
-            button.detran-inline-chip-btn.is-danger(
-              v-if='rawTableData.headers.length > 1'
-              type='button'
-              @mousedown.prevent
-              @click.stop='removeLastTableCol'
-            )
-              v-icon(size='13') mdi-table-column-remove
-              span - Coluna
+            .detran-table-toolbar__info
+              v-icon(size='13' color='#475569') mdi-table
+              span.detran-table-toolbar__title Tabela
+              span.detran-table-toolbar__dim {{ rawTableData.rows.length }}×{{ rawTableData.headers.length }}
+            .detran-table-toolbar__divider
+            .detran-table-btn-group
+              button.detran-table-btn.detran-table-btn--add(
+                type='button'
+                title='Adicionar nova linha no final da tabela'
+                aria-label='Adicionar linha'
+                @mousedown.prevent
+                @click.stop='addTableRow()'
+              )
+                v-icon(size='13' color='#16a34a') mdi-table-row-plus-after
+                span + Linha
+              button.detran-table-btn.detran-table-btn--add(
+                type='button'
+                title='Adicionar nova coluna à direita da tabela'
+                aria-label='Adicionar coluna'
+                @mousedown.prevent
+                @click.stop='addTableCol()'
+              )
+                v-icon(size='13' color='#16a34a') mdi-table-column-plus-after
+                span + Coluna
+            .detran-table-toolbar__divider
+            .detran-table-btn-group
+              button.detran-table-btn.detran-table-btn--remove(
+                type='button'
+                :disabled='rawTableData.rows.length <= 1'
+                :title='rawTableData.rows.length <= 1 ? "A tabela deve ter no mínimo uma linha de dados" : "Remover a última linha da tabela"'
+                aria-label='Remover última linha'
+                @mousedown.prevent
+                @click.stop='removeLastTableRow()'
+              )
+                v-icon(size='13' :color='rawTableData.rows.length <= 1 ? "#94a3b8" : "#dc2626"') mdi-table-row-remove
+                span - Linha
+              button.detran-table-btn.detran-table-btn--remove(
+                type='button'
+                :disabled='rawTableData.headers.length <= 1'
+                :title='rawTableData.headers.length <= 1 ? "A tabela deve ter no mínimo uma coluna de cabeçalho" : "Remover a última coluna da tabela"'
+                aria-label='Remover última coluna'
+                @mousedown.prevent
+                @click.stop='removeLastTableCol()'
+              )
+                v-icon(size='13' :color='rawTableData.headers.length <= 1 ? "#94a3b8" : "#dc2626"') mdi-table-column-remove
+                span - Coluna
 
         //- 5d. Listas (marcadores, numeradas e checklists interativas)
         .detran-live-list-wrapper(v-else-if='rawKind === "list"')
@@ -1770,7 +1794,113 @@ export default {
   }
 }
 
-.detran-table-toolbar,
+.detran-table-toolbar {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 4px 6px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 5;
+}
+
+.detran-table-toolbar__info {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 11px;
+  user-select: none;
+}
+
+.detran-table-toolbar__title {
+  font-weight: 600;
+  color: #475569;
+}
+
+.detran-table-toolbar__dim {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748b;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 0 4px;
+  line-height: 1.4;
+}
+
+.detran-table-toolbar__divider {
+  width: 1px;
+  height: 18px;
+  background: #e2e8f0;
+  margin: 0 2px;
+}
+
+.detran-table-btn-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.detran-table-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+  user-select: none;
+
+  &:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+
+  &--add {
+    &:hover:not(:disabled) {
+      background: #f0fdf4;
+      border-color: #86efac;
+      color: #15803d;
+      box-shadow: 0 1px 3px rgba(22, 101, 52, 0.08);
+    }
+  }
+
+  &--remove {
+    &:hover:not(:disabled) {
+      background: #fef2f2;
+      border-color: #fca5a5;
+      color: #b91c1c;
+      box-shadow: 0 1px 3px rgba(185, 28, 28, 0.08);
+    }
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    background: #f8fafc;
+    border-color: #e2e8f0;
+    color: #94a3b8;
+    box-shadow: none;
+  }
+}
+
 .detran-mermaid-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1799,7 +1929,7 @@ export default {
     color: #166534;
   }
 
-  &.is-danger:hover {
+  &.is-delete:hover {
     background: #fef2f2;
     border-color: #fecaca;
     color: #b91c1c;

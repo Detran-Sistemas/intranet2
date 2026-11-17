@@ -404,12 +404,13 @@
   // 11. ALERTAS NATIVOS DO WIKI.JS
   // Classes geradas pelo rendering pipeline: .is-info, .is-warning, .is-danger, .is-success
   // Referência: linhas 142-248 do protótipo design_system.html
+  // Escopo estrito para blocos de alerta, excluindo botões, chips e controles interativos
   // ---------------------------------------------------------------------------
 
-  .is-info,
-  .is-warning,
-  .is-danger,
-  .is-success {
+  .is-info:not(button):not([class*="btn"]):not([class*="chip"]),
+  .is-warning:not(button):not([class*="btn"]):not([class*="chip"]),
+  .is-danger:not(button):not([class*="btn"]):not([class*="chip"]),
+  .is-success:not(button):not([class*="btn"]):not([class*="chip"]) {
     padding: 1rem 1.25rem 1rem 3.5rem;
     border-radius: $radius-lg;
     position: relative;
@@ -448,7 +449,7 @@
   }
 
   // Info (Azul)
-  .is-info,
+  .is-info:not(button):not([class*="btn"]):not([class*="chip"]),
   blockquote.is-info {
     background-color: #eff6ff !important;
     border-left: 4px solid $color-info !important;
@@ -458,7 +459,7 @@
   }
 
   // Warning (Laranja/Âmbar)
-  .is-warning,
+  .is-warning:not(button):not([class*="btn"]):not([class*="chip"]),
   blockquote.is-warning {
     background-color: #fffbeb !important;
     border-left: 4px solid $color-warning !important;
@@ -468,7 +469,7 @@
   }
 
   // Danger (Vermelho)
-  .is-danger,
+  .is-danger:not(button):not([class*="btn"]):not([class*="chip"]),
   blockquote.is-danger {
     background-color: #fef2f2 !important;
     border-left: 4px solid $color-error !important;
@@ -478,7 +479,7 @@
   }
 
   // Success (Verde Detran)
-  .is-success,
+  .is-success:not(button):not([class*="btn"]):not([class*="chip"]),
   blockquote.is-success {
     background-color: $detran-50 !important;
     border-left: 4px solid $detran-500 !important;

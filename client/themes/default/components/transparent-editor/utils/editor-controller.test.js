@@ -678,5 +678,15 @@ describe('transparent-editor/editor-controller', () => {
       expect(blockItemSrc).toContain('list-item-editable')
       expect(blockItemSrc).toContain('detran-live-quote')
     })
+
+    it('provides cohesive Detran-MG table row/column manipulation toolbar without generic alert class collisions', () => {
+      const blockItemSrc = fs.readFileSync(path.resolve(__dirname, '../block-item.vue'), 'utf8')
+      expect(blockItemSrc).toContain('detran-table-toolbar')
+      expect(blockItemSrc).toContain('detran-table-toolbar__info')
+      expect(blockItemSrc).toContain('detran-table-toolbar__dim')
+      expect(blockItemSrc).toContain('detran-table-btn--add')
+      expect(blockItemSrc).toContain('detran-table-btn--remove')
+      expect(blockItemSrc).not.toMatch(/detran-table-btn[^\n]*\bis-danger\b/)
+    })
   })
 })

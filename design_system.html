@@ -843,6 +843,60 @@ module.exports = {
                                 </div>
                             </div>
 
+                            <!-- Bloco Demonstrativo de Tabela com Toolbar Integrada de Linhas e Colunas -->
+                            <div class="my-6 p-4 rounded-xl border border-dashed border-detran-500/50 bg-detran-50/20 transition-all hover:bg-detran-50/40">
+                                <div class="overflow-x-auto rounded-lg bg-white border border-slate-200 shadow-sm">
+                                    <table class="w-full text-left border-collapse text-xs m-0">
+                                        <thead class="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold">
+                                            <tr>
+                                                <th class="p-2.5">Setor / Área</th>
+                                                <th class="p-2.5">Responsável</th>
+                                                <th class="p-2.5">Prazo de Resposta</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-slate-100 text-slate-600">
+                                            <tr>
+                                                <td class="p-2.5 font-medium text-slate-800">Diretoria de Habilitação</td>
+                                                <td class="p-2.5">Coordenação CNH</td>
+                                                <td class="p-2.5">24 horas úteis</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="p-2.5 font-medium text-slate-800">Gerência de Veículos</td>
+                                                <td class="p-2.5">Supervisão de Emplacamento</td>
+                                                <td class="p-2.5">48 horas úteis</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <!-- Barra Integrada de Manipulação de Linhas e Colunas (.detran-table-toolbar) -->
+                                <div class="inline-flex items-center gap-1.5 mt-2.5 px-2 py-1 bg-white border border-slate-200 rounded-lg shadow-sm text-xs select-none">
+                                    <div class="inline-flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 border border-slate-200 rounded-md text-[11px] font-semibold text-slate-600">
+                                        <i class="fa-solid fa-table text-slate-500"></i>
+                                        <span>Tabela</span>
+                                        <span class="font-mono text-[10px] text-slate-500 bg-white px-1 rounded border border-slate-300">2×3</span>
+                                    </div>
+                                    <div class="w-px h-4 bg-slate-200 mx-0.5"></div>
+                                    <div class="inline-flex items-center gap-1">
+                                        <button class="inline-flex items-center gap-1 h-6.5 px-2 text-[11px] font-semibold text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700 transition-colors shadow-xs">
+                                            <i class="fa-solid fa-plus text-emerald-600 text-[10px]"></i> Linha
+                                        </button>
+                                        <button class="inline-flex items-center gap-1 h-6.5 px-2 text-[11px] font-semibold text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700 transition-colors shadow-xs">
+                                            <i class="fa-solid fa-plus text-emerald-600 text-[10px]"></i> Coluna
+                                        </button>
+                                    </div>
+                                    <div class="w-px h-4 bg-slate-200 mx-0.5"></div>
+                                    <div class="inline-flex items-center gap-1">
+                                        <button class="inline-flex items-center gap-1 h-6.5 px-2 text-[11px] font-semibold text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-rose-50 hover:border-rose-300 hover:text-rose-700 transition-colors shadow-xs">
+                                            <i class="fa-solid fa-minus text-rose-600 text-[10px]"></i> Linha
+                                        </button>
+                                        <button class="inline-flex items-center gap-1 h-6.5 px-2 text-[11px] font-semibold text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-rose-50 hover:border-rose-300 hover:text-rose-700 transition-colors shadow-xs">
+                                            <i class="fa-solid fa-minus text-rose-600 text-[10px]"></i> Coluna
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
                             <h2 id="sec-10">10. Diagramas Integrados (Draw.io & Mermaid)</h2>
                             <p>Tanto na visualização da página quanto na <strong>tela de revisão comparativa de alterações</strong>, diagramas gerados no Draw.io (vetorizados em SVG Base64) ou codificados em Mermaid são renderizados diretamente no navegador com suporte a zoom, contraste de cores e legibilidade:</p>
 
