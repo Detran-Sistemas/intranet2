@@ -98,7 +98,7 @@
                     v-else
                     :class='(transparentChangeCount > 0 || hasPendingDraftToSubmit) ? "is-amber" : "is-emerald"'
                   )
-                  span.detran-sync-pill__text {{ isSavingDraft ? "Salvando em tempo real..." : (isAwaitingValidation ? "Aguardando validação" : (lastSavedTime ? "Rascunho salvo" : "Edição contínua ativa")) }}
+                  span.detran-sync-pill__text {{ isSavingDraft ? "Salvando em tempo real..." : (isAwaitingValidation ? "Aguardando validação" : (lastSavedTime ? ("Salvo às " + lastSavedTime) : "Edição contínua ativa")) }}
                   button.detran-sync-pill__btn(
                     v-if='transparentChangeCount > 0 || hasPendingDraftToSubmit'
                     type='button'

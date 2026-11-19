@@ -202,7 +202,7 @@
                 @mousedown.prevent
                 @click.stop='addTableRow()'
               )
-                v-icon(size='13' color='#16a34a') mdi-table-row-plus-after
+                v-icon(size='13') mdi-table-row-plus-after
                 span + Linha
               button.detran-table-btn.detran-table-btn--add(
                 type='button'
@@ -211,7 +211,7 @@
                 @mousedown.prevent
                 @click.stop='addTableCol()'
               )
-                v-icon(size='13' color='#16a34a') mdi-table-column-plus-after
+                v-icon(size='13') mdi-table-column-plus-after
                 span + Coluna
             .detran-table-toolbar__divider
             .detran-table-btn-group
@@ -223,7 +223,7 @@
                 @mousedown.prevent
                 @click.stop='removeLastTableRow()'
               )
-                v-icon(size='13' :color='rawTableData.rows.length <= 1 ? "#94a3b8" : "#dc2626"') mdi-table-row-remove
+                v-icon(size='13') mdi-table-row-remove
                 span - Linha
               button.detran-table-btn.detran-table-btn--remove(
                 type='button'
@@ -233,7 +233,7 @@
                 @mousedown.prevent
                 @click.stop='removeLastTableCol()'
               )
-                v-icon(size='13' :color='rawTableData.headers.length <= 1 ? "#94a3b8" : "#dc2626"') mdi-table-column-remove
+                v-icon(size='13') mdi-table-column-remove
                 span - Coluna
 
         //- 5d. Listas (marcadores, numeradas e checklists interativas)
@@ -380,6 +380,7 @@
 <script>
 import {
   detectSlashTrigger,
+  shouldTriggerSlashFromInput,
   getCaretTriggerRect,
   updateLinkCardItem,
   handleMarkdownPrefixTrigger
@@ -640,6 +641,24 @@ export default {
         sel.addRange(range)
       } catch (err) {}
     },
+    getTextBeforeCaret (el) {
+      if (!el) return ''
+      if (typeof window !== 'undefined' && typeof window.getSelection === 'function') {
+        try {
+          const sel = window.getSelection()
+          if (sel && sel.rangeCount > 0) {
+            const range = sel.getRangeAt(0)
+            if (range && el.contains(range.startContainer)) {
+              const preRange = range.cloneRange()
+              preRange.selectNodeContents(el)
+              preRange.setEnd(range.startContainer, range.startOffset)
+              return preRange.toString()
+            }
+          }
+        } catch (err) {}
+      }
+      return el.textContent || ''
+    },
     onInputText (e) {
       const mdText = inlineHtmlToMarkdown(e.target.innerHTML)
 
@@ -679,7 +698,9 @@ export default {
         }
       })
 
-      if (detectSlashTrigger(mdText)) {
+      const inputData = e && typeof e.data === 'string' ? e.data : ''
+      const textBeforeCaret = this.getTextBeforeCaret(e && e.target)
+      if (detectSlashTrigger(mdText) || shouldTriggerSlashFromInput({ mdText, inputData, textBeforeCaret })) {
         const rect = getCaretTriggerRect(e.target, typeof window !== 'undefined' ? window : null)
         /* eslint-disable-next-line vue/custom-event-name-casing */
         this.$emit('slash-command', {
@@ -1151,6 +1172,16 @@ export default {
     onRawQuoteInput (e) {
       const md = inlineHtmlToMarkdown(e.target.innerHTML)
       this.emitRawText(serializeRawQuote(md))
+      const inputData = e && typeof e.data === 'string' ? e.data : ''
+      const textBeforeCaret = this.getTextBeforeCaret(e && e.target)
+      if (detectSlashTrigger(md) || shouldTriggerSlashFromInput({ mdText: md, inputData, textBeforeCaret })) {
+        const rect = getCaretTriggerRect(e.target, typeof window !== 'undefined' ? window : null)
+        /* eslint-disable-next-line vue/custom-event-name-casing */
+        this.$emit('slash-command', {
+          index: this.index,
+          rect
+        })
+      }
     },
     onRawQuoteKeydown (e) {
       const isMod = e.ctrlKey || e.metaKey
@@ -1318,8 +1349,8 @@ export default {
   position: relative;
   display: flex;
   align-items: flex-start;
-  gap: 4px;
-  padding: 6px 4px 6px 6px;
+  gap: 2px;
+  padding: 6px 4px 6px 0;
   margin-left: -32px;
   margin-right: -28px;
   margin-bottom: 12px;
@@ -1336,13 +1367,13 @@ export default {
 
   &:hover,
   &.is-hovered {
-    background-color: rgba(241, 245, 249, 0.28) !important;
+    background-color: rgba(241, 245, 249, 0.32) !important;
   }
 
   &:focus-within,
   &.is-focused {
     background-color: transparent !important;
-    box-shadow: inset 2px 0 0 rgba(46, 160, 88, 0.45) !important;
+    box-shadow: inset 2px 0 0 rgba(22, 163, 74, 0.45) !important;
   }
 
   &.block-type-callout,
@@ -1359,16 +1390,30 @@ export default {
   }
 
   &.is-dragging {
-    opacity: 0.45;
+    opacity: 0.4;
     background-color: #f8fafc !important;
   }
 
-  &.is-drag-over-top {
-    box-shadow: inset 0 3px 0 #288b4a !important;
+  &.is-drag-over-top::after,
+  &.is-drag-over-bottom::after {
+    content: '';
+    position: absolute;
+    left: 28px;
+    right: 24px;
+    height: 2px;
+    border-radius: 9999px;
+    background: #16a34a;
+    box-shadow: 0 0 8px rgba(22, 163, 74, 0.45);
+    pointer-events: none;
+    z-index: 6;
   }
 
-  &.is-drag-over-bottom {
-    box-shadow: inset 0 -3px 0 #288b4a !important;
+  &.is-drag-over-top::after {
+    top: -1px;
+  }
+
+  &.is-drag-over-bottom::after {
+    bottom: -1px;
   }
 
   &.block-type-heading {
@@ -1403,16 +1448,16 @@ export default {
 }
 
 .block-handle {
-  width: 22px;
+  width: 30px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0px;
-  padding-top: 4px;
-  color: #cbd5e1;
+  gap: 1px;
+  padding-top: 2px;
+  color: #94a3b8;
   opacity: 0;
-  transition: opacity 0.15s ease, color 0.15s ease;
+  transition: opacity 0.15s cubic-bezier(0.4, 0, 0.2, 1), color 0.15s ease;
   cursor: grab;
 
   .notion-block:hover &,
@@ -1423,48 +1468,60 @@ export default {
   }
 
   &:hover {
-    color: #64748b;
+    color: #475569;
   }
 
   .handle-add-btn {
-    width: 11px;
-    height: 18px;
+    width: 15px;
+    height: 22px;
     padding: 0;
     border: none;
     background: transparent;
-    border-radius: 3px;
+    border-radius: 5px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     color: inherit;
     cursor: pointer;
-    transition: background-color 0.12s ease, color 0.12s ease;
+    transition: background-color 0.14s ease, color 0.14s ease, transform 0.1s ease;
 
     .v-icon {
       color: inherit !important;
     }
 
     &:hover {
-      background-color: #e2e8f0;
-      color: #475569;
+      background-color: #ecfdf5;
+      color: #15803d;
+    }
+
+    &:active {
+      transform: scale(0.92);
     }
   }
 
   .handle-grip {
-    width: 12px;
-    height: 18px;
+    width: 14px;
+    height: 22px;
+    border-radius: 5px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     color: inherit !important;
     cursor: grab;
+    transition: background-color 0.14s ease, color 0.14s ease;
 
     .v-icon {
       color: inherit !important;
     }
 
+    &:hover {
+      background-color: #f1f5f9;
+      color: #334155 !important;
+    }
+
     &:active {
       cursor: grabbing;
+      background-color: #e2e8f0;
     }
   }
 }
@@ -1783,14 +1840,14 @@ export default {
   min-height: 1.4em;
   outline: none;
   cursor: text;
-  border-radius: 4px;
-  padding: 2px 4px;
-  margin: -2px -4px;
-  transition: background-color 0.12s ease, box-shadow 0.12s ease;
+  border-radius: 5px;
+  padding: 2px 5px;
+  margin: -2px -5px;
+  transition: background-color 0.14s ease, box-shadow 0.14s ease;
 
   &:focus {
-    background: rgba(240, 253, 244, 0.65);
-    box-shadow: inset 0 0 0 1px rgba(40, 139, 74, 0.35);
+    background: rgba(240, 253, 244, 0.72);
+    box-shadow: inset 0 0 0 1.5px rgba(22, 163, 74, 0.45), 0 0 0 3px rgba(22, 163, 74, 0.1);
   }
 }
 
@@ -1800,11 +1857,13 @@ export default {
   align-items: center;
   gap: 4px;
   margin-top: 10px;
-  padding: 4px 6px;
-  background: #ffffff;
+  padding: 4px 5px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  border-radius: 10px;
+  box-shadow: 0 4px 14px -4px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 5;
 }
@@ -1812,11 +1871,11 @@ export default {
 .detran-table-toolbar__info {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 7px;
+  gap: 5px;
+  padding: 3px 8px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 6px;
+  border-radius: 7px;
   font-size: 11px;
   user-select: none;
 }
@@ -1828,11 +1887,12 @@ export default {
 
 .detran-table-toolbar__dim {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-variant-numeric: tabular-nums;
   font-size: 10px;
-  font-weight: 600;
-  color: #64748b;
+  font-weight: 700;
+  color: #475569;
   background: #ffffff;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #e2e8f0;
   border-radius: 4px;
   padding: 0 4px;
   line-height: 1.4;
@@ -1840,7 +1900,7 @@ export default {
 
 .detran-table-toolbar__divider {
   width: 1px;
-  height: 18px;
+  height: 16px;
   background: #e2e8f0;
   margin: 0 2px;
 }
@@ -1848,56 +1908,64 @@ export default {
 .detran-table-btn-group {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
 .detran-table-btn {
+  appearance: none;
   display: inline-flex;
   align-items: center;
   gap: 4px;
   height: 26px;
   padding: 0 8px;
-  border-radius: 6px;
-  border: 1px solid #cbd5e1;
-  background: #ffffff;
-  color: #334155;
-  font-size: 11px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #475569;
+  font-size: 11.5px;
   font-weight: 600;
   line-height: 1;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+  transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease, transform 0.1s ease;
   user-select: none;
 
+  .v-icon {
+    color: inherit !important;
+    transition: color 0.14s ease;
+  }
+
   &:active:not(:disabled) {
-    transform: translateY(1px);
+    transform: scale(0.96);
   }
 
   &--add {
+    .v-icon {
+      color: #16a34a !important;
+    }
+
     &:hover:not(:disabled) {
-      background: #f0fdf4;
-      border-color: #86efac;
+      background: #ecfdf5;
+      border-color: #a7f3d0;
       color: #15803d;
-      box-shadow: 0 1px 3px rgba(22, 101, 52, 0.08);
     }
   }
 
   &--remove {
+    color: #64748b;
+
     &:hover:not(:disabled) {
       background: #fef2f2;
-      border-color: #fca5a5;
-      color: #b91c1c;
-      box-shadow: 0 1px 3px rgba(185, 28, 28, 0.08);
+      border-color: #fecaca;
+      color: #dc2626;
     }
   }
 
   &:disabled {
-    opacity: 0.45;
+    opacity: 0.38;
     cursor: not-allowed;
-    background: #f8fafc;
-    border-color: #e2e8f0;
+    background: transparent;
+    border-color: transparent;
     color: #94a3b8;
-    box-shadow: none;
   }
 }
 

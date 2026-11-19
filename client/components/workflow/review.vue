@@ -68,19 +68,48 @@
       .detran-gdocs-header__title-section
         .detran-gdocs-header__title-group
           template(v-if='canEditDraftText')
-            input.detran-page-title-input(
-              v-model='editableTitle'
-              type='text'
-              placeholder='Título do documento...'
-              @input='onTitleChange'
-              title='Clique para editar o título do documento'
-              aria-label='Título do documento'
-            )
+            .detran-page-title-editor
+              input.detran-page-title-input(
+                v-model='editableTitle'
+                type='text'
+                placeholder='Título do documento...'
+                @input='onTitleChange'
+                title='Clique para editar o título do documento'
+                aria-label='Título do documento'
+              )
+              v-icon.detran-page-title-editor__icon(size='16' aria-hidden='true') mdi-pencil-outline
           template(v-else)
             h1.detran-page-title {{ draft.title || 'Revisão de Documento' }}
           span.detran-review-status-pill(:class='stateBadge.pillClass')
             v-icon(size='14' :color='stateBadge.iconColor') {{ stateBadge.icon }}
             span {{ stateBadge.label }}
+          button.detran-autosave-pill(
+            v-if='canEditDraftText && draftSaveStatus !== "idle"'
+            type='button'
+            :class='"is-" + draftSaveStatus'
+            :title='draftSaveStatus === "error" ? (draftSaveError || "Clique para tentar salvar novamente") : "Status do salvamento automático"'
+            :disabled='draftSaveStatus !== "error"'
+            @click='retrySaveDraft'
+          )
+            v-progress-circular(
+              v-if='draftSaveStatus === "saving"'
+              indeterminate
+              size='11'
+              width='2'
+              color='#475569'
+            )
+            span.detran-autosave-pill__dot(v-else-if='draftSaveStatus === "pending"')
+            v-icon(
+              v-else-if='draftSaveStatus === "saved"'
+              size='13'
+              color='#15803d'
+            ) mdi-cloud-check-outline
+            v-icon(
+              v-else-if='draftSaveStatus === "error"'
+              size='13'
+              color='#dc2626'
+            ) mdi-cloud-alert
+            span {{ autosaveStatusLabel }}
 
       //- 3. BARRA DE FERRAMENTAS E METADADOS
       .detran-gdocs-toolbar
@@ -188,7 +217,7 @@
         )
           //- Tags de Categoria da Página no Topo da Folha
           .detran-doc-tags(:class='{ "select-none": !canEditDraftText }')
-            span.detran-doc-tag {{ draft.pageId ? '#DOCUMENTO-' + draft.pageId : '#NOVA-PÁGINA' }}
+            span.detran-doc-tag.is-system {{ draft.pageId ? '#DOCUMENTO-' + draft.pageId : '#NOVA-PÁGINA' }}
             span.detran-doc-tag.is-editable(
               v-for='(tag, tIdx) in editableTags'
               :key='tIdx'
@@ -198,27 +227,31 @@
                 v-if='canEditDraftText'
                 type='button'
                 title='Remover tag'
+                aria-label='Remover tag'
                 @click.stop='removeTag(tIdx)'
               )
-                v-icon(size='12' color='#15803d') mdi-close
+                v-icon(size='11') mdi-close
             .detran-doc-tag-add(v-if='canEditDraftText')
               input.detran-doc-tag-input(
                 v-model='newTagInput'
                 type='text'
-                placeholder='+ Tag'
+                placeholder='+ Nova tag'
+                aria-label='Adicionar tag ao documento'
                 @keydown.enter.prevent='addTag'
                 @keydown.space.prevent='addTag'
+                @keydown.188.prevent='addTag'
               )
               button.detran-doc-tag-add-btn(
                 v-if='newTagInput && newTagInput.trim()'
                 type='button'
                 title='Adicionar tag'
+                aria-label='Confirmar nova tag'
                 @click='addTag'
               )
-                v-icon(size='14' color='#15803d') mdi-plus
+                v-icon(size='13' color='#15803d') mdi-plus
             span.detran-doc-edit-badge(v-if='docMode === "edit"')
-              v-icon(size='13' color='#15803d') mdi-auto-fix
-              span Modo Edição Ativo — Clique em qualquer bloco para editar
+              span.detran-doc-edit-badge__dot
+              span Modo Edição — Clique em qualquer bloco ou digite / para comandos
 
           //- Editor Transparente Integrado na Página de Revisão
           transparent-editor(
@@ -493,6 +526,9 @@ export default {
       suggestionDecisions: {},
       draftModifiedByReview: false,
       reviewSaveTimer: null,
+      draftSaveStatus: 'idle',
+      lastSavedTime: '',
+      draftSaveError: '',
       selectionPopover: {
         visible: false,
         top: 0,
@@ -569,6 +605,22 @@ export default {
         return 'Exibindo prévia final limpa de como a página ficará publicada no portal'
       }
       return 'Selecione qualquer trecho do texto com o mouse para adicionar um comentário ou sugerir alteração'
+    },
+
+    autosaveStatusLabel () {
+      if (this.draftSaveStatus === 'saving') {
+        return 'Salvando alterações...'
+      }
+      if (this.draftSaveStatus === 'pending') {
+        return 'Alterações pendentes...'
+      }
+      if (this.draftSaveStatus === 'saved') {
+        return this.lastSavedTime ? `Salvo às ${this.lastSavedTime}` : 'Salvo no servidor'
+      }
+      if (this.draftSaveStatus === 'error') {
+        return 'Erro ao salvar · Tentar novamente'
+      }
+      return ''
     },
 
     blobInspection () {
@@ -903,10 +955,17 @@ export default {
     },
 
     debouncedSaveDraft () {
+      this.draftSaveStatus = 'pending'
       clearTimeout(this.reviewSaveTimer)
       this.reviewSaveTimer = setTimeout(() => {
         this.persistReviewedDraftContentIfNeeded().catch(() => {})
       }, 1000)
+    },
+
+    retrySaveDraft () {
+      if (this.draftSaveStatus !== 'error') return
+      this.draftModifiedByReview = true
+      this.persistReviewedDraftContentIfNeeded().catch(() => {})
     },
 
     renderMermaidDiagrams () {
@@ -960,6 +1019,7 @@ export default {
     onReviewEditorChange ({ markdown }) {
       this.draft.content = markdown
       this.draftModifiedByReview = true
+      this.draftSaveStatus = 'pending'
       if (this.reviewSaveTimer) clearTimeout(this.reviewSaveTimer)
       this.reviewSaveTimer = setTimeout(() => {
         this.persistReviewedDraftContentIfNeeded().catch(() => {})
@@ -1527,58 +1587,76 @@ export default {
 
     async persistReviewedDraftContentIfNeeded () {
       if (!this.draftModifiedByReview) return
-      await this.$apollo.mutate({
-        mutation: gql`
-          mutation (
-            $id: Int
-            $pageId: Int
-            $path: String!
-            $locale: String!
-            $title: String!
-            $description: String
-            $content: String!
-            $contentType: String
-            $editorKey: String
-            $tags: [String]
-            $decisions: String
-          ) {
-            workflow {
-              saveDraft(
-                id: $id
-                pageId: $pageId
-                path: $path
-                locale: $locale
-                title: $title
-                description: $description
-                content: $content
-                contentType: $contentType
-                editorKey: $editorKey
-                tags: $tags
-                decisions: $decisions
-              ) {
-                responseResult {
-                  succeeded
-                  message
+      this.draftSaveStatus = 'saving'
+      this.draftSaveError = ''
+      try {
+        const res = await this.$apollo.mutate({
+          mutation: gql`
+            mutation (
+              $id: Int
+              $pageId: Int
+              $path: String!
+              $locale: String!
+              $title: String!
+              $description: String
+              $content: String!
+              $contentType: String
+              $editorKey: String
+              $tags: [String]
+              $decisions: String
+            ) {
+              workflow {
+                saveDraft(
+                  id: $id
+                  pageId: $pageId
+                  path: $path
+                  locale: $locale
+                  title: $title
+                  description: $description
+                  content: $content
+                  contentType: $contentType
+                  editorKey: $editorKey
+                  tags: $tags
+                  decisions: $decisions
+                ) {
+                  responseResult {
+                    succeeded
+                    message
+                  }
                 }
               }
             }
+          `,
+          variables: {
+            id: this.draft.id || null,
+            pageId: this.draft.pageId || null,
+            path: this.draft.path,
+            locale: this.draft.locale || 'pt-br',
+            title: this.draft.title || 'Documento',
+            description: this.draft.description || '',
+            content: this.draft.content,
+            contentType: this.draft.contentType || 'markdown',
+            editorKey: this.draft.editorKey || 'markdown',
+            tags: this.draft.tags || [],
+            decisions: JSON.stringify(this.suggestionDecisions || {})
           }
-        `,
-        variables: {
-          id: this.draft.id || null,
-          pageId: this.draft.pageId || null,
-          path: this.draft.path,
-          locale: this.draft.locale || 'pt-br',
-          title: this.draft.title || 'Documento',
-          description: this.draft.description || '',
-          content: this.draft.content,
-          contentType: this.draft.contentType || 'markdown',
-          editorKey: this.draft.editorKey || 'markdown',
-          tags: this.draft.tags || [],
-          decisions: JSON.stringify(this.suggestionDecisions || {})
+        })
+        const saveResult = res &&
+          res.data &&
+          res.data.workflow &&
+          res.data.workflow.saveDraft &&
+          res.data.workflow.saveDraft.responseResult
+        if (saveResult && saveResult.succeeded === false) {
+          throw new Error(saveResult.message || 'Falha ao salvar rascunho.')
         }
-      })
-      this.draftModifiedByReview = false
+        this.draftModifiedByReview = false
+        this.draftSaveStatus = 'saved'
+        this.lastSavedTime = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      } catch (err) {
+        this.draftSaveStatus = 'error'
+        this.draftSaveError = (err && err.message) || 'Erro ao salvar rascunho.'
+        throw err
+      }
     },
 
     async executeAction () {
@@ -1876,31 +1954,141 @@ export default {
   }
 }
 
+.detran-page-title-editor {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: 1 1 280px;
+  max-width: 580px;
+
+  &__icon {
+    position: absolute;
+    right: 10px;
+    color: #94a3b8 !important;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease, color 0.15s ease;
+  }
+
+  &:hover &__icon {
+    opacity: 0.85;
+  }
+
+  &:focus-within &__icon {
+    opacity: 1;
+    color: #16a34a !important;
+  }
+}
+
 .detran-page-title-input {
   font-family: inherit;
   font-size: 1.625rem;
   font-weight: 800;
   color: $slate-900;
   line-height: 1.25;
+  letter-spacing: -0.02em;
   margin: 0;
   border: 1px solid transparent;
-  border-radius: 0.5rem;
-  padding: 0.15rem 0.5rem;
+  border-radius: 0.625rem;
+  padding: 0.2rem 2rem 0.2rem 0.55rem;
+  margin-left: -0.55rem;
   background: transparent;
   width: 100%;
-  max-width: 560px;
   outline: none;
-  transition: all 0.2s ease;
+  transition: background-color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+
+  &::placeholder {
+    color: #94a3b8;
+    font-weight: 600;
+  }
 
   &:hover {
-    background: #f1f5f9;
-    border-color: #cbd5e1;
+    background: #f8fafc;
+    border-color: #e2e8f0;
   }
 
   &:focus {
     background: #ffffff;
-    border-color: #15803d;
-    box-shadow: 0 0 0 3px rgba(21, 128, 61, 0.15);
+    border-color: #22c55e;
+    box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12);
+  }
+}
+
+.detran-autosave-pill {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.7rem;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.2;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, opacity 0.18s ease;
+  animation: autosavePillIn 0.18s ease-out;
+
+  &:disabled {
+    cursor: default;
+  }
+
+  &__dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 9999px;
+    background: #f59e0b;
+    animation: autosavePulse 1.4s ease-in-out infinite;
+  }
+
+  &.is-pending {
+    background: #fffbeb;
+    color: #b45309;
+    border: 1px solid #fde68a;
+  }
+
+  &.is-saving {
+    background: #f8fafc;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+  }
+
+  &.is-saved {
+    background: #f0fdf4;
+    color: #15803d;
+    border: 1px solid #bbf7d0;
+  }
+
+  &.is-error {
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+    cursor: pointer;
+
+    &:hover {
+      background: #fee2e2;
+      border-color: #fca5a5;
+    }
+  }
+}
+
+@keyframes autosavePillIn {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes autosavePulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.85);
   }
 }
 
@@ -2128,9 +2316,10 @@ export default {
 .detran-mode-switcher {
   display: inline-flex;
   align-items: center;
-  background: rgba(226, 232, 240, 0.85);
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
   padding: 3px;
-  border-radius: 0.5rem;
+  border-radius: 10px;
   gap: 2px;
 
   &__btn {
@@ -2138,19 +2327,25 @@ export default {
     align-items: center;
     gap: 0.35rem;
     padding: 0.35rem 0.75rem;
-    border-radius: 0.375rem;
-    border: none;
+    border-radius: 7px;
+    border: 1px solid transparent;
     background: transparent;
     font-size: 0.75rem;
     font-weight: 600;
     color: $slate-600;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+
+    &:hover:not(.is-active) {
+      color: $slate-900;
+      background: rgba(255, 255, 255, 0.55);
+    }
 
     &.is-active {
       background: #ffffff;
       color: $slate-900;
-      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+      border-color: rgba(226, 232, 240, 0.9);
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px rgba(15, 23, 42, 0.04);
     }
   }
 }
@@ -2377,36 +2572,68 @@ export default {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.45rem;
   margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #f1f5f9;
 }
 
 .detran-doc-tag {
-  padding: 2px 10px;
-  border-radius: 4px;
-  font-size: 0.6875rem;
-  font-weight: 700;
-  background: #f0fdf4;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.015em;
+  background: #ecfdf5;
   color: #15803d;
-  border: 1px solid #bbf7d0;
+  border: 1px solid #a7f3d0;
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.3rem;
+  transition: background-color 0.14s ease, border-color 0.14s ease;
+
+  &.is-system {
+    background: #f1f5f9;
+    color: #475569;
+    border-color: #e2e8f0;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.675rem;
+  }
+
+  &.is-editable:hover {
+    background: #dcfce7;
+    border-color: #86efac;
+  }
 
   &__remove {
+    appearance: none;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    width: 15px;
+    height: 15px;
     background: transparent;
     border: none;
+    color: #15803d;
     cursor: pointer;
     padding: 0;
-    margin-left: 2px;
-    border-radius: 50%;
-    transition: transform 0.15s ease;
+    margin-left: 1px;
+    margin-right: -3px;
+    border-radius: 9999px;
+    transition: background-color 0.14s ease, color 0.14s ease, transform 0.12s ease;
+
+    .v-icon {
+      color: inherit !important;
+    }
 
     &:hover {
-      transform: scale(1.2);
+      background: rgba(22, 163, 74, 0.18);
+      color: #14532d;
+      transform: scale(1.08);
+    }
+
+    &:active {
+      transform: scale(0.92);
     }
   }
 }
@@ -2418,48 +2645,78 @@ export default {
 }
 
 .detran-doc-tag-input {
-  font-size: 0.6875rem;
+  font-size: 0.7rem;
   font-weight: 600;
-  padding: 2px 8px;
-  width: 75px;
+  padding: 3px 10px;
+  width: 84px;
   border: 1px dashed #cbd5e1;
-  border-radius: 4px;
-  background: #ffffff;
+  border-radius: 9999px;
+  background: #f8fafc;
   outline: none;
   color: #334155;
-  transition: all 0.15s ease;
+  transition: width 0.18s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+
+  &::placeholder {
+    color: #94a3b8;
+  }
+
+  &:hover {
+    background: #ffffff;
+    border-color: #94a3b8;
+  }
 
   &:focus {
-    width: 110px;
-    border-color: #15803d;
+    width: 132px;
+    background: #ffffff;
+    border-color: #22c55e;
     border-style: solid;
-    box-shadow: 0 0 0 2px rgba(21, 128, 61, 0.12);
+    box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.12);
   }
 }
 
 .detran-doc-tag-add-btn {
+  appearance: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
-  border-radius: 4px;
-  padding: 2px 6px;
+  width: 22px;
+  height: 22px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 9999px;
+  padding: 0;
   cursor: pointer;
+  transition: background-color 0.14s ease, transform 0.1s ease;
+
+  &:hover {
+    background: #dcfce7;
+  }
+
+  &:active {
+    transform: scale(0.92);
+  }
 }
 
 .detran-doc-edit-badge {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.4rem;
   margin-left: auto;
   padding: 3px 10px;
   border-radius: 9999px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  background: #dcfce7;
-  color: #166534;
-  border: 1px solid #86efac;
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: #f8fafc;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+
+  &__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background: #16a34a;
+    box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.2);
+  }
 }
 
 .detran-doc-content {

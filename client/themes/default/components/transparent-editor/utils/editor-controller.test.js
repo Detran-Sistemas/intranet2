@@ -3,6 +3,10 @@ import path from 'path'
 import {
   SLASH_MENU_ITEMS,
   DEFAULT_LINK_ITEMS,
+  groupSlashMenuItems,
+  extractActiveSlashQuery,
+  filterSlashMenuItems,
+  shouldTriggerSlashFromInput,
   initEditorBlocks,
   updateBlockAt,
   insertBlockBelow,
@@ -35,9 +39,22 @@ import {
 import { inlineMarkdownToHtml, inlineHtmlToMarkdown } from './markdown-blocks'
 
 describe('transparent-editor/editor-controller', () => {
-  it('exports SLASH_MENU_ITEMS and DEFAULT_LINK_ITEMS constants', () => {
+  it('exports categorized SLASH_MENU_ITEMS with shortcuts and DEFAULT_LINK_ITEMS constants', () => {
     expect(Array.isArray(SLASH_MENU_ITEMS)).toBe(true)
-    expect(SLASH_MENU_ITEMS.length).toBe(6)
+    expect(SLASH_MENU_ITEMS.length).toBeGreaterThanOrEqual(10)
+    SLASH_MENU_ITEMS.forEach(item => {
+      expect(typeof item.group).toBe('string')
+      expect(item.group.length).toBeGreaterThan(0)
+      expect(typeof item.shortcut).toBe('string')
+      expect(item.shortcut.length).toBeGreaterThan(0)
+    })
+
+    const grouped = groupSlashMenuItems(SLASH_MENU_ITEMS)
+    expect(grouped.length).toBe(3)
+    expect(grouped.map(g => g.label)).toEqual(['Texto Básico', 'Destaques', 'Mídia & Estrutura'])
+    const flatIndices = grouped.reduce((acc, g) => acc.concat(g.items.map(i => i.flatIndex)), [])
+    expect(flatIndices).toEqual(SLASH_MENU_ITEMS.map((_, idx) => idx))
+
     expect(Array.isArray(DEFAULT_LINK_ITEMS)).toBe(true)
     expect(DEFAULT_LINK_ITEMS.length).toBe(3)
   })
@@ -156,6 +173,33 @@ describe('transparent-editor/editor-controller', () => {
         anchor: 'meu-titulo',
         text: 'Meu Título'
       })
+
+      expect(applySlashCommandToBlock(base, 'heading-3')).toEqual({
+        id: 'blk-1',
+        type: 'heading',
+        level: 3,
+        anchor: 'meu-titulo',
+        text: 'Meu Título'
+      })
+
+      expect(applySlashCommandToBlock(base, 'callout-warning')).toEqual({
+        id: 'blk-1',
+        type: 'callout',
+        variant: 'warning',
+        text: 'Meu Título'
+      })
+
+      const tableBlock = applySlashCommandToBlock(base, 'table')
+      expect(tableBlock.type).toBe('raw')
+      expect(tableBlock.text).toContain('| Coluna 1 | Coluna 2 | Coluna 3 |')
+
+      const codeBlock = applySlashCommandToBlock(base, 'code')
+      expect(codeBlock.type).toBe('raw')
+      expect(codeBlock.text).toContain('```texto\nMeu Título\n```')
+
+      const hrBlock = applySlashCommandToBlock(base, 'hr')
+      expect(hrBlock.type).toBe('raw')
+      expect(hrBlock.text).toBe('---')
 
       const linksBlock = applySlashCommandToBlock(base, 'links')
       expect(linksBlock.type).toBe('links')
@@ -687,6 +731,94 @@ describe('transparent-editor/editor-controller', () => {
       expect(blockItemSrc).toContain('detran-table-btn--add')
       expect(blockItemSrc).toContain('detran-table-btn--remove')
       expect(blockItemSrc).not.toMatch(/detran-table-btn[^\n]*\bis-danger\b/)
+    })
+
+    it('implements 21st.dev-inspired Floating Action Pill, Command Palette Slash Menu, and Review Autosave Status Pill', () => {
+      const toolbarSrc = fs.readFileSync(path.resolve(__dirname, '../floating-toolbar.vue'), 'utf8')
+      expect(toolbarSrc).toContain('floating-toolbar__pill')
+      expect(toolbarSrc).toContain('backdrop-filter')
+      expect(toolbarSrc).toContain('activeFormats')
+      expect(toolbarSrc).toContain('heading-3')
+
+      const slashSrc = fs.readFileSync(path.resolve(__dirname, '../slash-menu.vue'), 'utf8')
+      expect(slashSrc).toContain('slash-cmd-panel')
+      expect(slashSrc).toContain('slash-cmd-group')
+      expect(slashSrc).toContain('slash-cmd-item__kbd')
+      expect(slashSrc).toContain('ArrowDown')
+      expect(slashSrc).toContain('ArrowUp')
+
+      const reviewSrc = fs.readFileSync(path.resolve(__dirname, '../../../../../components/workflow/review.vue'), 'utf8')
+      expect(reviewSrc).toContain('detran-autosave-pill')
+      expect(reviewSrc).toContain('draftSaveStatus')
+      expect(reviewSrc).toContain('lastSavedTime')
+    })
+
+    it('portals slash-menu and floating-toolbar to body/[data-app] and clears fadeInUp transform to prevent fixed-position clipping', () => {
+      const slashSrc = fs.readFileSync(path.resolve(__dirname, '../slash-menu.vue'), 'utf8')
+      expect(slashSrc).toContain('portalEl')
+      expect(slashSrc).toContain('appendChild')
+
+      const toolbarSrc = fs.readFileSync(path.resolve(__dirname, '../floating-toolbar.vue'), 'utf8')
+      expect(toolbarSrc).toContain('portalEl')
+      expect(toolbarSrc).toContain('appendChild')
+
+      const animScss = fs.readFileSync(path.resolve(__dirname, '../../../../detran/scss/_animations.scss'), 'utf8')
+      const fadeInUpBlock = animScss.match(/@keyframes fadeInUp\s*\{[\s\S]*?\n\}/)
+      expect(fadeInUpBlock).not.toBeNull()
+      expect(fadeInUpBlock[0]).toContain('transform: none')
+      expect(fadeInUpBlock[0]).not.toContain('translateY(0)')
+    })
+
+    it('extracts active slash queries, filters slash items accent-insensitively, and rejects bogus (0,0) caret rects', () => {
+      expect(extractActiveSlashQuery('/')).toBe('')
+      expect(extractActiveSlashQuery('texto /')).toBe('')
+      expect(extractActiveSlashQuery('/tab')).toBe('tab')
+      expect(extractActiveSlashQuery('Linha /aviso')).toBe('aviso')
+      expect(extractActiveSlashQuery('https://detran.mg.gov.br/doc')).toBeNull()
+      expect(extractActiveSlashQuery('texto / ')).toBeNull()
+      expect(extractActiveSlashQuery('texto normal')).toBeNull()
+
+      const tableMatches = filterSlashMenuItems(SLASH_MENU_ITEMS, 'tabela')
+      expect(tableMatches.some(i => i.type === 'table')).toBe(true)
+      const accentMatches = filterSlashMenuItems(SLASH_MENU_ITEMS, 'titulo')
+      expect(accentMatches.some(i => i.type === 'heading')).toBe(true)
+      expect(filterSlashMenuItems(SLASH_MENU_ITEMS, '').length).toBe(SLASH_MENU_ITEMS.length)
+
+      expect(shouldTriggerSlashFromInput({ mdText: '/', inputData: '/', textBeforeCaret: '/' })).toBe(true)
+      expect(shouldTriggerSlashFromInput({ mdText: '/Texto existente', inputData: '/', textBeforeCaret: '/' })).toBe(true)
+      expect(shouldTriggerSlashFromInput({ mdText: 'https://', inputData: '/', textBeforeCaret: 'https://' })).toBe(false)
+
+      expect(applySlashCommandToBlock({ id: 'blk-q', type: 'paragraph', text: 'Seção /h3' }, 'heading-3')).toEqual({
+        id: 'blk-q',
+        type: 'heading',
+        level: 3,
+        anchor: 'secao',
+        text: 'Seção'
+      })
+
+      // Rejects Chrome's collapsed range (top: 0, left: 0, height: 24) and uses element bounding rect fallback
+      const blockEl = {
+        getBoundingClientRect: () => ({ top: 420, left: 320, bottom: 444, width: 600, height: 24 }),
+        contains: () => true
+      }
+      const chromeZeroRectWin = {
+        getSelection: () => ({
+          rangeCount: 1,
+          getRangeAt: () => ({
+            startContainer: blockEl,
+            startOffset: 0,
+            getClientRects: () => [{ top: 0, left: 0, bottom: 24, width: 0, height: 24 }],
+            getBoundingClientRect: () => ({ top: 0, left: 0, bottom: 24, width: 0, height: 24 })
+          })
+        })
+      }
+      expect(getCaretTriggerRect(blockEl, chromeZeroRectWin)).toEqual({
+        top: 420,
+        left: 320,
+        bottom: 444,
+        width: 600,
+        height: 24
+      })
     })
   })
 })

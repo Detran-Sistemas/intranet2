@@ -13,8 +13,9 @@
   slash-menu(
     :visible='slashMenuVisible'
     :position='slashMenuPosition'
+    :query='slashQuery'
     @select='applySlashCommand'
-    @close='slashMenuVisible = false'
+    @close='closeSlashMenu'
   )
 
   //- Modal de Inserção de Mídia
@@ -88,6 +89,7 @@ import {
   clearOrDeleteBlockAt,
   reorderBlocks,
   applySlashCommandToBlock,
+  extractActiveSlashQuery,
   insertMediaBlock,
   buildEditorChangePayload,
   transformBlockHeading,
@@ -134,6 +136,7 @@ export default {
       slashMenuVisible: false,
       slashMenuPosition: { top: 0, left: 0 },
       slashBlockIndex: null,
+      slashQuery: '',
       toolbarVisible: false,
       toolbarPosition: { top: 0, left: 0 },
       activeBlockIndex: null,
@@ -199,6 +202,15 @@ export default {
       const scrollContainer = this.getScrollContainer()
       const savedTop = scrollContainer ? scrollContainer.scrollTop : null
       this.blocks = updateBlockAt(this.blocks, index, block)
+      if (this.slashMenuVisible && index === this.slashBlockIndex) {
+        const blockText = String((block && block.text) || '')
+        const activeQuery = extractActiveSlashQuery(blockText)
+        if (activeQuery !== null) {
+          this.slashQuery = activeQuery
+        } else if (!blockText.includes('/') || /\s$/.test(blockText)) {
+          this.closeSlashMenu()
+        }
+      }
       this.recordHistory()
       this.triggerChange()
       if (scrollContainer !== null && savedTop !== null) {
@@ -285,8 +297,13 @@ export default {
     appendNewParagraph () {
       this.onInsertBelow(this.blocks.length - 1)
     },
+    closeSlashMenu () {
+      this.slashMenuVisible = false
+      this.slashQuery = ''
+    },
     onSlashTriggered ({ index, rect }) {
       this.slashBlockIndex = index
+      this.slashQuery = ''
       this.slashMenuPosition = {
         top: rect.top,
         left: rect.left
@@ -297,21 +314,32 @@ export default {
       const index = this.slashBlockIndex
       if (index === null || !this.blocks[index]) return
 
+      let focusIndex = index
       if (type === 'image') {
         this.mediaInsertIndex = index
         this.dialogMedia = true
       } else {
         const transformed = applySlashCommandToBlock(this.blocks[index], type)
         this.blocks = updateBlockAt(this.blocks, index, transformed)
+        if (type === 'hr') {
+          const inserted = insertBlockBelow(this.blocks, index, `${Date.now()}-${Math.random()}`)
+          this.blocks = inserted.blocks
+          focusIndex = inserted.insertedIndex
+        }
       }
 
-      this.slashMenuVisible = false
+      this.closeSlashMenu()
       this.recordHistory()
       this.triggerChange()
 
       this.$nextTick(() => {
-        const item = this.getBlockComponentByIndex(index)
-        if (item) item.focus()
+        const item = this.getBlockComponentByIndex(focusIndex)
+        if (item) {
+          if (typeof item.syncEditableDom === 'function') {
+            item.syncEditableDom(true)
+          }
+          item.focus({ caretAtEnd: true })
+        }
       })
     },
     onInsertMedia ({ src, alt }) {

@@ -3,6 +3,8 @@ import { parseMarkdown, serializeBlocks, slugify, inlineHtmlToMarkdown } from '.
 export const SLASH_MENU_ITEMS = [
   {
     type: 'paragraph',
+    group: 'Texto Básico',
+    shortcut: 'P',
     icon: 'mdi-format-paragraph',
     avatarColor: '#f1f5f9',
     iconColor: '#475569',
@@ -11,6 +13,8 @@ export const SLASH_MENU_ITEMS = [
   },
   {
     type: 'heading',
+    group: 'Texto Básico',
+    shortcut: '##',
     icon: 'mdi-format-header-2',
     avatarColor: '#f1f5f9',
     iconColor: '#1e293b',
@@ -18,7 +22,19 @@ export const SLASH_MENU_ITEMS = [
     subtitle: 'Cabeçalho H2 com índice'
   },
   {
+    type: 'heading-3',
+    group: 'Texto Básico',
+    shortcut: '###',
+    icon: 'mdi-format-header-3',
+    avatarColor: '#f1f5f9',
+    iconColor: '#334155',
+    title: 'Subtítulo',
+    subtitle: 'Cabeçalho H3 de subseção'
+  },
+  {
     type: 'callout-info',
+    group: 'Destaques',
+    shortcut: '> i',
     icon: 'mdi-information-outline',
     avatarColor: '#eff6ff',
     iconColor: '#2563eb',
@@ -27,6 +43,8 @@ export const SLASH_MENU_ITEMS = [
   },
   {
     type: 'callout-success',
+    group: 'Destaques',
+    shortcut: '> ✓',
     icon: 'mdi-check-circle-outline',
     avatarColor: '#f0fdf4',
     iconColor: '#1b6535',
@@ -34,7 +52,39 @@ export const SLASH_MENU_ITEMS = [
     subtitle: 'Aviso verde Detran-MG'
   },
   {
+    type: 'callout-warning',
+    group: 'Destaques',
+    shortcut: '> !',
+    icon: 'mdi-alert-outline',
+    avatarColor: '#fffbeb',
+    iconColor: '#d97706',
+    title: 'Aviso de Atenção',
+    subtitle: 'Alerta âmbar para prazos e regras'
+  },
+  {
+    type: 'table',
+    group: 'Mídia & Estrutura',
+    shortcut: '| |',
+    icon: 'mdi-table',
+    avatarColor: '#f0fdf4',
+    iconColor: '#15803d',
+    title: 'Tabela de Dados',
+    subtitle: 'Grade editável inline'
+  },
+  {
+    type: 'code',
+    group: 'Mídia & Estrutura',
+    shortcut: '```',
+    icon: 'mdi-code-tags',
+    avatarColor: '#f1f5f9',
+    iconColor: '#0f172a',
+    title: 'Bloco de Código',
+    subtitle: 'Trecho técnico ou comando'
+  },
+  {
     type: 'image',
+    group: 'Mídia & Estrutura',
+    shortcut: 'IMG',
     icon: 'mdi-image-outline',
     avatarColor: '#fef3c7',
     iconColor: '#d97706',
@@ -43,13 +93,99 @@ export const SLASH_MENU_ITEMS = [
   },
   {
     type: 'links',
+    group: 'Mídia & Estrutura',
+    shortcut: '[]',
     icon: 'mdi-view-grid-outline',
     avatarColor: '#e0f2fe',
     iconColor: '#0284c7',
     title: 'Cards de Links',
     subtitle: 'Grade de acessos rápidos'
+  },
+  {
+    type: 'hr',
+    group: 'Mídia & Estrutura',
+    shortcut: '---',
+    icon: 'mdi-minus',
+    avatarColor: '#f1f5f9',
+    iconColor: '#64748b',
+    title: 'Linha Divisória',
+    subtitle: 'Separador horizontal de seções'
   }
 ]
+
+/**
+ * Agrupa os itens do menu de comandos "/" preservando o índice linear para navegação via teclado.
+ */
+export function groupSlashMenuItems (items = SLASH_MENU_ITEMS) {
+  if (!Array.isArray(items) || items.length === 0) return []
+  const groupMap = new Map()
+  items.forEach((item, flatIndex) => {
+    const label = (item && item.group) || 'Blocos'
+    if (!groupMap.has(label)) {
+      groupMap.set(label, [])
+    }
+    groupMap.get(label).push({
+      ...item,
+      flatIndex
+    })
+  })
+  return Array.from(groupMap.entries()).map(([label, groupItems]) => ({
+    label,
+    items: groupItems
+  }))
+}
+
+function normalizeSearchToken (str = '') {
+  return String(str || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+}
+
+/**
+ * Extrai a query ativa após "/" no final do texto (ex: "/" -> "", "texto /tab" -> "tab").
+ * Retorna null quando não há comando "/" ativo (ex: URLs como "https://..." ou após espaço).
+ */
+export function extractActiveSlashQuery (text = '') {
+  const raw = String(text || '')
+  if (!raw || /\s$/.test(raw)) return null
+  const match = raw.match(/(?:^|\s)\/([^\s/]*)$/)
+  return match ? match[1] : null
+}
+
+/**
+ * Filtra os itens do menu "/" sem sensibilidade a maiúsculas ou acentos.
+ */
+export function filterSlashMenuItems (items = SLASH_MENU_ITEMS, query = '') {
+  if (!Array.isArray(items)) return []
+  const q = normalizeSearchToken(query)
+  if (!q) return items
+  return items.filter(item => {
+    if (!item) return false
+    const haystack = normalizeSearchToken([
+      item.title,
+      item.subtitle,
+      item.group,
+      item.type,
+      item.shortcut
+    ].join(' '))
+    return haystack.includes(q)
+  })
+}
+
+/**
+ * Decide se o evento de digitação atual deve abrir o menu de comandos "/".
+ * Suporta "/" no final do bloco, em linha vazia ou digitado diretamente no cursor (mesmo antes de texto existente),
+ * ignorando barras em URLs como "https://".
+ */
+export function shouldTriggerSlashFromInput ({ mdText = '', inputData = '', textBeforeCaret = '' } = {}) {
+  if (inputData === '/') {
+    if (!textBeforeCaret) return true
+    return /(?:^|\s)\/$/.test(String(textBeforeCaret))
+  }
+  return extractActiveSlashQuery(mdText) === ''
+}
 
 export const DEFAULT_LINK_ITEMS = [
   { title: 'Procedimentos operacionais', description: 'Manuais institucionais', href: '/procedimentos' },
@@ -205,7 +341,10 @@ export function reorderBlocks (blocks = [], fromIndex, toIndex) {
  * Transforma um bloco de acordo com o comando selecionado no menu "/" ou barra flutuante.
  */
 export function applySlashCommandToBlock (block = {}, type = 'paragraph') {
-  const cleanText = String(block.text || '').replace(/\/$/, '').trim()
+  const cleanText = String(block.text || '')
+    .replace(/(?:^|\s)\/[^\s/]*$/, '')
+    .replace(/\/$/, '')
+    .trim()
 
   if (type === 'callout-info') {
     return {
@@ -225,6 +364,15 @@ export function applySlashCommandToBlock (block = {}, type = 'paragraph') {
     }
   }
 
+  if (type === 'callout-warning') {
+    return {
+      ...block,
+      type: 'callout',
+      variant: 'warning',
+      text: cleanText
+    }
+  }
+
   if (type === 'heading') {
     return {
       ...block,
@@ -232,6 +380,40 @@ export function applySlashCommandToBlock (block = {}, type = 'paragraph') {
       level: 2,
       anchor: slugify(cleanText),
       text: cleanText
+    }
+  }
+
+  if (type === 'heading-3') {
+    return {
+      ...block,
+      type: 'heading',
+      level: 3,
+      anchor: slugify(cleanText),
+      text: cleanText
+    }
+  }
+
+  if (type === 'table') {
+    return {
+      ...block,
+      type: 'raw',
+      text: '| Coluna 1 | Coluna 2 | Coluna 3 |\n| --- | --- | --- |\n| Dado 1 | Dado 2 | Dado 3 |'
+    }
+  }
+
+  if (type === 'code') {
+    return {
+      ...block,
+      type: 'raw',
+      text: `\`\`\`texto\n${cleanText}\n\`\`\``
+    }
+  }
+
+  if (type === 'hr') {
+    return {
+      ...block,
+      type: 'raw',
+      text: '---'
     }
   }
 
@@ -350,11 +532,12 @@ export function getCaretTriggerRect (el, win = (typeof window !== 'undefined' ? 
       return fallback
     }
 
+    const hasPositionedRect = r => Boolean(r && (r.top > 0 || r.left > 0))
     const clientRects = typeof range.getClientRects === 'function' ? range.getClientRects() : null
     const rawRect = (clientRects && clientRects.length > 0 && clientRects[0]) ||
       (typeof range.getBoundingClientRect === 'function' ? range.getBoundingClientRect() : null)
 
-    if (rawRect && (rawRect.height > 0 || rawRect.width > 0 || rawRect.top > 0 || rawRect.left > 0)) {
+    if (hasPositionedRect(rawRect)) {
       return {
         top: rawRect.top,
         left: rawRect.left,
@@ -369,7 +552,7 @@ export function getCaretTriggerRect (el, win = (typeof window !== 'undefined' ? 
       charRange.setStart(range.startContainer, range.startOffset - 1)
       charRange.setEnd(range.startContainer, range.startOffset)
       const charRect = charRange.getBoundingClientRect()
-      if (charRect && (charRect.height > 0 || charRect.top > 0 || charRect.left > 0)) {
+      if (hasPositionedRect(charRect)) {
         return {
           top: charRect.top,
           left: charRect.right || charRect.left,
