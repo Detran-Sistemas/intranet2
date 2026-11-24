@@ -56,6 +56,8 @@ jobs:
       with:
         context: .
         file: Dockerfile
+        provenance: false
+        sbom: false
         push: true
         tags: |
           ghcr.io/${{ env.IMAGE_NAME }}:canary
@@ -235,13 +237,12 @@ jobs:
 
     - name: Create and Push Manifests
       run: |
-        echo "Creating the manifests..."
+        echo "Creating and pushing beta manifest..."
 
-        docker manifest create ghcr.io/${{ env.IMAGE_NAME }}:beta-$REL_VERSION_STRICT ghcr.io/${{ env.IMAGE_NAME }}:canary-$REL_VERSION_STRICT ghcr.io/${{ env.IMAGE_NAME }}:canary-arm64-$REL_VERSION_STRICT
-
-        echo "Pushing the manifests..."
-
-        docker manifest push -p ghcr.io/${{ env.IMAGE_NAME }}:beta-$REL_VERSION_STRICT
+        docker buildx imagetools create \
+          -t ghcr.io/${{ env.IMAGE_NAME }}:beta-$REL_VERSION_STRICT \
+          ghcr.io/${{ env.IMAGE_NAME }}:canary-$REL_VERSION_STRICT \
+          ghcr.io/${{ env.IMAGE_NAME }}:canary-arm64-$REL_VERSION_STRICT
 
   release:
     name: Publish Release Images
@@ -277,19 +278,15 @@ jobs:
         MAJORMINOR="$MAJOR.$MINOR"
 
         echo "Using major $MAJOR and minor $MINOR..."
-        echo "Creating the manifests..."
+        echo "Creating and pushing release manifests..."
 
-        docker manifest create ghcr.io/${{ env.IMAGE_NAME }}:$REL_VERSION_STRICT ghcr.io/${{ env.IMAGE_NAME }}:canary-$REL_VERSION_STRICT ghcr.io/${{ env.IMAGE_NAME }}:canary-arm64-$REL_VERSION_STRICT
-        docker manifest create ghcr.io/${{ env.IMAGE_NAME }}:$MAJOR ghcr.io/${{ env.IMAGE_NAME }}:canary-$REL_VERSION_STRICT ghcr.io/${{ env.IMAGE_NAME }}:canary-arm64-$REL_VERSION_STRICT
-        docker manifest create ghcr.io/${{ env.IMAGE_NAME }}:$MAJORMINOR ghcr.io/${{ env.IMAGE_NAME }}:canary-$REL_VERSION_STRICT ghcr.io/${{ env.IMAGE_NAME }}:canary-arm64-$REL_VERSION_STRICT
-        docker manifest create ghcr.io/${{ env.IMAGE_NAME }}:latest ghcr.io/${{ env.IMAGE_NAME }}:canary-$REL_VERSION_STRICT ghcr.io/${{ env.IMAGE_NAME }}:canary-arm64-$REL_VERSION_STRICT
-
-        echo "Pushing the manifests..."
-
-        docker manifest push -p ghcr.io/${{ env.IMAGE_NAME }}:$REL_VERSION_STRICT
-        docker manifest push -p ghcr.io/${{ env.IMAGE_NAME }}:$MAJOR
-        docker manifest push -p ghcr.io/${{ env.IMAGE_NAME }}:$MAJORMINOR
-        docker manifest push -p ghcr.io/${{ env.IMAGE_NAME }}:latest
+        docker buildx imagetools create \
+          -t ghcr.io/${{ env.IMAGE_NAME }}:$REL_VERSION_STRICT \
+          -t ghcr.io/${{ env.IMAGE_NAME }}:$MAJOR \
+          -t ghcr.io/${{ env.IMAGE_NAME }}:$MAJORMINOR \
+          -t ghcr.io/${{ env.IMAGE_NAME }}:latest \
+          ghcr.io/${{ env.IMAGE_NAME }}:canary-$REL_VERSION_STRICT \
+          ghcr.io/${{ env.IMAGE_NAME }}:canary-arm64-$REL_VERSION_STRICT
 
     - name: Download Linux Build
       uses: actions/download-artifact@v8
