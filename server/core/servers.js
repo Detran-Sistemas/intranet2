@@ -6,6 +6,7 @@ const Promise = require('bluebird')
 const _ = require('lodash')
 const jwt = require('jsonwebtoken')
 const cookie = require('cookie')
+const { getGraphQLSecurityOptions } = require('../helpers/graphql-security')
 
 /* global WIKI */
 
@@ -122,8 +123,14 @@ module.exports = {
    */
   async startGraphQL () {
     const graphqlSchema = require('../graph')
+    const graphqlSecurityOptions = getGraphQLSecurityOptions(process.env, Boolean(WIKI.IS_DEBUG))
+    WIKI.logger.info(
+      `GraphQL Security: Introspection [ ${graphqlSecurityOptions.introspection ? 'ENABLED' : 'DISABLED'} ], ` +
+      `Playground [ ${graphqlSecurityOptions.playground ? 'ENABLED' : 'DISABLED'} ]`
+    )
     this.servers.graph = new ApolloServer({
       ...graphqlSchema,
+      ...graphqlSecurityOptions,
       context: ({ req, res }) => ({ req, res }),
       subscriptions: {
         onConnect: (connectionParams, webSocket) => {
